@@ -18,10 +18,7 @@ function saveGameState(game, clocks) {
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(state));
 }
-function loadGameState() {
-  try { return JSON.parse(localStorage.getItem(SAVE_KEY)); }
-  catch { return null; }
-}
+function loadGameState() { try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; } }
 function clearGameState() { localStorage.removeItem(SAVE_KEY); }
 
 /* ========= Settings storage ========= */
@@ -332,9 +329,7 @@ export function initUI(){
     saveSettings(settings);
     beeper.enabled = settings.sound;
     optSound.checked = settings.sound;
-    // Re-init clocks with new base; keep current turn
     clocks.init(settings.minutes, settings.increment, game.turn);
-    // Keep paused until resume
     btnPause.textContent = '▶️';
     closeModal();
   });
@@ -343,41 +338,65 @@ export function initUI(){
   function isFullscreen(){
     return !!(document.fullscreenElement || document.webkitFullscreenElement);
   }
+
   async function enterFullscreen(){
     try{
       if(app.requestFullscreen){ await app.requestFullscreen({ navigationUI: 'hide' }); }
       else if(app.webkitRequestFullscreen){ app.webkitRequestFullscreen(); }
-      // Try to lock landscape; ignore failures silently
-      try{
-        if(screen.orientation && screen.orientation.lock){
-          await screen.orientation.lock('landscape');
-        }
-      }catch(_){}
-      btnFullscreen.textContent = '🡼'; // exit icon
-    }catch(e){
-      // If denied, just ignore
-    }
+      try{ if(screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape'); } }catch(_){}
+    }catch(_){}
+    updateFsLayout();
+    scheduleTopbarAutohide();
   }
+
   async function exitFullscreen(){
     try{
       if(document.exitFullscreen){ await document.exitFullscreen(); }
       else if(document.webkitExitFullscreen){ document.webkitExitFullscreen(); }
-      try{
-        if(screen.orientation && screen.orientation.unlock){
-          screen.orientation.unlock();
-        }
-      }catch(_){}
-      btnFullscreen.textContent = '⛶';
-    }catch(e){}
+      try{ if(screen.orientation && screen.orientation.unlock){ screen.orientation.unlock(); } }catch(_){}
+    }catch(_){}
+    app.classList.remove('fs-rotate','fs-autohide');
+    showTopbarNow();
   }
-  btnFullscreen.addEventListener('click', ()=>{
-    if(isFullscreen()) exitFullscreen(); else enterFullscreen();
-  });
-  document.addEventListener('fullscreenchange', ()=>{
-    btnFullscreen.textContent = isFullscreen() ? '🡼' : '⛶';
-  });
-  document.addEventListener('webkitfullscreenchange', ()=>{
-    btnFullscreen.textContent = isFullscreen() ? '🡼' : '⛶';
+
+  function portrait(){ return window.innerHeight > window.innerWidth; }
+
+  function updateFsLayout(){
+    const fs = isFullscreen();
+    // Apply soft-rotate only if fullscreen AND device is still portrait
+    if(fs && portrait()){ app.classList.add('fs-rotate'); }
+    else { app.classList.remove('fs-rotate'); }
+  }
+
+  // Button and FS change events
+  const btnFullscreen = document.getElementById('btnFullscreen');
+  btnFullscreen.addEventListener('click', ()=>{ isFullscreen() ? exitFullscreen() : enterFullscreen(); });
+
+  document.addEventListener('fullscreenchange', ()=>{ updateFsLayout(); });
+  document.addEventListener('webkitfullscreenchange', ()=>{ updateFsLayout(); });
+  window.addEventListener('resize', updateFsLayout);
+  window.addEventListener('orientationchange', updateFsLayout);
+
+  /* ===== Auto-hide topbar while fullscreen ===== */
+  let hideTimer = null;
+  const HIDE_DELAY = 2000; // ms
+
+  function scheduleTopbarAutohide(){
+    if(!isFullscreen()) return;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(()=> app.classList.add('fs-autohide'), HIDE_DELAY);
+  }
+  function showTopbarNow(){
+    app.classList.remove('fs-autohide');
+    if(isFullscreen()) scheduleTopbarAutohide();
+  }
+
+  // Wake the topbar on interactions while in fullscreen
+  ['mousemove','mousedown','touchstart','wheel','keydown'].forEach(evt=>{
+    window.addEventListener(evt, ()=>{
+      if(!isFullscreen()) return;
+      showTopbarNow();
+    }, {passive:true});
   });
 
   // Save on unload

@@ -26,10 +26,11 @@ body{
 
 /* Top bar */
 .topbar{
-  position:sticky;top:0;z-index:10;
+  position:sticky;top:0;z-index:20;
   background:var(--blue); color:#fff;
   display:flex; align-items:center; gap:.5rem;
   padding:.75rem 1rem;
+  transition: transform .25s ease, opacity .25s ease;
 }
 .topbar h1{font-size:1.1rem; margin:0}
 .icon-btn{
@@ -38,6 +39,9 @@ body{
 }
 .icon-btn:active{transform:translateY(1px)}
 .topbar .spacer{flex:1}
+
+/* Hide effect when autohide is active */
+.app.fs-autohide .topbar{ transform: translateY(-100%); opacity:0 }
 
 /* Layout */
 .layout{
@@ -138,7 +142,7 @@ body{
   position:absolute; inset:0; background:rgba(0,0,0,.4);
 }
 .modal-card{
-  position:relative; z-index:2;
+  position:relative; z-index:30;
   margin:5vh auto 0 auto; max-width:560px; background:#fff;
   border-radius:1rem; box-shadow:var(--shadow); padding:0;
 }
@@ -163,14 +167,14 @@ body{
 
 /* ---------- FULLSCREEN ENHANCEMENTS ---------- */
 
-/* Standard :fullscreen and WebKit vendor */
+/* Fullscreen backdrop */
 .app:fullscreen, .app:-webkit-full-screen{
-  background:#0a0e18; /* darker for immersion */
+  background:#0a0e18;
 }
 
-/* Keep topbar visible but sleeker */
+/* Keep topbar visible (we autohide via class) */
 .app:fullscreen .topbar, .app:-webkit-full-screen .topbar{
-  position:fixed; top:0; left:0; right:0; z-index:20;
+  position:fixed; top:0; left:0; right:0; z-index:25;
   background:rgba(13,45,92,.88);
   backdrop-filter: blur(6px);
 }
@@ -193,15 +197,34 @@ body{
   margin-top:64px; /* room for topbar */
 }
 
-/* Make timers compact and board as large as possible */
+/* Make timers wide and board large */
 .app:fullscreen .timers,
 .app:-webkit-full-screen .timers{
   width: min(98vw, 1600px);
 }
 .app:fullscreen .board,
 .app:-webkit-full-screen .board{
-  /* Try to fill vertical space: subtract approx. timers + gaps (~180px) */
   width: min(98vw, calc(98vh - 180px));
+  max-width: 98vmin;
+}
+
+/* --- Soft Landscape Fallback (rotate UI when device is vertical in fullscreen) --- */
+.app.fs-rotate{
+  position:fixed; inset:0;
+  transform: rotate(90deg);
+  transform-origin: 50% 50%;
+  /* Swap logical width/height after rotate */
+  width: 100vh;
+  height: 100vw;
+  overflow:hidden;
+  background:#0a0e18;
+}
+.app.fs-rotate .layout{
+  margin-top:64px;
+}
+.app.fs-rotate .timers{ width: min(98vh, 1600px); }
+.app.fs-rotate .board{
+  width: min(98vh, calc(98vw - 180px));
   max-width: 98vmin;
 }
 

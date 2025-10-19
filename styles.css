@@ -244,3 +244,26 @@ body{
 
 /* Space so content not hidden under fixed bar */
 .app, .home-app, .shell { padding-bottom: 76px; }
+
+
+
+
+
+
+/* ==== Last move & capture highlights ==== */
+.cell.last-from { outline: 3px solid rgba(132,202,255,.95); box-shadow: inset 0 0 0 3px rgba(132,202,255,.45); }
+.cell.last-to   { outline: 3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45); }
+.cell.last-capture { animation: capFlash .9s ease-out; }
+@keyframes capFlash {
+  0%   { box-shadow: inset 0 0 0 0 rgba(255,0,0,.0), 0 0 0 0 rgba(255,0,0,.0); }
+  30%  { box-shadow: inset 0 0 0 4px rgba(255,0,0,.55), 0 0 14px 6px rgba(255,0,0,.25); }
+  100% { box-shadow: inset 0 0 0 0 rgba(255,0,0,.0), 0 0 0 0 rgba(255,0,0,.0); }
+}
+
+/* Optional: small badge style if you want to inject extra status in the turn label */
+.badge {
+  display:inline-block; margin-left:.4rem; padding:.1rem .45rem; border-radius:.5rem;
+  font-size:.75rem; font-weight:800; background:#ffecb3; color:#7a4b00;
+}
+.badge.danger { background:#ffe1e1; color:#8a1111; }
+.badge.ok     { background:#e7f9ee; color:#046a2a; }

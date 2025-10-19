@@ -3,52 +3,65 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>ទំព័រដើម | Khmer Chess</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>អុកចត្រង្គ (Khmer Chess)</title>
+
+  <!-- ✅ PWA Essentials -->
   <link rel="manifest" href="manifest.webmanifest" />
-<meta name="theme-color" content="#0d2d5c" />
-<link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
-<script src="js/pwa.js" defer></script>
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+
+  <!-- ✅ Styles -->
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="home-app">
-    <header class="home-topbar">
-      <h1>Khmer Chess</h1>
-      <a class="avatar" href="settings.html" title="Settings">
-        <img src="assets/user.png" alt="User" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
-        <span class="avatar-fallback">U</span>
+  <div class="app home-app">
+    <!-- ===== Top bar ===== -->
+    <header class="topbar">
+      <h1>អុកចត្រង្គ (Khmer Chess)</h1>
+      <div class="spacer"></div>
+      <a href="settings.html" class="avatar-link" title="Setting">
+        <img src="assets/icons/user.png" alt="user" class="avatar" />
       </a>
     </header>
 
+    <!-- ===== Main Content ===== -->
     <main class="home-main">
-      <a class="home-card" href="play.html?mode=ai">
-        <div class="card-emoji">🤖</div>
-        <div>
-          <div class="card-title">Play with AI</div>
-          <div class="card-sub">Single player vs computer</div>
-        </div>
-      </a>
+      <!-- ✅ PWA Install Button -->
+      <button id="installBtn" class="install-btn" style="display:none">
+        📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
+      </button>
 
-      <a class="home-card" href="play.html?mode=friend">
-        <div class="card-emoji">👥</div>
-        <div>
-          <div class="card-title">Play with Friend</div>
-          <div class="card-sub">Two players on one device</div>
-        </div>
-      </a>
-
-      <!-- Install PWA button (shown only when available) -->
-<button id="installBtn" class="install-btn" style="display:none">
-  📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
-</button>
+      <!-- Game Mode Menu -->
+      <div class="menu-grid">
+        <a class="menu-card" href="play.html?mode=ai">
+          <img src="assets/icons/ai.png" alt="AI" class="menu-icon" />
+          <span>លេងជាមួយ AI</span>
+        </a>
+        <a class="menu-card" href="play.html?mode=friend">
+          <img src="assets/icons/friend.png" alt="Friend" class="menu-icon" />
+          <span>លេងជាមួយមិត្ត</span>
+        </a>
+      </div>
     </main>
 
+    <!-- ===== Bottom Navigation ===== -->
     <nav class="home-nav">
-      <a class="nav-item active" href="index.html" aria-current="page"><span class="ni">🏠</span><span>Home</span></a>
-      <a class="nav-item" href="friends.html"><span class="ni">👥</span><span>Friend</span></a>
-      <a class="nav-item" href="play.html"><span class="ni">🎮</span><span>Play</span></a>
-      <a class="nav-item" href="settings.html"><span class="ni">⚙️</span><span>Setting</span></a>
-      <a class="nav-item" href="notifications.html"><span class="ni">🔔</span><span>Notification</span></a>
+      <a class="nav-item active" href="index.html" aria-current="page">
+        <span class="ni">🏠</span><span>Home</span>
+      </a>
+      <a class="nav-item" href="friends.html">
+        <span class="ni">👥</span><span>Friend</span>
+      </a>
+      <a class="nav-item" href="play.html">
+        <span class="ni">🎮</span><span>Play</span>
+      </a>
+      <a class="nav-item" href="settings.html">
+        <span class="ni">⚙️</span><span>Setting</span>
+      </a>
+      <a class="nav-item" href="notifications.html">
+        <span class="ni">🔔</span><span>Notification</span>
+      </a>
     </nav>
   </div>
 </body>

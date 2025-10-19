@@ -8,12 +8,14 @@ export const PT = {
 export function initialPosition(){
   const emptyRow = () => Array(SIZE).fill(null);
   const board = Array.from({length: SIZE}, emptyRow);
+  // Black back rank
   board[0] = [
     piece(PT.ROOK,'b'), piece(PT.KNIGHT,'b'), piece(PT.BISHOP,'b'), piece(PT.QUEEN,'b'),
     piece(PT.KING,'b'), piece(PT.BISHOP,'b'), piece(PT.KNIGHT,'b'), piece(PT.ROOK,'b'),
   ];
-  board[2] = Array(SIZE).fill(piece(PT.PAWN,'b'));
-  board[5] = Array(SIZE).fill(piece(PT.PAWN,'w'));
+  board[2] = Array(SIZE).fill(piece(PT.PAWN,'b')); // black pawns
+  board[5] = Array(SIZE).fill(piece(PT.PAWN,'w')); // white pawns
+  // White back rank
   board[7] = [
     piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.QUEEN,'w'),
     piece(PT.KING,'w'), piece(PT.BISHOP,'w'), piece(PT.KNIGHT,'w'), piece(PT.ROOK,'w'),
@@ -49,7 +51,8 @@ export class Game{
       case 'B': { const d=p.c==='w'?-1:+1; add(x-1,y+d,'both'); add(x+1,y+d,'both'); break; }
       case 'R': ray(1,0); ray(-1,0); ray(0,1); ray(0,-1); break;
       case 'N': for(const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both'); break;
-      case 'P': { const d=this.pawnDir(p.c); if(this.inBounds(x,y+d)&&!this.at(x,y+d)) out.push({x,y:y+d});
+      case 'P': { const d=this.pawnDir(p.c);
+                  if(this.inBounds(x,y+d)&&!this.at(x,y+d)) out.push({x,y:y+d});
                   for(const dx of[-1,1]){ const nx=x+dx, ny=y+d; if(this.inBounds(nx,ny)){ const t=this.at(nx,ny); if(t&&t.c!==p.c) out.push({x:nx,y:ny}); } }
                   break; }
     }

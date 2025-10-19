@@ -5,47 +5,56 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>អុកចត្រង្គ (Khmer Chess)</title>
 
-  <!-- ✅ PWA Essentials -->
+  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- ✅ Styles -->
   <link rel="stylesheet" href="styles.css" />
+  <style>
+    /* small helpers so we don't rely on missing images */
+    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;padding:1rem}
+    .menu-card{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;
+      padding:1rem;border-radius:1rem;text-decoration:none;color:#0d2d5c;box-shadow:0 4px 12px rgba(0,0,0,.08);font-weight:700}
+    .menu-card:active{transform:scale(.98)}
+    .card-emoji{font-size:2.2rem;margin-bottom:.4rem}
+    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover}
+  </style>
 </head>
 <body>
   <div class="app home-app">
-    <!-- ===== Top bar ===== -->
+    <!-- Top bar -->
     <header class="topbar">
       <h1>អុកចត្រង្គ (Khmer Chess)</h1>
       <div class="spacer"></div>
+      <!-- use the existing 192 icon as the avatar -->
       <a href="settings.html" class="avatar-link" title="Setting">
-        <img src="assets/icons/user.png" alt="user" class="avatar" />
+        <img src="assets/icons/icon-192.png" alt="user" class="avatar" />
       </a>
     </header>
 
-    <!-- ===== Main Content ===== -->
+    <!-- Main -->
     <main class="home-main">
-      <!-- ✅ PWA Install Button -->
+      <!-- Install PWA button -->
       <button id="installBtn" class="install-btn" style="display:none">
         📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
       </button>
 
-      <!-- Game Mode Menu -->
+      <!-- Game Mode Menu (emoji; no external images required) -->
       <div class="menu-grid">
         <a class="menu-card" href="play.html?mode=ai">
-          <img src="assets/icons/ai.png" alt="AI" class="menu-icon" />
+          <div class="card-emoji">🤖</div>
           <span>លេងជាមួយ AI</span>
         </a>
         <a class="menu-card" href="play.html?mode=friend">
-          <img src="assets/icons/friend.png" alt="Friend" class="menu-icon" />
+          <div class="card-emoji">👥</div>
           <span>លេងជាមួយមិត្ត</span>
         </a>
       </div>
     </main>
 
-    <!-- ===== Bottom Navigation ===== -->
+    <!-- Bottom Navigation -->
     <nav class="home-nav">
       <a class="nav-item active" href="index.html" aria-current="page">
         <span class="ni">🏠</span><span>Home</span>

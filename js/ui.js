@@ -39,8 +39,15 @@ export function initUI(){
         if(p){
           const span = document.createElement('div');
           span.className = `piece ${p.c===COLORS.WHITE?'white':'black'}`;
-          // Text label placeholder (replace later with PNG by CSS background-image)
-          span.textContent = LABEL[p.t];
+          const nameMap = {
+  K:'king', Q:'queen', B:'bishop', R:'rook', N:'knight', P:'pawn'
+};
+const pieceName = `${p.c === 'w' ? 'w' : 'b'}-${nameMap[p.t]}`;
+span.style.backgroundImage = `url(./assets/pieces/${pieceName}.png)`;
+span.style.backgroundSize = 'contain';
+span.style.backgroundRepeat = 'no-repeat';
+span.style.backgroundPosition = 'center';
+span.textContent = '';
           span.draggable = false;
           cell.appendChild(span);
         }

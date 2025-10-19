@@ -177,11 +177,42 @@ export function initUI(){
   window.addEventListener('resize', updateFsLayout);
   window.addEventListener('orientationchange', updateFsLayout);
 
-  // autohide topbar
   let hideTimer=null; const HIDE_DELAY=2000;
   function scheduleHide(){ if(!isFS()) return; clearTimeout(hideTimer); hideTimer=setTimeout(()=>app.classList.add('fs-autohide'), HIDE_DELAY); }
   function showNow(){ app.classList.remove('fs-autohide'); if(isFS()) scheduleHide(); }
   ['mousemove','mousedown','touchstart','wheel','keydown'].forEach(evt=> window.addEventListener(evt, ()=>{ if(isFS()) showNow(); }, {passive:true}));
+
+  // ===== Ask to save when navigating away from play page =====
+  function attachLeaveProtection() {
+    const onPlayPage = /play\.html/i.test(location.pathname) || location.pathname.endsWith('/play');
+    if (!onPlayPage) return;
+
+    const selectors = ['.home-nav a', '.topbar a', '#btnHome', '.avatar'];
+    const links = document.querySelectorAll(selectors.join(','));
+    const promptMsg = 'តើអ្នកចង់រក្សាទុក game នេះសម្រាប់លេងពេលក្រោយឬទេ?';
+
+    function confirmAndGo(href){
+      const wantSave = confirm(promptMsg);
+      if (wantSave) saveGameState(game, clocks);
+      location.href = href;
+    }
+
+    links.forEach(a=>{
+      a.addEventListener('click', (e)=>{
+        const href = a.getAttribute('href');
+        if (!href || href.startsWith('#')) return;
+        e.preventDefault();
+        confirmAndGo(href);
+      });
+    });
+
+    window.addEventListener('beforeunload', (e)=>{
+      saveGameState(game, clocks);
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  }
+  attachLeaveProtection();
 
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }

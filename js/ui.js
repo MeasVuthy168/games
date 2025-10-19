@@ -18,18 +18,11 @@ function saveGameState(game, clocks) {
   };
   localStorage.setItem(SAVE_KEY, JSON.stringify(state));
 }
-
 function loadGameState() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVE_KEY));
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)); }
+  catch { return null; }
 }
-
-function clearGameState() {
-  localStorage.removeItem(SAVE_KEY);
-}
+function clearGameState() { localStorage.removeItem(SAVE_KEY); }
 
 /* ========= Settings storage ========= */
 function loadSettings(){
@@ -38,9 +31,7 @@ function loadSettings(){
     return s ? {...DEFAULTS, ...s} : {...DEFAULTS};
   }catch{ return {...DEFAULTS}; }
 }
-function saveSettings(s){
-  localStorage.setItem(LS_KEY, JSON.stringify(s));
-}
+function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
 
 /* ========= Audio ========= */
 class Beeper {
@@ -90,28 +81,19 @@ class Clocks {
     const tick = ()=>{
       if(!this.running) return;
       const now = performance.now();
-      const dt = now - last;
-      last = now;
-      if(this.turn===COLORS.WHITE){
-        this.msW = Math.max(0,this.msW - dt);
-      }else{
-        this.msB = Math.max(0,this.msB - dt);
-      }
+      const dt = now - last; last = now;
+      if(this.turn===COLORS.WHITE) this.msW = Math.max(0,this.msW - dt);
+      else this.msB = Math.max(0,this.msB - dt);
       this._updated(this.msW,this.msB);
       if(this.msW<=0 || this.msB<=0){ this.stop(); return; }
       this._timer = requestAnimationFrame(tick);
     };
     this._timer = requestAnimationFrame(tick);
   }
-  stop(){
-    this.running = false;
-    if(this._timer) cancelAnimationFrame(this._timer);
-    this._timer = null;
-  }
+  stop(){ this.running = false; if(this._timer) cancelAnimationFrame(this._timer); this._timer = null; }
   pauseResume(){ this.running ? this.stop() : this.start(); }
   switchedByMove(prevTurn){
-    if(prevTurn===COLORS.WHITE) this.msW+=this.increment;
-    else this.msB+=this.increment;
+    if(prevTurn===COLORS.WHITE) this.msW+=this.increment; else this.msB+=this.increment;
     this.turn = (prevTurn===COLORS.WHITE) ? COLORS.BLACK : COLORS.WHITE;
     this._updated(this.msW,this.msB);
     this.start();
@@ -126,6 +108,7 @@ class Clocks {
 
 /* ========= UI ========= */
 export function initUI(){
+  const app   = document.getElementById('app');
   const elBoard = document.getElementById('board');
   const elMoves = document.getElementById('moveList');
   const elTurn  = document.getElementById('turnLabel');
@@ -137,6 +120,7 @@ export function initUI(){
   const btnHome = document.getElementById('btnHome');
   const btnPause= document.getElementById('btnPause');
   const btnSettings = document.getElementById('btnSettings');
+  const btnFullscreen = document.getElementById('btnFullscreen');
 
   const clockW = document.getElementById('clockW');
   const clockB = document.getElementById('clockB');
@@ -324,4 +308,78 @@ export function initUI(){
     modal.classList.add('show');
   }
   function closeModal(){ modal.classList.remove('show'); }
-  btnSettings.addEventListener('
+  btnSettings.addEventListener('click', openModal);
+  modal.querySelectorAll('[data-close]').forEach(el=> el.addEventListener('click', closeModal));
+  modal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); });
+  btnDefaults.addEventListener('click', ()=>{
+    setMinutes.value = 10;
+    setIncrement.value = 5;
+    setSound.checked = true;
+  });
+  btnTestSound.addEventListener('click', ()=>{
+    const was = beeper.enabled; beeper.enabled = true;
+    beeper.move(); setTimeout(()=> beeper.capture(), 160);
+    setTimeout(()=> beeper.select(), 330);
+    beeper.enabled = was;
+  });
+  btnApply.addEventListener('click', ()=>{
+    const newSettings = {
+      minutes: Math.max(1, Math.min(180, parseInt(setMinutes.value||'10',10))),
+      increment: Math.max(0, Math.min(60, parseInt(setIncrement.value||'5',10))),
+      sound: !!setSound.checked
+    };
+    settings = newSettings;
+    saveSettings(settings);
+    beeper.enabled = settings.sound;
+    optSound.checked = settings.sound;
+    // Re-init clocks with new base; keep current turn
+    clocks.init(settings.minutes, settings.increment, game.turn);
+    // Keep paused until resume
+    btnPause.textContent = '▶️';
+    closeModal();
+  });
+
+  /* ===== Fullscreen handling ===== */
+  function isFullscreen(){
+    return !!(document.fullscreenElement || document.webkitFullscreenElement);
+  }
+  async function enterFullscreen(){
+    try{
+      if(app.requestFullscreen){ await app.requestFullscreen({ navigationUI: 'hide' }); }
+      else if(app.webkitRequestFullscreen){ app.webkitRequestFullscreen(); }
+      // Try to lock landscape; ignore failures silently
+      try{
+        if(screen.orientation && screen.orientation.lock){
+          await screen.orientation.lock('landscape');
+        }
+      }catch(_){}
+      btnFullscreen.textContent = '🡼'; // exit icon
+    }catch(e){
+      // If denied, just ignore
+    }
+  }
+  async function exitFullscreen(){
+    try{
+      if(document.exitFullscreen){ await document.exitFullscreen(); }
+      else if(document.webkitExitFullscreen){ document.webkitExitFullscreen(); }
+      try{
+        if(screen.orientation && screen.orientation.unlock){
+          screen.orientation.unlock();
+        }
+      }catch(_){}
+      btnFullscreen.textContent = '⛶';
+    }catch(e){}
+  }
+  btnFullscreen.addEventListener('click', ()=>{
+    if(isFullscreen()) exitFullscreen(); else enterFullscreen();
+  });
+  document.addEventListener('fullscreenchange', ()=>{
+    btnFullscreen.textContent = isFullscreen() ? '🡼' : '⛶';
+  });
+  document.addEventListener('webkitfullscreenchange', ()=>{
+    btnFullscreen.textContent = isFullscreen() ? '🡼' : '⛶';
+  });
+
+  // Save on unload
+  window.addEventListener('beforeunload', () => { saveGameState(game, clocks); });
+}

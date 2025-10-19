@@ -1,347 +1,60 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="km">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Excel File Upload with Validation and Splitting</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-        }
-        .container {
-            background-color: #f9f9f9;
-            border-radius: 8px;
-            padding: 20px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-        }
-        .upload-area {
-            border: 2px dashed #ccc;
-            padding: 30px;
-            text-align: center;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            background-color: #fff;
-            transition: all 0.3s;
-        }
-        .upload-area:hover {
-            border-color: #4CAF50;
-        }
-        #fileInput {
-            display: none;
-        }
-        .upload-btn {
-            background-color: #4CAF50;
-            color: white;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 16px;
-            margin-bottom: 10px;
-        }
-        .upload-btn:hover {
-            background-color: #45a049;
-        }
-        .file-list {
-            margin-top: 20px;
-        }
-        .file-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px;
-            background-color: #eee;
-            margin-bottom: 5px;
-            border-radius: 4px;
-        }
-        .status {
-            font-weight: bold;
-        }
-        .valid {
-            color: #4CAF50;
-        }
-        .invalid {
-            color: #f44336;
-        }
-        .spinner {
-            display: none;
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #4CAF50;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .progress-container {
-            width: 100%;
-            background-color: #ddd;
-            border-radius: 4px;
-            margin-top: 20px;
-        }
-        .progress-bar {
-            height: 20px;
-            background-color: #4CAF50;
-            border-radius: 4px;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        .download-area {
-            margin-top: 20px;
-            display: none;
-        }
-        .download-btn {
-            background-color: #2196F3;
-            color: white;
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            margin-right: 10px;
-            margin-bottom: 10px;
-        }
-        .download-btn:hover {
-            background-color: #0b7dda;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>អុកចត្រង្គ (Khmer Chess)</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-    <div class="container">
-        <h1>Excel File Upload with Validation and Splitting</h1>
-        
-        <div class="upload-area" id="dropArea">
-            <p>Drag & drop Excel files here or click to select</p>
-            <button class="upload-btn" id="selectFilesBtn">Select Files</button>
-            <input type="file" id="fileInput" multiple accept=".xlsx, .xls" />
-            <p>Supports .xlsx and .xls files</p>
-        </div>
-        
-        <div class="progress-container" id="progressContainer" style="display: none;">
-            <div class="progress-bar" id="progressBar"></div>
-        </div>
-        
-        <div class="spinner" id="spinner"></div>
-        
-        <div class="file-list" id="fileList"></div>
-        
-        <div class="download-area" id="downloadArea">
-            <h3>Processed Files Ready for Download:</h3>
-            <div id="downloadLinks"></div>
-        </div>
-        
-        <div id="validationResults"></div>
-    </div>
+  <!-- Top bar (same feel as your app) -->
+  <header class="topbar">
+    <button class="icon-btn" id="btnBack" title="Back">←</button>
+    <h1>អុកចត្រង្គ (Khmer Chess)</h1>
+    <div class="spacer"></div>
+  </header>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const fileInput = document.getElementById('fileInput');
-            const selectFilesBtn = document.getElementById('selectFilesBtn');
-            const dropArea = document.getElementById('dropArea');
-            const fileList = document.getElementById('fileList');
-            const spinner = document.getElementById('spinner');
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const downloadArea = document.getElementById('downloadArea');
-            const downloadLinks = document.getElementById('downloadLinks');
-            const validationResults = document.getElementById('validationResults');
+  <main class="layout">
+    <section class="panel board-panel">
+      <div id="board" class="board" aria-label="Khmer Chess Board"></div>
 
-            let filesToProcess = [];
-            let processedFiles = [];
+      <div class="controls">
+        <button id="btnReset" class="primary">♻ ចាប់ផ្តើមថ្មី</button>
+        <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
+        <span class="turn" id="turnLabel">White to move</span>
+      </div>
+    </section>
 
-            // Event listeners
-            selectFilesBtn.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', handleFileSelect);
-            
-            // Drag and drop events
-            dropArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropArea.style.borderColor = '#4CAF50';
-                dropArea.style.backgroundColor = '#f0fff0';
-            });
-            
-            dropArea.addEventListener('dragleave', () => {
-                dropArea.style.borderColor = '#ccc';
-                dropArea.style.backgroundColor = '#fff';
-            });
-            
-            dropArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                dropArea.style.borderColor = '#ccc';
-                dropArea.style.backgroundColor = '#fff';
-                
-                if (e.dataTransfer.files.length) {
-                    fileInput.files = e.dataTransfer.files;
-                    handleFileSelect({ target: fileInput });
-                }
-            });
+    <aside class="panel side-panel">
+      <h2>ប្រវត្តិការធ្វើចលនា</h2>
+      <ol id="moveList" class="moves"></ol>
 
-            function handleFileSelect(event) {
-                filesToProcess = Array.from(event.target.files);
-                if (filesToProcess.length === 0) return;
-                
-                fileList.innerHTML = '';
-                filesToProcess.forEach((file, index) => {
-                    const fileItem = document.createElement('div');
-                    fileItem.className = 'file-item';
-                    fileItem.innerHTML = `
-                        <span>${file.name} (${formatFileSize(file.size)})</span>
-                        <span class="status">Pending</span>
-                    `;
-                    fileList.appendChild(fileItem);
-                });
-                
-                processFiles();
-            }
+      <h2>ជម្រើសបង្ហាញ</h2>
+      <label class="opt">
+        <input type="checkbox" id="optShowHints" checked />
+        បង្ហាញទីតាំងអាចដាក់
+      </label>
+      <label class="opt">
+        <input type="checkbox" id="optSound" />
+        សម្លេងពេលផ្លាស់ទី (សម្រាប់បន្ថែមពេលក្រោយ)
+      </label>
 
-            async function processFiles() {
-                spinner.style.display = 'block';
-                progressContainer.style.display = 'block';
-                downloadArea.style.display = 'none';
-                downloadLinks.innerHTML = '';
-                processedFiles = [];
-                
-                const totalFiles = filesToProcess.length;
-                let processedCount = 0;
-                
-                for (const file of filesToProcess) {
-                    try {
-                        const fileData = await readFile(file);
-                        const workbook = XLSX.read(fileData, { type: 'array' });
-                        
-                        // Validate and process each sheet
-                        for (const sheetName of workbook.SheetNames) {
-                            const worksheet = workbook.Sheets[sheetName];
-                            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                            
-                            // Validate first column header is LD_CIF_OS
-                            if (jsonData.length > 0) {
-                                const firstCell = jsonData[0][0];
-                                if (firstCell !== 'LD_CIF_OS') {
-                                    updateFileStatus(file.name, 'Invalid - First column must be LD_CIF_OS');
-                                    continue;
-                                }
-                            }
-                            
-                            // Split if more than 3000 rows (excluding header)
-                            if (jsonData.length > 3001) {
-                                const splitFiles = splitExcelFile(workbook, sheetName, file.name);
-                                processedFiles.push(...splitFiles);
-                                updateFileStatus(file.name, `Split into ${splitFiles.length} files`);
-                            } else {
-                                // If no splitting needed, just add to processed files
-                                const blob = new Blob([fileData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                                processedFiles.push({
-                                    name: file.name.replace(/.xlsx?$/, '') + '_validated.xlsx',
-                                    blob: blob,
-                                    status: 'Valid'
-                                });
-                                updateFileStatus(file.name, 'Valid');
-                            }
-                        }
-                    } catch (error) {
-                        console.error('Error processing file:', file.name, error);
-                        updateFileStatus(file.name, 'Error processing file');
-                    }
-                    
-                    processedCount++;
-                    progressBar.style.width = `${(processedCount / totalFiles) * 100}%`;
-                }
-                
-                spinner.style.display = 'none';
-                progressBar.style.width = '100%';
-                
-                if (processedFiles.length > 0) {
-                    showDownloadLinks();
-                }
-            }
+      <div class="note">
+        <strong>សម្គាល់៖</strong> នេះគឺជាកំណែដំបូង (custom). ច្បាប់អុកចត្រង្គបានដាក់អោយប្រើតាម
+        ក្បួនស្តង់ដារ (ខ្មែរដូច Makruk) និងអាចត្រូវការ​ពិនិត្យបន្ថែម។ អ្នកអាចប្តូរច្បាប់ ឬរចនាបថឯកសារ <code>js/game.js</code>.
+      </div>
+    </aside>
+  </main>
 
-            function splitExcelFile(workbook, sheetName, originalFileName) {
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                const header = jsonData[0];
-                const rows = jsonData.slice(1);
-                
-                const splitFiles = [];
-                const chunkSize = 3000;
-                
-                for (let i = 0; i < rows.length; i += chunkSize) {
-                    const chunk = rows.slice(i, i + chunkSize);
-                    const chunkWithHeader = [header, ...chunk];
-                    
-                    const newWorkbook = XLSX.utils.book_new();
-                    const newWorksheet = XLSX.utils.aoa_to_sheet(chunkWithHeader);
-                    XLSX.utils.book_append_sheet(newWorkbook, newWorksheet, sheetName);
-                    
-                    const excelBuffer = XLSX.write(newWorkbook, { bookType: 'xlsx', type: 'array' });
-                    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-                    
-                    const baseName = originalFileName.replace(/.xlsx?$/, '');
-                    const partNumber = Math.floor(i / chunkSize) + 1;
-                    const fileName = `${baseName}_part${partNumber}.xlsx`;
-                    
-                    splitFiles.push({
-                        name: fileName,
-                        blob: blob,
-                        status: 'Split'
-                    });
-                }
-                
-                return splitFiles;
-            }
+  <!-- Bottom bar (simple) -->
+  <footer class="bottombar">
+    <span>© ២០២៥ — Khmer Chess (អុកចត្រង្គ)</span>
+    <a class="home-link" href="#" id="btnHome">🏠 Home</a>
+  </footer>
 
-            function readFile(file) {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => resolve(e.target.result);
-                    reader.onerror = (e) => reject(new Error('File reading failed'));
-                    reader.readAsArrayBuffer(file);
-                });
-            }
-
-            function updateFileStatus(fileName, status) {
-                const fileItems = document.querySelectorAll('.file-item');
-                for (const item of fileItems) {
-                    if (item.textContent.includes(fileName)) {
-                        const statusElement = item.querySelector('.status');
-                        statusElement.textContent = status;
-                        statusElement.className = 'status ' + (status.includes('Invalid') || status.includes('Error') ? 'invalid' : 'valid');
-                        break;
-                    }
-                }
-            }
-
-            function showDownloadLinks() {
-                downloadArea.style.display = 'block';
-                processedFiles.forEach(file => {
-                    const downloadLink = document.createElement('a');
-                    downloadLink.href = URL.createObjectURL(file.blob);
-                    downloadLink.download = file.name;
-                    downloadLink.className = 'download-btn';
-                    downloadLink.textContent = `Download ${file.name}`;
-                    downloadLinks.appendChild(downloadLink);
-                });
-            }
-
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 Bytes';
-                const k = 1024;
-                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-            }
-        });
-    </script>
+  <script type="module">
+    import { initUI } from './js/ui.js';
+    initUI();
+  </script>
 </body>
 </html>

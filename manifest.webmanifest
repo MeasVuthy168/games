@@ -1,0 +1,25 @@
+{
+  "name": "Khmer Chess (អុកចត្រង្គ)",
+  "short_name": "Khmer Chess",
+  "description": "Play Khmer Chess offline. Timers, sounds, saves, and more.",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0d2d5c",
+  "theme_color": "#0d2d5c",
+  "icons": [
+    {
+      "src": "assets/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

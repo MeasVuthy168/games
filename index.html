@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Make a root container we can fullscreen -->
+  <!-- Fullscreen wrapper -->
   <div id="app" class="app">
     <!-- Top bar -->
     <header class="topbar">
@@ -19,10 +19,11 @@
       <button class="icon-btn" id="btnPause" title="Pause/Resume">⏸️</button>
     </header>
 
+    <!-- Main Layout -->
     <main class="layout">
       <section class="panel board-panel">
 
-        <!-- Top player timer (Black) -->
+        <!-- Top timer -->
         <div class="timers">
           <div class="player-row top">
             <div class="player-name">ខ្មៅ (Black)</div>
@@ -30,9 +31,10 @@
           </div>
         </div>
 
+        <!-- Chess Board -->
         <div id="board" class="board" aria-label="Khmer Chess Board"></div>
 
-        <!-- Bottom player timer (White) -->
+        <!-- Bottom timer -->
         <div class="timers">
           <div class="player-row bottom">
             <div class="player-name">ស (White)</div>
@@ -40,6 +42,7 @@
           </div>
         </div>
 
+        <!-- Controls -->
         <div class="controls">
           <button id="btnReset" class="primary">♻ ចាប់ផ្ដើមថ្មី</button>
           <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
@@ -47,6 +50,7 @@
         </div>
       </section>
 
+      <!-- Side Panel -->
       <aside class="panel side-panel">
         <h2>ប្រវត្តិការធ្វើចលនា</h2>
         <ol id="moveList" class="moves"></ol>
@@ -62,7 +66,7 @@
         </label>
 
         <div class="note">
-          <strong>សម្គាល់៖</strong> Timers, sounds, and settings can be configured from the ⚙️ button.
+          <strong>សម្គាល់៖</strong> អ្នកអាចកំណត់ពេលវេលា និងសម្លេងតាម ⚙️ Settings។
         </div>
       </aside>
     </main>
@@ -100,16 +104,14 @@
       </div>
     </div>
 
-    <!-- Bottom bar -->
+    <!-- Bottom Bar -->
     <footer class="bottombar">
       <span>© ២០២៥ — Khmer Chess (អុកចត្រង្គ)</span>
-      <a class="home-link" href="#" id="btnHome">🏠 Home</a>
+      <a class="home-link" href="index.html" id="btnHome">🏠 Home</a>
     </footer>
-  </div><!-- /app -->
+  </div>
 
-  <script type="module">
-    import { initUI } from './js/ui.js';
-    initUI();
-  </script>
+  <!-- ✅ Load JavaScript at the END -->
+  <script type="module" src="./js/main.js"></script>
 </body>
 </html>

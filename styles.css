@@ -21,6 +21,9 @@ body{
   background:#f5f6f7;
 }
 
+/* App wrapper (fullscreen target) */
+.app{ min-height:100dvh; display:flex; flex-direction:column }
+
 /* Top bar */
 .topbar{
   position:sticky;top:0;z-index:10;
@@ -42,6 +45,7 @@ body{
   grid-template-columns: 1fr 320px;
   gap:1rem;
   padding:1rem;
+  flex:1;
 }
 .panel{
   background:var(--panel); border-radius:1rem; box-shadow:var(--shadow);
@@ -56,8 +60,6 @@ body{
   background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
   padding:.4rem .7rem; box-shadow: var(--shadow);
 }
-.player-row.top{ transform: translateY(0); }
-.player-row.bottom{ transform: translateY(0); }
 .player-name{ font-weight:700 }
 .clock{
   font-variant-numeric: tabular-nums;
@@ -158,6 +160,50 @@ body{
   padding:.6rem 1rem; display:flex; align-items:center; justify-content:space-between;
 }
 .home-link{text-decoration:none; font-weight:700}
+
+/* ---------- FULLSCREEN ENHANCEMENTS ---------- */
+
+/* Standard :fullscreen and WebKit vendor */
+.app:fullscreen, .app:-webkit-full-screen{
+  background:#0a0e18; /* darker for immersion */
+}
+
+/* Keep topbar visible but sleeker */
+.app:fullscreen .topbar, .app:-webkit-full-screen .topbar{
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  background:rgba(13,45,92,.88);
+  backdrop-filter: blur(6px);
+}
+
+/* Hide bottom bar and side panel to maximize space */
+.app:fullscreen .bottombar,
+.app:-webkit-full-screen .bottombar{
+  display:none;
+}
+.app:fullscreen .side-panel,
+.app:-webkit-full-screen .side-panel{
+  display:none;
+}
+
+/* Single-column layout in fullscreen */
+.app:fullscreen .layout,
+.app:-webkit-full-screen .layout{
+  grid-template-columns: 1fr;
+  padding:.6rem;
+  margin-top:64px; /* room for topbar */
+}
+
+/* Make timers compact and board as large as possible */
+.app:fullscreen .timers,
+.app:-webkit-full-screen .timers{
+  width: min(98vw, 1600px);
+}
+.app:fullscreen .board,
+.app:-webkit-full-screen .board{
+  /* Try to fill vertical space: subtract approx. timers + gaps (~180px) */
+  width: min(98vw, calc(98vh - 180px));
+  max-width: 98vmin;
+}
 
 /* Responsive */
 @media (max-width: 920px){

@@ -7,19 +7,38 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Top bar (same feel as your app) -->
+  <!-- Top bar -->
   <header class="topbar">
     <button class="icon-btn" id="btnBack" title="Back">←</button>
     <h1>អុកចត្រង្គ (Khmer Chess)</h1>
     <div class="spacer"></div>
+    <button class="icon-btn" id="btnSettings" title="Settings">⚙️</button>
+    <button class="icon-btn" id="btnPause" title="Pause/Resume">⏸️</button>
   </header>
 
   <main class="layout">
     <section class="panel board-panel">
+
+      <!-- Top player timer (Black) -->
+      <div class="timers">
+        <div class="player-row top">
+          <div class="player-name">ខ្មៅ (Black)</div>
+          <div class="clock" id="clockB">10:00.0</div>
+        </div>
+      </div>
+
       <div id="board" class="board" aria-label="Khmer Chess Board"></div>
 
+      <!-- Bottom player timer (White) -->
+      <div class="timers">
+        <div class="player-row bottom">
+          <div class="player-name">ស (White)</div>
+          <div class="clock" id="clockW">10:00.0</div>
+        </div>
+      </div>
+
       <div class="controls">
-        <button id="btnReset" class="primary">♻ ចាប់ផ្តើមថ្មី</button>
+        <button id="btnReset" class="primary">♻ ចាប់ផ្ដើមថ្មី</button>
         <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
         <span class="turn" id="turnLabel">White to move</span>
       </div>
@@ -36,17 +55,49 @@
       </label>
       <label class="opt">
         <input type="checkbox" id="optSound" />
-        សម្លេងពេលផ្លាស់ទី (សម្រាប់បន្ថែមពេលក្រោយ)
+        បើកសម្លេង
       </label>
 
       <div class="note">
-        <strong>សម្គាល់៖</strong> នេះគឺជាកំណែដំបូង (custom). ច្បាប់អុកចត្រង្គបានដាក់អោយប្រើតាម
-        ក្បួនស្តង់ដារ (ខ្មែរដូច Makruk) និងអាចត្រូវការ​ពិនិត្យបន្ថែម។ អ្នកអាចប្តូរច្បាប់ ឬរចនាបថឯកសារ <code>js/game.js</code>.
+        <strong>សម្គាល់៖</strong> Timers, sounds, and settings can be configured from the ⚙️ button.
       </div>
     </aside>
   </main>
 
-  <!-- Bottom bar (simple) -->
+  <!-- Settings Modal -->
+  <div class="modal" id="settingsModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="modal-header">
+        <h3 id="settingsTitle">ការកំណត់ (Settings)</h3>
+        <button class="icon-btn" data-close>✖</button>
+      </header>
+      <div class="modal-body">
+        <div class="form-row">
+          <label>Initial time (minutes per side)</label>
+          <input type="number" id="setMinutes" min="1" max="180" step="1" value="10" />
+        </div>
+        <div class="form-row">
+          <label>Increment (seconds added after each move)</label>
+          <input type="number" id="setIncrement" min="0" max="60" step="1" value="5" />
+        </div>
+        <div class="form-row inline">
+          <label class="chk">
+            <input type="checkbox" id="setSound" checked />
+            Enable sounds
+          </label>
+        </div>
+        <div class="row-actions">
+          <button id="btnTestSound" class="secondary">🔊 Test sound</button>
+          <button id="btnDefaults" class="secondary">↺ Defaults</button>
+          <div class="spacer"></div>
+          <button id="btnApply" class="primary">✅ Save & Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom bar -->
   <footer class="bottombar">
     <span>© ២០២៥ — Khmer Chess (អុកចត្រង្គ)</span>
     <a class="home-link" href="#" id="btnHome">🏠 Home</a>

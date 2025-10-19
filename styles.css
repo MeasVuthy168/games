@@ -166,67 +166,30 @@ body{
 .home-link{text-decoration:none; font-weight:700}
 
 /* ---------- FULLSCREEN ENHANCEMENTS ---------- */
-
-/* Fullscreen backdrop */
-.app:fullscreen, .app:-webkit-full-screen{
-  background:#0a0e18;
-}
-
-/* Keep topbar visible (we autohide via class) */
+.app:fullscreen, .app:-webkit-full-screen{ background:#0a0e18; }
 .app:fullscreen .topbar, .app:-webkit-full-screen .topbar{
   position:fixed; top:0; left:0; right:0; z-index:25;
   background:rgba(13,45,92,.88);
   backdrop-filter: blur(6px);
 }
-
-/* Hide bottom bar and side panel to maximize space */
-.app:fullscreen .bottombar,
-.app:-webkit-full-screen .bottombar{
-  display:none;
+.app:fullscreen .bottombar, .app:-webkit-full-screen .bottombar{ display:none; }
+.app:fullscreen .side-panel, .app:-webkit-full-screen .side-panel{ display:none; }
+.app:fullscreen .layout, .app:-webkit-full-screen .layout{
+  grid-template-columns: 1fr; padding:.6rem; margin-top:64px;
 }
-.app:fullscreen .side-panel,
-.app:-webkit-full-screen .side-panel{
-  display:none;
-}
-
-/* Single-column layout in fullscreen */
-.app:fullscreen .layout,
-.app:-webkit-full-screen .layout{
-  grid-template-columns: 1fr;
-  padding:.6rem;
-  margin-top:64px; /* room for topbar */
+.app:fullscreen .timers, .app:-webkit-full-screen .timers{ width:min(98vw,1600px); }
+.app:fullscreen .board, .app:-webkit-full-screen .board{
+  width:min(98vw, calc(98vh - 180px)); max-width:98vmin;
 }
 
-/* Make timers wide and board large */
-.app:fullscreen .timers,
-.app:-webkit-full-screen .timers{
-  width: min(98vw, 1600px);
-}
-.app:fullscreen .board,
-.app:-webkit-full-screen .board{
-  width: min(98vw, calc(98vh - 180px));
-  max-width: 98vmin;
-}
-
-/* --- Soft Landscape Fallback (rotate UI when device is vertical in fullscreen) --- */
+/* Soft rotation when fullscreen+portrait */
 .app.fs-rotate{
-  position:fixed; inset:0;
-  transform: rotate(90deg);
-  transform-origin: 50% 50%;
-  /* Swap logical width/height after rotate */
-  width: 100vh;
-  height: 100vw;
-  overflow:hidden;
-  background:#0a0e18;
+  position:fixed; inset:0; transform:rotate(90deg); transform-origin:50% 50%;
+  width:100vh; height:100vw; overflow:hidden; background:#0a0e18;
 }
-.app.fs-rotate .layout{
-  margin-top:64px;
-}
-.app.fs-rotate .timers{ width: min(98vh, 1600px); }
-.app.fs-rotate .board{
-  width: min(98vh, calc(98vw - 180px));
-  max-width: 98vmin;
-}
+.app.fs-rotate .layout{ margin-top:64px; }
+.app.fs-rotate .timers{ width:min(98vh,1600px); }
+.app.fs-rotate .board{ width:min(98vh, calc(98vw - 180px)); max-width:98vmin; }
 
 /* Responsive */
 @media (max-width: 920px){

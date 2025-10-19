@@ -23,6 +23,7 @@ class Beeper{
   }
   move(){this.tone(660,90,'square',0.06);} capture(){this.tone(420,140,'sawtooth',0.07);}
   select(){this.tone(880,70,'sine',0.05);} error(){this.tone(200,180,'triangle',0.07);}
+  check(){this.tone(980,160,'sine',0.06);}
 }
 const beeper=new Beeper();
 
@@ -65,6 +66,17 @@ export function initUI(){
   const btnDefaults=document.getElementById('btnDefaults');
   const btnTestSound=document.getElementById('btnTestSound');
 
+  const KH = {
+    white: 'ស',
+    black: 'ខ្មៅ',
+    toMove: 'លំដាប់វេន',
+    check: 'ឆក់រាជា',
+    checkmate: 'ម៉ាត់',
+    stalemate: 'គប់ស្ដាំ (Stalemate)',
+    resumeQ: 'មានល្បែងមុន។ តើបន្តទេ?',
+    askSaveLeave: 'តើអ្នកចង់រក្សាទុក game នេះសម្រាប់លេងពេលក្រោយឬទេ?',
+  };
+
   const game=new Game();
   let settings=loadSettings();
   optSound.checked=settings.sound; beeper.enabled=settings.sound;
@@ -72,6 +84,7 @@ export function initUI(){
   const clocks=new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
+  // Build board cells
   const cells=[];
   for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
     const cell=document.createElement('div');
@@ -80,20 +93,46 @@ export function initUI(){
     elBoard.appendChild(cell); cells.push(cell);
   }
 
-  function setPieceBG(span,p){
+  const setPieceBG=(span,p)=>{
     const map={K:'king',Q:'queen',B:'bishop',R:'rook',N:'knight',P:'pawn'};
     const name=`${p.c==='w'?'w':'b'}-${map[p.t]}`;
     span.style.backgroundImage=`url(./assets/pieces/${name}.png)`;
+  };
+
+  function khTurnLabel(){
+    const side = game.turn===COLORS.WHITE ? KH.white : KH.black;
+    const st = game.status();
+    if(st.state==='checkmate') return `${side} ${KH.checkmate} · ${side==='ស'?'ខ្មៅ':'ស'} ឈ្នះ`;
+    if(st.state==='stalemate') return `${KH.stalemate}`;
+    if(st.state==='check') return `${side} ${KH.toMove} · ${KH.check}`;
+    return `${side} ${KH.toMove}`;
   }
 
   function render(){
-    for(const c of cells){ c.innerHTML=''; c.classList.remove('selected','hint-move','hint-capture'); }
+    // clear
+    for(const c of cells){ c.innerHTML=''; c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture'); }
+
+    // pieces
     for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
       const p=game.at(x,y); if(!p) continue;
-      const cell=cells[y*SIZE+x]; const span=document.createElement('div');
-      span.className=`piece ${p.c==='w'?'white':'black'}`; setPieceBG(span,p); cell.appendChild(span);
+      const cell=cells[y*SIZE+x];
+      const span=document.createElement('div');
+      span.className=`piece ${p.c==='w'?'white':'black'}`;
+      setPieceBG(span,p);
+      cell.appendChild(span);
     }
-    elTurn.textContent=game.turn===COLORS.WHITE?'ស - White to move':'ខ - Black to move';
+
+    // last move highlight
+    const last = game.history[game.history.length-1];
+    if(last){
+      cells[last.from.y*SIZE+last.from.x].classList.add('last-from');
+      const toCell = cells[last.to.y*SIZE+last.to.x];
+      toCell.classList.add('last-to');
+      if(last.captured) toCell.classList.add('last-capture');
+    }
+
+    // turn label (Khmer-first)
+    elTurn.textContent = khTurnLabel();
   }
 
   let selected=null, legal=[];
@@ -108,7 +147,10 @@ export function initUI(){
     const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
     if(p && p.c===game.turn){ selected={x,y}; showHints(x,y); if(beeper.enabled) beeper.select(); return; }
     if(!selected) return;
-    const ok=legal.some(m=>m.x===x&&m.y===y); if(!ok){ selected=null; legal=[]; clearHints(); if(beeper.enabled) beeper.error(); return; }
+
+    const ok=legal.some(m=>m.x===x&&m.y===y);
+    if(!ok){ selected=null; legal=[]; clearHints(); if(beeper.enabled) beeper.error(); return; }
+
     const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prevTurn=game.turn;
     const res=game.move(from,to);
     if(res.ok){
@@ -117,37 +159,58 @@ export function initUI(){
       if(game.turn===COLORS.BLACK){ const li=document.createElement('li'); li.textContent=`${idx}. ${moveText}`; elMoves.appendChild(li); }
       else { const last=elMoves.lastElementChild; if(last) last.textContent=`${last.textContent} | ${moveText}`; else { const li=document.createElement('li'); li.textContent=`${idx}. ... ${moveText}`; elMoves.appendChild(li);} }
       elMoves.parentElement.scrollTop=elMoves.parentElement.scrollHeight;
-      if(beeper.enabled) (before?beeper.capture():beeper.move());
+
+      if(beeper.enabled){ if(before) beeper.capture(); else beeper.move(); }
+      if(res.status?.state==='check' && beeper.enabled){ beeper.check(); }
+
       clocks.switchedByMove(prevTurn);
-      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      selected=null; legal=[]; clearHints(); render();
+      saveGameState(game,clocks);
+
+      // announce end
+      if(res.status?.state==='checkmate'){
+        setTimeout(()=> alert('ម៉ាត់! ល្បែងបានបញ្ចប់'), 50);
+      }else if(res.status?.state==='stalemate'){
+        setTimeout(()=> alert('គប់ស្ដាំ (Stalemate) — ល្បែងស្មើ!'), 50);
+      }
     }
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  elReset.addEventListener('click', ()=>{ game.reset(); elMoves.innerHTML=''; selected=null; legal=[]; clearHints(); clearGameState();
-    clocks.init(settings.minutes, settings.increment, COLORS.WHITE); render(); clocks.start(); });
-
-  elUndo.addEventListener('click', ()=>{ if(game.undo()){
-    if(elMoves.lastElementChild){ const hasPipe=elMoves.lastElementChild.textContent.includes('|');
-      if(hasPipe){ const t=elMoves.lastElementChild.textContent.split('|')[0].trim(); elMoves.lastElementChild.textContent=t; }
-      else elMoves.removeChild(elMoves.lastElementChild);
-    }
-    selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-  }});
-
-  // Resume saved game
+  // Khmer-first labels for buttons already in markup; start game
   const saved=loadGameState();
-  if(saved && confirm("មានការបន្តពីល្បែងចាស់។ បន្តទេ?")){ game.board=saved.board; game.turn=saved.turn; game.history=saved.history;
+  if(saved && confirm(KH.resumeQ)){ game.board=saved.board; game.turn=saved.turn; game.history=saved.history;
     clocks.msW=saved.msW; clocks.msB=saved.msB; clocks.turn=saved.clockTurn; render(); clocks.start(); }
-  else { if(saved===null) {} else clearGameState(); clocks.start(); }
+  else { if(saved!==null) clearGameState(); render(); clocks.start(); }
 
-  // Pause/Resume
-  btnPause.addEventListener('click', ()=>{ clocks.pauseResume(); btnPause.textContent=clocks.running?'⏸️':'▶️'; });
+  // Controls
+  document.getElementById('btnReset').addEventListener('click', ()=>{
+    game.reset(); elMoves.innerHTML=''; selected=null; legal=[]; clearHints();
+    clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+    render(); clocks.start();
+  });
 
-  // Sound toggle
+  document.getElementById('btnUndo').addEventListener('click', ()=>{
+    if(game.undo()){
+      if(elMoves.lastElementChild){
+        const hasPipe=elMoves.lastElementChild.textContent.includes('|');
+        if(hasPipe){
+          const t=elMoves.lastElementChild.textContent.split('|')[0].trim();
+          elMoves.lastElementChild.textContent=t;
+        }else elMoves.removeChild(elMoves.lastElementChild);
+      }
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+    }
+  });
+
+  document.getElementById('btnPause').addEventListener('click', ()=>{
+    clocks.pauseResume();
+    btnPause.textContent=clocks.running?'⏸️':'▶️';
+  });
+
   optSound.addEventListener('change', ()=>{ beeper.enabled=optSound.checked; settings.sound=beeper.enabled; saveSettings(settings); });
 
-  // Settings modal
+  // Settings modal wires
   const openModal=()=>{ setMinutes.value=settings.minutes; setIncrement.value=settings.increment; setSound.checked=!!settings.sound; modal.classList.add('show'); };
   const closeModal=()=>{ modal.classList.remove('show'); };
   btnSettings.addEventListener('click', openModal);
@@ -163,7 +226,7 @@ export function initUI(){
     clocks.init(settings.minutes, settings.increment, game.turn); btnPause.textContent='▶️'; closeModal();
   });
 
-  // Fullscreen + soft-rotate + autohide topbar
+  // Fullscreen + rotate + autohide as before
   const isFS=()=>!!(document.fullscreenElement||document.webkitFullscreenElement);
   async function enterFS(){ try{ if(app.requestFullscreen) await app.requestFullscreen({navigationUI:'hide'}); else if(app.webkitRequestFullscreen) app.webkitRequestFullscreen();
     try{ if(screen.orientation?.lock) await screen.orientation.lock('landscape'); }catch{} }catch{} updateFsLayout(); scheduleHide(); }
@@ -182,21 +245,20 @@ export function initUI(){
   function showNow(){ app.classList.remove('fs-autohide'); if(isFS()) scheduleHide(); }
   ['mousemove','mousedown','touchstart','wheel','keydown'].forEach(evt=> window.addEventListener(evt, ()=>{ if(isFS()) showNow(); }, {passive:true}));
 
-  // ===== Ask to save when navigating away from play page =====
+  // Ask to save when leaving via bottom nav / links (Khmer prompt)
   function attachLeaveProtection() {
     const onPlayPage = /play\.html/i.test(location.pathname) || location.pathname.endsWith('/play');
     if (!onPlayPage) return;
 
     const selectors = ['.home-nav a', '.topbar a', '#btnHome', '.avatar'];
     const links = document.querySelectorAll(selectors.join(','));
-    const promptMsg = 'តើអ្នកចង់រក្សាទុក game នេះសម្រាប់លេងពេលក្រោយឬទេ?';
+    const promptMsg = KH.askSaveLeave;
 
     function confirmAndGo(href){
       const wantSave = confirm(promptMsg);
       if (wantSave) saveGameState(game, clocks);
       location.href = href;
     }
-
     links.forEach(a=>{
       a.addEventListener('click', (e)=>{
         const href = a.getAttribute('href');
@@ -207,12 +269,13 @@ export function initUI(){
     });
 
     window.addEventListener('beforeunload', (e)=>{
-      saveGameState(game, clocks);
+      saveGameState(game, clocks); // auto-save
       e.preventDefault();
       e.returnValue = '';
     });
   }
   attachLeaveProtection();
 
+  // persist on unload anyway
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }

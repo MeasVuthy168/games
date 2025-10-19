@@ -7,9 +7,7 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <!-- Fullscreen wrapper -->
   <div id="app" class="app">
-    <!-- Top bar -->
     <header class="topbar">
       <button class="icon-btn" id="btnBack" title="Back">←</button>
       <h1>អុកចត្រង្គ (Khmer Chess)</h1>
@@ -19,11 +17,8 @@
       <button class="icon-btn" id="btnPause" title="Pause/Resume">⏸️</button>
     </header>
 
-    <!-- Main Layout -->
     <main class="layout">
       <section class="panel board-panel">
-
-        <!-- Top timer -->
         <div class="timers">
           <div class="player-row top">
             <div class="player-name">ខ្មៅ (Black)</div>
@@ -31,10 +26,8 @@
           </div>
         </div>
 
-        <!-- Chess Board -->
         <div id="board" class="board" aria-label="Khmer Chess Board"></div>
 
-        <!-- Bottom timer -->
         <div class="timers">
           <div class="player-row bottom">
             <div class="player-name">ស (White)</div>
@@ -42,7 +35,6 @@
           </div>
         </div>
 
-        <!-- Controls -->
         <div class="controls">
           <button id="btnReset" class="primary">♻ ចាប់ផ្ដើមថ្មី</button>
           <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
@@ -50,7 +42,6 @@
         </div>
       </section>
 
-      <!-- Side Panel -->
       <aside class="panel side-panel">
         <h2>ប្រវត្តិការធ្វើចលនា</h2>
         <ol id="moveList" class="moves"></ol>
@@ -71,7 +62,6 @@
       </aside>
     </main>
 
-    <!-- Settings Modal -->
     <div class="modal" id="settingsModal" aria-hidden="true">
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
@@ -104,14 +94,13 @@
       </div>
     </div>
 
-    <!-- Bottom Bar -->
     <footer class="bottombar">
       <span>© ២០២៥ — Khmer Chess (អុកចត្រង្គ)</span>
       <a class="home-link" href="index.html" id="btnHome">🏠 Home</a>
     </footer>
   </div>
 
-  <!-- ✅ Load JavaScript at the END -->
+  <!-- Load JS at the end -->
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>

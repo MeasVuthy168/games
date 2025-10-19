@@ -8,52 +8,38 @@
 </head>
 <body>
   <div class="home-app">
-
-    <!-- Top bar -->
     <header class="home-topbar">
       <h1>Khmer Chess</h1>
-
-      <!-- User avatar (click to settings) -->
       <a class="avatar" href="settings.html" title="Settings">
-        <!-- If you add assets/user.png it will show; otherwise we show initials -->
         <img src="assets/user.png" alt="User" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
         <span class="avatar-fallback">U</span>
       </a>
     </header>
 
-    <!-- Main -->
     <main class="home-main">
       <a class="home-card" href="play.html?mode=ai">
         <div class="card-emoji">🤖</div>
-        <div class="card-title">Play with AI</div>
-        <div class="card-sub">Single player vs computer</div>
+        <div>
+          <div class="card-title">Play with AI</div>
+          <div class="card-sub">Single player vs computer</div>
+        </div>
       </a>
 
       <a class="home-card" href="play.html?mode=friend">
         <div class="card-emoji">👥</div>
-        <div class="card-title">Play with Friend</div>
-        <div class="card-sub">Two players on one device</div>
+        <div>
+          <div class="card-title">Play with Friend</div>
+          <div class="card-sub">Two players on one device</div>
+        </div>
       </a>
     </main>
 
-    <!-- Bottom nav -->
     <nav class="home-nav">
-      <a class="nav-item active" href="index.html" aria-current="page">
-        <span class="ni">🏠</span>
-        <span>Home</span>
-      </a>
-      <a class="nav-item" href="friends.html">
-        <span class="ni">👤</span>
-        <span>Friend</span>
-      </a>
-      <a class="nav-item" href="settings.html">
-        <span class="ni">⚙️</span>
-        <span>Setting</span>
-      </a>
-      <a class="nav-item" href="notifications.html">
-        <span class="ni">🔔</span>
-        <span>Notification</span>
-      </a>
+      <a class="nav-item active" href="index.html" aria-current="page"><span class="ni">🏠</span><span>Home</span></a>
+      <a class="nav-item" href="friends.html"><span class="ni">👥</span><span>Friend</span></a>
+      <a class="nav-item" href="play.html"><span class="ni">🎮</span><span>Play</span></a>
+      <a class="nav-item" href="settings.html"><span class="ni">⚙️</span><span>Setting</span></a>
+      <a class="nav-item" href="notifications.html"><span class="ni">🔔</span><span>Notification</span></a>
     </nav>
   </div>
 </body>

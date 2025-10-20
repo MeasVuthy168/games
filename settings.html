@@ -1,11 +1,10 @@
 <!doctype html>
-<html lang="km">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Setting | Khmer Chess</title>
 
-  <!-- PWA + theme -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
@@ -24,65 +23,57 @@
 
     <main class="page settings-page">
       <!-- Profile header -->
-      <section class="prof-card">
-        <div class="prof-avatar">
-          <!-- use any 1:1 image later; this is a placeholder -->
-          <img id="profImg" src="assets/icons/icon-192.png" alt="user" />
-        </div>
-        <div class="prof-meta">
-          <div class="prof-name" id="profName">Guest</div>
-          <div class="prof-role">admin</div>
+      <section class="profile-bar card">
+        <img id="profImg" class="avatar-s" src="assets/icons/icon-192.png" alt="user" />
+        <div class="profile-meta">
+          <div id="profName" class="profile-name">Guest</div>
+          <div class="profile-sub">admin</div>
         </div>
       </section>
 
-      <!-- List sections -->
-      <div class="list">
+      <!-- Card list -->
+      <div class="card-list">
 
-        <!-- 1) User Image (coming soon) -->
-        <button class="row" disabled>
-          <span class="ri">👤</span>
-          <span class="rt">តម្លើងរូបភាព (User Image)</span>
-          <span class="rc">coming soon</span>
-          <span class="chev">›</span>
-        </button>
-
-        <!-- 2) User Account (coming soon) -->
-        <button class="row" disabled>
-          <span class="ri">ℹ️</span>
-          <span class="rt">គណនីអ្នកប្រើ (User Account)</span>
-          <span class="rc">coming soon</span>
-          <span class="chev">›</span>
-        </button>
-
-        <!-- 3) Notification on/off (coming soon) -->
-        <div class="row">
-          <span class="ri">🔔</span>
-          <span class="rt">ជូនដំណឹង (Notification)</span>
-          <label class="switch ml-auto">
-            <input type="checkbox" disabled />
-          </label>
-          <span class="mini off">Off</span>
-          <span class="mini on">On</span>
+        <!-- 1) Personal Info (coming soon) -->
+        <div class="card disabled">
+          <div class="card-left">
+            <div class="card-title">Personal Info</div>
+            <div class="card-sub">coming soon</div>
+          </div>
+          <div class="card-right">›</div>
         </div>
 
-        <!-- 4) Manage sound -->
-        <div class="row">
-          <span class="ri">🔊</span>
-          <span class="rt">សម្លេង (Sound)</span>
-          <label class="switch ml-auto">
-            <input type="checkbox" id="soundToggle" />
-          </label>
-          <button class="pill" id="btnTestBeep">Test</button>
+        <!-- 2) Notifications (coming soon) -->
+        <div class="card disabled">
+          <div class="card-left">
+            <div class="card-title">Notifications</div>
+            <div class="card-sub">coming soon</div>
+          </div>
+          <div class="card-right">›</div>
         </div>
 
-        <!-- 5) Timer (expandable) -->
-        <details class="row row-details">
+        <!-- 3) Sound -->
+        <div class="card">
+          <div class="card-left">
+            <div class="card-title">Sound</div>
+            <div class="card-sub">Turn game sounds on/off</div>
+          </div>
+          <div class="card-right">
+            <label class="switch"><input type="checkbox" id="soundToggle" /></label>
+            <button class="pill" id="btnTestBeep">Test</button>
+          </div>
+        </div>
+
+        <!-- 4) Timer -->
+        <details class="card exp">
           <summary>
-            <span class="ri">⏱️</span>
-            <span class="rt">ម៉ោង (Timer)</span>
-            <span class="chev">›</span>
+            <div class="card-left">
+              <div class="card-title">Timer</div>
+              <div class="card-sub">Default time control</div>
+            </div>
+            <div class="card-right">›</div>
           </summary>
-          <div class="details-body">
+          <div class="card-body">
             <label class="field">
               <span>Minutes per side</span>
               <input type="number" id="minutesInput" min="1" max="180" step="1" />
@@ -92,48 +83,47 @@
               <input type="number" id="incInput" min="0" max="60" step="1" />
             </label>
             <div class="row-inline">
-              <button class="primary" id="btnSaveTimer">✅ Save</button>
-              <button class="secondary" id="btnResetTimer">↺ Defaults</button>
+              <button class="primary" id="btnSaveTimer">Save</button>
+              <button class="secondary" id="btnResetTimer">Defaults</button>
             </div>
           </div>
         </details>
 
-        <!-- 6) Theme (expandable) -->
-        <details class="row row-details">
+        <!-- 5) Theme -->
+        <details class="card exp">
           <summary>
-            <span class="ri">🎨</span>
-            <span class="rt">រចនាបថ (Theme)</span>
-            <span class="chev">›</span>
+            <div class="card-left">
+              <div class="card-title">Theme</div>
+              <div class="card-sub">Choose app appearance</div>
+            </div>
+            <div class="card-right">›</div>
           </summary>
-          <div class="details-body">
-            <label class="radio"><input type="radio" name="theme" value="auto" checked /><span>Auto</span></label>
-            <label class="radio"><input type="radio" name="theme" value="light" /><span>Light</span></label>
-            <label class="radio"><input type="radio" name="theme" value="dark" /><span>Dark</span></label>
+          <div class="card-body">
+            <label class="radio"><input type="radio" name="theme" value="auto" checked /> <span>Auto</span></label>
+            <label class="radio"><input type="radio" name="theme" value="light" /> <span>Light</span></label>
+            <label class="radio"><input type="radio" name="theme" value="dark" /> <span>Dark</span></label>
           </div>
         </details>
 
-        <!-- 7) Possible direction show/hide -->
-        <div class="row">
-          <span class="ri">🟢</span>
-          <span class="rt">បង្ហាញទីអាចដាក់ (Hints)</span>
-          <label class="switch ml-auto">
-            <input type="checkbox" id="hintsToggle" />
-          </label>
+        <!-- 6) Possible Direction -->
+        <div class="card">
+          <div class="card-left">
+            <div class="card-title">Move Hints</div>
+            <div class="card-sub">Show green dots for legal moves</div>
+          </div>
+          <div class="card-right">
+            <label class="switch"><input type="checkbox" id="hintsToggle" /></label>
+          </div>
         </div>
 
-        <!-- 8) About (coming soon) -->
-        <button class="row" disabled>
-          <span class="ri">📱</span>
-          <span class="rt">អំពីកម្មវិធី (About)</span>
-          <span class="rc">coming soon</span>
-          <span class="chev">›</span>
-        </button>
-
-        <!-- Logout look (visual only) -->
-        <button class="row danger" disabled>
-          <span class="ri">↩️</span>
-          <span class="rt">ចាកចេញ</span>
-        </button>
+        <!-- 7) About (coming soon) -->
+        <div class="card disabled">
+          <div class="card-left">
+            <div class="card-title">About App</div>
+            <div class="card-sub">coming soon</div>
+          </div>
+          <div class="card-right">›</div>
+        </div>
 
       </div>
     </main>

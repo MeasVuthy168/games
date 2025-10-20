@@ -1,6 +1,16 @@
 // Registers the Service Worker + handles the install prompt button on Home.
+// Also applies the saved theme across all pages.
 (function () {
   const log = (...a) => console.log('[PWA]', ...a);
+
+  // ===== THEME boot =====
+  try {
+    const theme = localStorage.getItem('kc_theme') || 'auto';
+    const root = document.documentElement;
+    if (theme === 'dark') root.setAttribute('data-theme', 'dark');
+    else if (theme === 'light') root.setAttribute('data-theme', 'light');
+    else root.removeAttribute('data-theme');
+  } catch {}
 
   // SW registration (scope './' for GitHub Pages subfolder)
   if ('serviceWorker' in navigator) {

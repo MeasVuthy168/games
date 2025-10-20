@@ -1,8 +1,9 @@
+
 <!doctype html>
 <html lang="km">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Settings | Khmer Chess</title>
 
   <!-- ✅ PWA Essentials -->
@@ -13,6 +14,8 @@
 
   <!-- ✅ Styles -->
   <link rel="stylesheet" href="styles.css" />
+  <!-- Page logic -->
+  <script type="module" src="js/settings.js"></script>
 </head>
 <body>
   <div class="shell">
@@ -21,10 +24,130 @@
       <h1>Settings</h1>
       <span style="width:40px"></span>
     </header>
+
     <main class="page">
-      <p>Manage sound, timers, theme, and account (coming soon).</p>
-      <p><a class="btn" href="play.html">Open Game</a></p>
+      <div class="set-grid">
+
+        <!-- 1) User Image (coming soon) -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">User Image</h3>
+            <span class="badge">coming soon</span>
+          </div>
+          <p class="set-desc">Upload or change your profile image.</p>
+          <button class="secondary" disabled>Change Image</button>
+        </section>
+
+        <!-- 2) User Account (coming soon) -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">User Account</h3>
+            <span class="badge">coming soon</span>
+          </div>
+          <p class="set-desc">Manage your account and sign-in options.</p>
+          <div class="row">
+            <button class="secondary" disabled>Sign in</button>
+            <button class="secondary" disabled>Sign out</button>
+          </div>
+        </section>
+
+        <!-- 3) Notification on/off (coming soon) -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">Notification</h3>
+            <span class="badge">coming soon</span>
+          </div>
+          <p class="set-desc">Enable push notifications for future updates.</p>
+          <label class="switch">
+            <input type="checkbox" disabled />
+            <span>Notification</span>
+          </label>
+        </section>
+
+        <!-- 4) Manage sound -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">Manage Sound</h3>
+          </div>
+          <p class="set-desc">Turn game sounds on or off.</p>
+          <label class="switch">
+            <input type="checkbox" id="soundToggle" />
+            <span>Enable sounds</span>
+          </label>
+          <div class="row">
+            <button class="secondary" id="btnTestBeep">🔊 Test</button>
+          </div>
+        </section>
+
+        <!-- 5) Timer -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">Timer</h3>
+          </div>
+          <p class="set-desc">Default time control for new games.</p>
+          <div class="row">
+            <label class="field">
+              <span>Minutes per side</span>
+              <input type="number" id="minutesInput" min="1" max="180" step="1" />
+            </label>
+            <label class="field">
+              <span>Increment (sec)</span>
+              <input type="number" id="incInput" min="0" max="60" step="1" />
+            </label>
+          </div>
+          <div class="row">
+            <button class="primary" id="btnSaveTimer">✅ Save</button>
+            <button class="secondary" id="btnResetTimer">↺ Defaults</button>
+          </div>
+        </section>
+
+        <!-- 6) Theme -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">Theme</h3>
+          </div>
+          <p class="set-desc">Choose the app theme.</p>
+          <div class="row">
+            <label class="radio">
+              <input type="radio" name="theme" value="auto" checked />
+              <span>Auto</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="theme" value="light" />
+              <span>Light</span>
+            </label>
+            <label class="radio">
+              <input type="radio" name="theme" value="dark" />
+              <span>Dark</span>
+            </label>
+          </div>
+        </section>
+
+        <!-- 7) Possible direction shown/hide -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">Possible Direction (Hints)</h3>
+          </div>
+          <p class="set-desc">Show/hide green dots (legal moves) on the board.</p>
+          <label class="switch">
+            <input type="checkbox" id="hintsToggle" />
+            <span>Show move hints</span>
+          </label>
+        </section>
+
+        <!-- 8) About app (coming soon) -->
+        <section class="set-card">
+          <div class="set-card-head">
+            <h3 class="set-title">About App</h3>
+            <span class="badge">coming soon</span>
+          </div>
+          <p class="set-desc">Version, license, and credits.</p>
+          <button class="secondary" disabled>Open</button>
+        </section>
+
+      </div>
     </main>
+
     <nav class="home-nav">
       <a class="nav-item" href="index.html"><span class="ni">🏠</span><span>Home</span></a>
       <a class="nav-item" href="friends.html"><span class="ni">👥</span><span>Friend</span></a>

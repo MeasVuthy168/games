@@ -1,4 +1,4 @@
-// Settings controller (English labels; two disabled cards)
+// Settings controller
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
@@ -28,7 +28,7 @@ function toneTest(){
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  // placeholder profile
+  // Profile (placeholder)
   const profName = document.getElementById('profName');
   profName.textContent = localStorage.getItem('kc_profile_name') || 'Guest';
 

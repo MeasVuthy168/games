@@ -1,6 +1,6 @@
 import { Game, SIZE, COLORS } from './game.js';
 
-const LS_KEY='kc_settings_v1', SAVE_KEY='kc_game_state_v1';
+const LS_KEY='kc_settings_v1', SAVE_KEY='kc_game_state_v2'; // 🔁 bumped to v2 to avoid old-state conflicts
 const DEFAULTS={minutes:10, increment:5, sound:true};
 
 function saveGameState(game,clocks){
@@ -180,7 +180,10 @@ export function initUI(){
   // Khmer-first labels for buttons already in markup; start game
   const saved=loadGameState();
   if(saved && confirm(KH.resumeQ)){ game.board=saved.board; game.turn=saved.turn; game.history=saved.history;
-    clocks.msW=saved.msW; clocks.msB=saved.msB; clocks.turn=saved.clockTurn; render(); clocks.start(); }
+    const clockWEl=document.getElementById('clockW'); const clockBEl=document.getElementById('clockB');
+    clocks.msW=saved.msW; clocks.msB=saved.msB; clocks.turn=saved.clockTurn;
+    clockWEl.textContent=clocks.format(clocks.msW); clockBEl.textContent=clocks.format(clocks.msB);
+    render(); clocks.start(); }
   else { if(saved!==null) clearGameState(); render(); clocks.start(); }
 
   // Controls

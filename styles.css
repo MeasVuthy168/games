@@ -276,60 +276,47 @@ body{
 
 
 
-/* ===== Settings (profile + list rows) ===== */
-.settings-page { padding-top: 0; }
+/* ===== Settings: credit-style cards ===== */
+.settings-page{ padding-top: 0; }
 
-.prof-card{
-  margin: 10px 0 12px 0;
-  background:#fff; border-radius:12px; box-shadow:var(--shadow);
-  display:flex; align-items:center; gap:12px; padding:12px;
+.card{ 
+  background:#fff; border-radius:12px; box-shadow:var(--shadow); 
+  padding:12px; display:flex; align-items:center; justify-content:space-between;
+  border:1px solid #e9eef5; 
 }
-.prof-avatar{
-  width:64px; height:64px; border-radius:50%; overflow:hidden;
-  border:3px solid #0d2d5c22; flex:0 0 auto;
-}
-.prof-avatar img{ width:100%; height:100%; object-fit:cover; display:block; }
-.prof-meta{ display:flex; flex-direction:column; }
-.prof-name{ font-weight:900; color:#c69a09; font-size:1.2rem; line-height:1.1; }
-.prof-role{ opacity:.65; margin-top:2px; }
+.card + .card, .card + .exp, .exp + .card, .exp + .exp { margin-top:12px; }
+.card.disabled{ opacity:.55; pointer-events:none; }
 
-.list{ background:#fff; border-radius:12px; box-shadow:var(--shadow); overflow:hidden; }
-.row{
-  width:100%; display:flex; align-items:center; gap:12px;
-  padding:14px 12px; background:#fff; border:none; border-top:1px solid #eef1f5;
-  text-align:left; font: inherit; color:inherit; cursor:default;
-}
-.row:first-child{ border-top:none; }
-.row:disabled{ opacity:.65; }
-.row.danger{ color:#c81e1e; font-weight:800; }
-.ri{ font-size:1.15rem; width:24px; text-align:center; opacity:.9; }
-.rt{ flex:1; font-weight:700; }
-.rc{ font-size:.85rem; opacity:.6; }
-.mini{ font-size:.8rem; margin-left:6px; }
-.mini.off{ color:#b91c1c; }
-.mini.on{ color:#0e7a2f; }
-.ml-auto{ margin-left:auto; }
-.chev{ margin-left:8px; opacity:.45; }
+.card-list{ display:flex; flex-direction:column; }
 
-.switch input[type="checkbox"]{ width:36px; height:20px; accent-color:#0d2d5c; }
-.pill{
-  margin-left:8px; padding:.25rem .55rem; border-radius:999px; border:1px solid #d5d9e2; background:#f8fafc; cursor:pointer;
-}
+.card-left{ display:flex; flex-direction:column; gap:2px; }
+.card-title{ font-weight:800; }
+.card-sub{ font-size:.88rem; opacity:.7; }
+.card-right{ margin-left:12px; opacity:.45; display:flex; gap:8px; align-items:center; }
 
-.row-details summary{
-  list-style:none; display:flex; align-items:center; gap:12px;
-  cursor:pointer;
+.exp{ background:#fff; border-radius:12px; box-shadow:var(--shadow); border:1px solid #e9eef5; overflow:hidden; }
+.exp > summary{
+  list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer;
 }
-.row-details[open] .chev{ transform: rotate(90deg); }
-.row-details .details-body{
-  padding: 12px 6px 4px 36px; display:grid; gap:10px;
-}
+.exp[open] > summary .card-right{ transform: rotate(90deg); }
+.exp .card-body{ padding: 0 12px 12px 12px; display:grid; gap:10px; }
+
+.field{ display:flex; flex-direction:column; gap:6px; }
+.field input[type="number"]{ padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px; }
+
 .row-inline{ display:flex; gap:10px; flex-wrap:wrap; }
 
-.radio{ display:inline-flex; align-items:center; gap:.35rem; margin-right:10px; }
+.switch input[type="checkbox"]{ width:36px; height:20px; accent-color:#0d2d5c; }
+.pill{ padding:.3rem .7rem; border-radius:999px; border:1px solid #d5d9e2; background:#f8fafc; cursor:pointer; }
 
-/* Dark theme adjustments */
-:root[data-theme="dark"] .prof-card,
-:root[data-theme="dark"] .list,
-:root[data-theme="dark"] .row{ background:#11192a; border-color:#22304a; }
+.profile-bar{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+.avatar-s{ width:56px; height:56px; border-radius:50%; object-fit:cover; border:3px solid #0d2d5c22; }
+.profile-meta{ display:flex; flex-direction:column; }
+.profile-name{ font-weight:900; font-size:1.05rem; }
+.profile-sub{ opacity:.65; font-size:.9rem; }
+
+/* Dark theme */
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .exp,
+:root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a; }
 :root[data-theme="dark"] .pill{ background:#0f172a; border-color:#22304a; color:#e6f0ff; }

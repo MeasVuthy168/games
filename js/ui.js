@@ -1,7 +1,7 @@
 import { Game, SIZE, COLORS } from './game.js';
 
-const LS_KEY='kc_settings_v1', SAVE_KEY='kc_game_state_v2'; // 🔁 bumped to v2 to avoid old-state conflicts
-const DEFAULTS={minutes:10, increment:5, sound:true};
+const LS_KEY='kc_settings_v1', SAVE_KEY='kc_game_state_v2';
+const DEFAULTS={minutes:10, increment:5, sound:true, hints:true};
 
 function saveGameState(game,clocks){
   const s={board:game.board, turn:game.turn, history:game.history, msW:clocks.msW, msB:clocks.msB, clockTurn:clocks.turn};
@@ -10,7 +10,14 @@ function saveGameState(game,clocks){
 function loadGameState(){ try{return JSON.parse(localStorage.getItem(SAVE_KEY));}catch{return null;} }
 function clearGameState(){ localStorage.removeItem(SAVE_KEY); }
 
-function loadSettings(){ try{const s=JSON.parse(localStorage.getItem(LS_KEY)||'null'); return s?{...DEFAULTS,...s}:{...DEFAULTS};}catch{return {...DEFAULTS};} }
+function loadSettings(){
+  try{
+    const s=JSON.parse(localStorage.getItem(LS_KEY)||'null');
+    return s?{...DEFAULTS,...s}:{...DEFAULTS};
+  }catch{
+    return {...DEFAULTS};
+  }
+}
 function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
 
 class Beeper{
@@ -79,7 +86,12 @@ export function initUI(){
 
   const game=new Game();
   let settings=loadSettings();
-  optSound.checked=settings.sound; beeper.enabled=settings.sound;
+  // Apply settings to in-game controls
+  optSound.checked=settings.sound; 
+  beeper.enabled=settings.sound;
+
+  // ✅ Persist "hints" from settings
+  optHints.checked = settings.hints !== false;
 
   const clocks=new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
@@ -179,12 +191,15 @@ export function initUI(){
 
   // Khmer-first labels for buttons already in markup; start game
   const saved=loadGameState();
-  if(saved && confirm(KH.resumeQ)){ game.board=saved.board; game.turn=saved.turn; game.history=saved.history;
-    const clockWEl=document.getElementById('clockW'); const clockBEl=document.getElementById('clockB');
+  if(saved && confirm(KH.resumeQ)){
+    game.board=saved.board; game.turn=saved.turn; game.history=saved.history;
+    // Ensure clocks show immediately before start
     clocks.msW=saved.msW; clocks.msB=saved.msB; clocks.turn=saved.clockTurn;
-    clockWEl.textContent=clocks.format(clocks.msW); clockBEl.textContent=clocks.format(clocks.msB);
-    render(); clocks.start(); }
-  else { if(saved!==null) clearGameState(); render(); clocks.start(); }
+    clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
+    render(); clocks.start();
+  } else {
+    if(saved!==null) clearGameState(); render(); clocks.start();
+  }
 
   // Controls
   document.getElementById('btnReset').addEventListener('click', ()=>{
@@ -211,10 +226,26 @@ export function initUI(){
     btnPause.textContent=clocks.running?'⏸️':'▶️';
   });
 
-  optSound.addEventListener('change', ()=>{ beeper.enabled=optSound.checked; settings.sound=beeper.enabled; saveSettings(settings); });
+  // Persist sound + hints when changed in-game
+  optSound.addEventListener('change', ()=>{
+    beeper.enabled=optSound.checked; 
+    settings.sound=beeper.enabled; 
+    saveSettings(settings);
+  });
+  optHints.addEventListener('change', ()=>{
+    settings.hints=!!optHints.checked;
+    saveSettings(settings);
+    // Refresh hints for current selection (if any)
+    if(selected) showHints(selected.x, selected.y);
+  });
 
-  // Settings modal wires
-  const openModal=()=>{ setMinutes.value=settings.minutes; setIncrement.value=settings.increment; setSound.checked=!!settings.sound; modal.classList.add('show'); };
+  // Settings modal (still useful during a game)
+  const openModal=()=>{ 
+    setMinutes.value=settings.minutes; 
+    setIncrement.value=settings.increment; 
+    setSound.checked=!!settings.sound; 
+    modal.classList.add('show'); 
+  };
   const closeModal=()=>{ modal.classList.remove('show'); };
   btnSettings.addEventListener('click', openModal);
   modal.querySelectorAll('[data-close]').forEach(el=> el.addEventListener('click', closeModal));
@@ -224,9 +255,14 @@ export function initUI(){
   btnApply.addEventListener('click', ()=>{
     settings={ minutes:Math.max(1,Math.min(180,parseInt(setMinutes.value||'10',10))),
                increment:Math.max(0,Math.min(60,parseInt(setIncrement.value||'5',10))),
-               sound:!!setSound.checked };
-    saveSettings(settings); beeper.enabled=settings.sound; optSound.checked=settings.sound;
-    clocks.init(settings.minutes, settings.increment, game.turn); btnPause.textContent='▶️'; closeModal();
+               sound:!!setSound.checked,
+               hints: optHints.checked !== false };
+    saveSettings(settings); 
+    beeper.enabled=settings.sound; 
+    optSound.checked=settings.sound;
+    // Do not restart game here; just close
+    btnPause.textContent='▶️'; 
+    closeModal();
   });
 
   // Fullscreen + rotate + autohide as before

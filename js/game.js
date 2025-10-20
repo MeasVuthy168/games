@@ -24,6 +24,13 @@ export function initialPosition(){
 }
 export function piece(t,c){ return {t,c,moved:false}; }
 
+/*
+  Khmer mapping:
+  KING = ស្តេច, QUEEN = នាង (1-step diagonals),
+  BISHOP = ខុន (General, 5 directions: 4 diagonals + straight forward 1),
+  ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
+*/
+
 export class Game{
   constructor(){ this.reset(); }
 
@@ -56,7 +63,21 @@ export class Game{
     switch(p.t){
       case PT.KING: for(const dx of[-1,0,1])for(const dy of[-1,0,1]) if(dx||dy) add(x+dx,y+dy,'both'); break;
       case PT.QUEEN: for(const dx of[-1,1])for(const dy of[-1,1]) add(x+dx,y+dy,'both'); break; // Khmer queen: 1-step diagonal
-      case PT.BISHOP: { const d=p.c==='w'?-1:+1; add(x-1,y+d,'both'); add(x+1,y+d,'both'); break; }
+
+      // ✅ FIXED: PT.BISHOP = ខុន (General)
+      // 4 diagonals (1 step) + straight forward 1 (relative to color)
+      case PT.BISHOP: {
+        const d=this.pawnDir(p.c); // forward: -1 (white), +1 (black)
+        // diagonals
+        add(x-1, y-1, 'both');
+        add(x+1, y-1, 'both');
+        add(x-1, y+1, 'both');
+        add(x+1, y+1, 'both');
+        // forward straight
+        add(x,   y+d, 'both');
+        break;
+      }
+
       case PT.ROOK: ray(1,0); ray(-1,0); ray(0,1); ray(0,-1); break;
       case PT.KNIGHT: for(const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both'); break;
       case PT.PAWN: {

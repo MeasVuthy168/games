@@ -270,3 +270,85 @@ body{
   box-shadow:0 6px 18px rgba(0,0,0,.12); cursor:pointer;
 }
 .install-btn:active{ transform: translateY(1px); }
+
+
+
+
+
+
+/* ===== Settings cards ===== */
+.set-grid {
+  display: grid;
+  gap: 12px;
+}
+.set-card {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  border: 1px solid #e9eef5;
+}
+.set-card-head {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .25rem;
+}
+.set-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+.set-desc {
+  margin: 2px 0 10px 0;
+  opacity: .75;
+}
+.row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.field input[type="number"] {
+  padding: .5rem .6rem;
+  border: 1px solid #dadde3;
+  border-radius: .5rem;
+  width: 130px;
+}
+
+/* simple switch + radio */
+.switch { display:flex; align-items:center; gap:.6rem; }
+.switch input[type="checkbox"] { width:20px; height:20px; }
+.radio { display:flex; align-items:center; gap:.35rem; }
+
+/* ===== Dark theme (quick pass using CSS vars) ===== */
+:root[data-theme="dark"] {
+  --panel: #0f172a;
+  --ink: #e6f0ff;
+  --cell-a: #293241;
+  --cell-b: #1f2937;
+  --wood1:#384152;
+  --wood2:#2b3442;
+  --hi:#5eb0ff;
+  --legal:#3ddc84;
+  --danger:#ff6b74;
+  background: #0b1220;
+  color: var(--ink);
+}
+:root[data-theme="dark"] body {
+  background: #0b1220;
+  color: var(--ink);
+}
+:root[data-theme="dark"] .home-topbar,
+:root[data-theme="dark"] .topbar {
+  background: #0d2d5c;
+  color: #fff;
+}
+:root[data-theme="dark"] .home-nav {
+  background: #0f172a;
+  border-top-color: #22304a;
+}

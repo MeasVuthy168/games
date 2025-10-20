@@ -309,6 +309,7 @@ body{
 .switch input[type="checkbox"]{ width:36px; height:20px; accent-color:#0d2d5c; }
 .pill{ padding:.3rem .7rem; border-radius:999px; border:1px solid #d5d9e2; background:#f8fafc; cursor:pointer; }
 
+/* Profile header (small round image + name to the right) */
 .profile-bar{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .avatar-s{ width:56px; height:56px; border-radius:50%; object-fit:cover; border:3px solid #0d2d5c22; }
 .profile-meta{ display:flex; flex-direction:column; }

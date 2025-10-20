@@ -1,4 +1,4 @@
-// Settings page controller (appearance like native list, same behavior)
+// Settings controller (English labels; two disabled cards)
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
@@ -28,7 +28,10 @@ function toneTest(){
 }
 
 document.addEventListener('DOMContentLoaded', ()=>{
-  // controls
+  // placeholder profile
+  const profName = document.getElementById('profName');
+  profName.textContent = localStorage.getItem('kc_profile_name') || 'Guest';
+
   const soundToggle = document.getElementById('soundToggle');
   const hintsToggle = document.getElementById('hintsToggle');
   const minutesInput = document.getElementById('minutesInput');
@@ -38,26 +41,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnTestBeep = document.getElementById('btnTestBeep');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
 
-  // (Profile area placeholder; when you add real data, set these ids)
-  const profName = document.getElementById('profName');
-  profName.textContent = localStorage.getItem('kc_profile_name') || 'Guest';
-  // profImg.src can be updated later with real upload.
-
   let s = loadSettings();
 
-  // init UI
+  // init
   soundToggle.checked = !!s.sound;
   hintsToggle.checked = s.hints !== false;
   minutesInput.value = s.minutes;
   incInput.value = s.increment;
-
-  const curTheme = getTheme();
-  (themeRadios.find(r=>r.value===curTheme)||themeRadios[0]).checked = true;
+  (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
 
   // events
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
-
   btnTestBeep.addEventListener('click', ()=>{ if(soundToggle.checked) toneTest(); });
 
   btnSaveTimer.addEventListener('click', ()=>{
@@ -66,7 +61,10 @@ document.addEventListener('DOMContentLoaded', ()=>{
     s.minutes=m; s.increment=inc; saveSettings(s);
     alert('Saved. New games will use these timer settings.');
   });
-  btnResetTimer.addEventListener('click', ()=>{ minutesInput.value=DEFAULTS.minutes; incInput.value=DEFAULTS.increment; });
+  btnResetTimer.addEventListener('click', ()=>{
+    minutesInput.value = DEFAULTS.minutes;
+    incInput.value = DEFAULTS.increment;
+  });
 
   themeRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked) setTheme(r.value); }));
 });

@@ -2,16 +2,15 @@
 <html lang="km">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
   <title>អុកចត្រង្គ (Khmer Chess)</title>
-  
-  <!-- ✅ PWA Essentials -->
+
+  <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- ✅ Styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -20,12 +19,10 @@
       <button class="icon-btn" id="btnBack" title="Back">←</button>
       <h1>អុកចត្រង្គ (Khmer Chess)</h1>
       <div class="spacer"></div>
-      <button class="icon-btn" id="btnFullscreen" title="Fullscreen">⛶</button>
-      <button class="icon-btn" id="btnSettings" title="Settings">⚙️</button>
-      <button class="icon-btn" id="btnPause" title="Pause/Resume">⏸️</button>
+      <!-- (settings & fullscreen removed) -->
     </header>
 
-    <main class="layout">
+    <main class="layout layout-single">
       <section class="panel board-panel">
         <div class="timers">
           <div class="player-row top">
@@ -45,54 +42,22 @@
 
         <div class="controls">
           <button id="btnReset" class="primary">♻ ចាប់ផ្ដើមថ្មី</button>
+          <button id="btnPause" class="secondary">⏸️</button>
           <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
-          <span class="turn" id="turnLabel">White to move</span>
+          <span class="turn" id="turnLabel">វេនខាង (ស)</span>
         </div>
+
+        <!-- New: Chat section (coming soon) -->
+        <section class="panel card chat-panel">
+          <div class="card-left">
+            <div class="card-title">សន្ទនា (Chat)</div>
+            <div class="card-sub">coming soon</div>
+          </div>
+        </section>
       </section>
-
-      <aside class="panel side-panel">
-        <h2>ប្រវត្តិការធ្វើចលនា</h2>
-        <ol id="moveList" class="moves"></ol>
-
-        <h2>ជម្រើសបង្ហាញ</h2>
-        <label class="opt"><input type="checkbox" id="optShowHints" checked /> បង្ហាញទីតាំងអាចដាក់</label>
-        <label class="opt"><input type="checkbox" id="optSound" /> បើកសម្លេង</label>
-
-        <div class="note"><strong>សម្គាល់៖</strong> កំណត់ពេលវេលា/សម្លេងតាម ⚙️ Settings។</div>
-      </aside>
     </main>
 
-    <!-- Settings Modal -->
-    <div class="modal" id="settingsModal" aria-hidden="true">
-      <div class="modal-backdrop" data-close></div>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-        <header class="modal-header">
-          <h3 id="settingsTitle">ការកំណត់ (Settings)</h3>
-          <button class="icon-btn" data-close>✖</button>
-        </header>
-        <div class="modal-body">
-          <div class="form-row">
-            <label>Initial time (minutes per side)</label>
-            <input type="number" id="setMinutes" min="1" max="180" step="1" value="10" />
-          </div>
-          <div class="form-row">
-            <label>Increment (seconds added after each move)</label>
-            <input type="number" id="setIncrement" min="0" max="60" step="1" value="5" />
-          </div>
-          <div class="form-row inline">
-            <label class="chk"><input type="checkbox" id="setSound" checked /> Enable sounds</label>
-          </div>
-          <div class="row-actions">
-            <button id="btnTestSound" class="secondary">🔊 Test sound</button>
-            <button id="btnDefaults" class="secondary">↺ Defaults</button>
-            <div class="spacer"></div>
-            <button id="btnApply" class="primary">✅ Save & Close</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Fixed bottom nav (Play active) -->
+    <!-- Fixed bottom nav -->
     <nav class="home-nav">
       <a class="nav-item" href="index.html"><span class="ni">🏠</span><span>Home</span></a>
       <a class="nav-item" href="friends.html"><span class="ni">👥</span><span>Friend</span></a>

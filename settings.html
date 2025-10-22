@@ -5,13 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>Setting | Khmer Chess</title>
 
-  <!-- PWA + theme -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- Styles + page logic -->
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="js/settings.js"></script>
 </head>
@@ -35,6 +33,7 @@
 
       <!-- Card list -->
       <div class="card-list">
+
         <!-- Personal Info (coming soon) -->
         <div class="card disabled">
           <div class="card-left">
@@ -60,7 +59,11 @@
             <div class="card-sub">Turn game sounds on/off</div>
           </div>
           <div class="card-right">
-            <label class="switch"><input type="checkbox" id="soundToggle" /></label>
+            <!-- custom cross-platform switch -->
+            <label class="switch">
+              <input type="checkbox" id="soundToggle" />
+              <span class="slider"></span>
+            </label>
             <button class="pill" id="btnTestBeep">Test</button>
           </div>
         </div>
@@ -113,7 +116,11 @@
             <div class="card-sub">Show green dots for legal moves</div>
           </div>
           <div class="card-right">
-            <label class="switch"><input type="checkbox" id="hintsToggle" /></label>
+            <!-- custom cross-platform switch -->
+            <label class="switch">
+              <input type="checkbox" id="hintsToggle" />
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
 
@@ -125,10 +132,11 @@
           </div>
           <div class="card-right">›</div>
         </div>
+
       </div>
     </main>
 
-    <!-- ✅ Full 5-item bottom nav like other pages -->
+    <!-- Full 5-item bottom nav -->
     <nav class="home-nav">
       <a class="nav-item" href="index.html"><span class="ni">🏠</span><span>Home</span></a>
       <a class="nav-item" href="friends.html"><span class="ni">👥</span><span>Friend</span></a>

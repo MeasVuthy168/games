@@ -1,3 +1,7 @@
+
+
+
+
 :root{
   --blue:#0d2d5c;
   --wood1:#a57a54;
@@ -405,3 +409,46 @@ summary::-webkit-details-marker{ display:none; }
 /* About modal text uses dark theme colors too */
 :root[data-theme="dark"] .modal-card{ background:#11192a; color:#e6f0ff; border:1px solid #22304a; }
 :root[data-theme="dark"] .modal-header{ border-bottom-color:#22304a; }
+
+
+
+/* ===== Cards full-width across screen (no side margins) ===== */
+.settings-page {
+  padding: 0 0 80px 0;   /* remove side padding, keep bottom space for nav */
+}
+
+.card,
+.exp,
+.profile-bar {
+  width: calc(100vw - 16px);   /* stretch nearly full width */
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 14px;
+}
+
+/* Consistent spacing between cards */
+.card + .card,
+.card + .exp,
+.exp + .card,
+.exp + .exp {
+  margin-top: 14px;
+}
+
+/* Prevent content from touching screen edge */
+.card > *,
+.exp > summary,
+.exp .card-body,
+.profile-bar {
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
+}
+
+/* On wider screens keep centered */
+@media (min-width: 720px) {
+  .card,
+  .exp,
+  .profile-bar {
+    width: min(700px, 100%);
+  }
+}

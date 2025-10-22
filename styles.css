@@ -133,7 +133,7 @@ body{
   padding:.6rem .8rem; border-radius:.4rem; margin-top:1rem; font-size:.92rem;
 }
 
-/* Modal */
+/* Modal (generic) */
 .modal{ position:fixed; inset:0; display:none; }
 .modal.show{ display:block; }
 .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.4); }
@@ -221,7 +221,9 @@ body{
 .card-title{ font-size:1.2rem; font-weight:800; }
 .card-sub{ font-size:.9rem; opacity:.7 }
 
-.page{ padding:1rem; max-width:700px; margin:0 auto; }
+/* Page container (full width so cards can stretch) */
+.page{ padding:1rem; max-width:100%; margin:0 auto; }
+
 .btn{ display:inline-block; padding:.6rem .9rem; border-radius:.6rem; background:#0d2d5c; color:#fff; text-decoration:none; }
 
 /* ===== Bottom nav (fixed) ===== */
@@ -271,80 +273,76 @@ body{
 }
 .install-btn:active{ transform: translateY(1px); }
 
+/* ===================================================================== */
+/* ==================== Settings: credit-style cards ==================== */
+/* ===================================================================== */
 
+.settings-page{ padding-top: 0; }
 
+/* Cards span full width of page container */
+.card-full{ width:100%; }
 
-
-
-/* ===== Settings (uniform across iOS & Android) ===== */
-
-/* Make cards use the full screen width on the Settings page */
-.settings-page{ padding:12px; max-width:none; width:100%; }
-.settings-page .card,
-.settings-page .exp,
-.settings-page .profile-bar{ width:100%; }
-
-/* Hide native details/summary markers (Android shows ▶ by default) */
-summary::-webkit-details-marker { display:none; }
-summary::marker { content:""; }
-
-/* Card base */
 .card{ 
-  background:#fff; border-radius:16px; box-shadow:var(--shadow); 
-  padding:14px; display:flex; align-items:center; justify-content:space-between;
-  border:1px solid #e9eef5;
+  background:#fff; border-radius:12px; box-shadow:var(--shadow); 
+  padding:12px; display:flex; align-items:center; justify-content:space-between;
+  border:1px solid #e9eef5; 
 }
-.card + .card, .card + .exp, .exp + .card, .exp + .exp { margin-top:14px; }
+.card + .card, .card + .exp, .exp + .card, .exp + .exp { margin-top:12px; }
 .card.disabled{ opacity:.55; pointer-events:none; }
+.card.clickable{ cursor:pointer; }
 
 .card-list{ display:flex; flex-direction:column; }
 
-/* Card content */
-.card-left{ display:flex; flex-direction:column; gap:4px; }
-.card-title{ font-weight:900; font-size:1.2rem; }
-.card-sub{ font-size:.9rem; opacity:.7; }
-.card-right{ margin-left:12px; opacity:.9; display:flex; gap:10px; align-items:center; }
+.card-left{ display:flex; flex-direction:column; gap:2px; }
+.card-title{ font-weight:800; }
+.card-sub{ font-size:.88rem; opacity:.7; }
+.card-right{ margin-left:12px; opacity:.45; display:flex; gap:8px; align-items:center; }
 
-/* Expandable card */
-.exp{ background:#fff; border-radius:16px; box-shadow:var(--shadow); border:1px solid #e9eef5; overflow:hidden; }
+/* Expanders (custom look; no native marker) */
+summary::-webkit-details-marker{ display:none; }
+.exp{ background:#fff; border-radius:12px; box-shadow:var(--shadow); border:1px solid #e9eef5; overflow:hidden; }
 .exp > summary{
-  list-style:none; display:flex; align-items:center; justify-content:space-between; padding:14px; cursor:pointer;
+  list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer;
 }
-.exp[open] > summary .card-right{ transform: rotate(90deg); }
-.exp .card-body{ padding: 0 14px 14px 14px; display:grid; gap:12px; }
+.caret{ transition: transform .2s ease; }
+.exp[open] > summary .caret{ transform: rotate(90deg); }
+.exp .card-body{ padding: 0 12px 12px 12px; display:grid; gap:10px; }
 
 .field{ display:flex; flex-direction:column; gap:6px; }
-.field input[type="number"]{
-  padding:.6rem .7rem; border:1px solid #dadde3; border-radius:.6rem; width:160px; font:inherit;
-}
+.field input[type="number"]{ padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px; }
 
-/* Custom switch (same on iOS/Android) */
-.switch{ position:relative; width:48px; height:28px; display:inline-block; }
+.row-inline{ display:flex; gap:10px; flex-wrap:wrap; }
+
+/* Uniform custom switch (iOS/Android look the same) */
+.switch{ position:relative; display:inline-block; width:46px; height:26px; }
 .switch input{ position:absolute; opacity:0; width:0; height:0; }
 .switch .slider{
-  position:absolute; inset:0; background:#e5e7eb; border-radius:999px; transition: .18s ease;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.08);
+  position:absolute; inset:0; background:#d7dbe3; border-radius:999px;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.12);
+  transition: background .18s ease;
 }
-.switch .slider::before{
-  content:""; position:absolute; width:22px; height:22px; top:3px; left:3px; border-radius:50%;
-  background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.18); transition:.18s ease;
+.switch .slider::after{
+  content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition: transform .18s ease;
 }
 .switch input:checked + .slider{ background:#0d2d5c; }
-.switch input:checked + .slider::before{ transform: translateX(20px); }
+.switch input:checked + .slider::after{ transform: translateX(20px); }
 
-/* “Test” pill */
 .pill{
-  padding:.35rem .75rem; border-radius:999px; border:1px solid #d5d9e2; background:#f8fafc; cursor:pointer;
+  padding:.3rem .7rem; border-radius:999px; border:1px solid #d5d9e2; background:#f8fafc; cursor:pointer;
 }
 
-/* Profile header (small round image + name on right) */
-.profile-bar{ display:flex; align-items:center; gap:12px; }
+/* Profile header (small round image + name to the right) */
+.profile-bar{ display:flex; align-items:center; gap:12px; margin-bottom:12px; }
 .avatar-s{ width:56px; height:56px; border-radius:50%; object-fit:cover; border:3px solid #0d2d5c22; }
 .profile-meta{ display:flex; flex-direction:column; }
 .profile-name{ font-weight:900; font-size:1.05rem; }
 .profile-sub{ opacity:.65; font-size:.9rem; }
 
-/* Dark theme */
+/* About modal tidy rows */
+.about-row{ margin:.35rem 0; }
+
+/* Dark theme (Settings section) */
 :root[data-theme="dark"] .card,
 :root[data-theme="dark"] .exp,
 :root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a; }

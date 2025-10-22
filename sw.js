@@ -1,5 +1,5 @@
 /* Khmer Chess — Service Worker */
-const VERSION = 'v1.0.3';            // ⬅️ bumped for new rules/cache refresh
+const VERSION = 'v1.0.4';            // bump when any asset changes
 const CACHE = `khmer-chess-${VERSION}`;
 
 const CORE = [
@@ -16,6 +16,7 @@ const CORE = [
   './js/ui.js',
   './js/game.js',
   './js/pwa.js',
+  './js/settings.js',           // ✅ include settings controller
   './manifest.webmanifest',
 
   // icons & pieces
@@ -37,18 +38,23 @@ const CORE = [
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
-    caches.open(CACHE).then(cache => cache.addAll(CORE)).then(() => self.skipWaiting())
+    caches.open(CACHE)
+      .then(cache => cache.addAll(CORE))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys
-        .filter(k => k.startsWith('khmer-chess-') && k !== CACHE)
-        .map(k => caches.delete(k))
+    caches.keys()
+      .then(keys =>
+        Promise.all(
+          keys
+            .filter(k => k.startsWith('khmer-chess-') && k !== CACHE)
+            .map(k => caches.delete(k))
+        )
       )
-    ).then(() => self.clients.claim())
+      .then(() => self.clients.claim())
   );
 });
 
@@ -58,9 +64,11 @@ self.addEventListener('fetch', (e) => {
 
   if (req.method !== 'GET' || url.origin !== location.origin) return;
 
-  // Navigations → App shell
+  // Navigations → App shell fallback
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('./index.html')));
+    e.respondWith(
+      fetch(req).catch(() => caches.match('./index.html'))
+    );
     return;
   }
 
@@ -68,7 +76,8 @@ self.addEventListener('fetch', (e) => {
   if (/\.(css|js|png|jpg|jpeg|gif|svg|webp|ico|webmanifest)$/.test(url.pathname)) {
     e.respondWith(
       caches.match(req).then(cached =>
-        cached || fetch(req).then(res => {
+        cached ||
+        fetch(req).then(res => {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy));
           return res;
@@ -78,7 +87,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Network-first for the rest
+  // Network-first for everything else
   e.respondWith(
     fetch(req).then(res => {
       const copy = res.clone();

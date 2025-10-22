@@ -347,3 +347,61 @@ summary::-webkit-details-marker{ display:none; }
 :root[data-theme="dark"] .exp,
 :root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a; }
 :root[data-theme="dark"] .pill{ background:#0f172a; border-color:#22304a; color:#e6f0ff; }
+
+
+/* ===== Fix: cards are always full width, even when <details> is open ===== */
+.card,
+.exp { width: 100%; margin-left: 0; margin-right: 0; }
+
+.exp { display:block; overflow:hidden; border-radius:12px; }
+.exp > summary { width:100%; box-sizing:border-box; }
+.exp .card-body{
+  width:100%;
+  box-sizing:border-box;
+  padding: 12px;             /* same padding as header so width never changes */
+  padding-top: 0;            /* keep header/body spacing tight */
+  display:grid; gap:10px;
+  background: inherit;       /* keep same card background */
+}
+
+/* Make number inputs scale nicely inside the expanded card */
+.field input[type="number"]{
+  width: 100%;
+  max-width: 280px;          /* looks good on phones; expand if you like */
+}
+
+/* ===== Dark theme: readable text + controls ===== */
+:root[data-theme="dark"]{
+  --ink:#e6f0ff;                       /* primary text becomes light */
+}
+
+/* Dark cards & subtle captions */
+:root[data-theme="dark"] .card-title{ color: var(--ink); }
+:root[data-theme="dark"] .card-sub{ color: rgba(230,240,255,.75); }
+
+/* Inputs in dark */
+:root[data-theme="dark"] .field input[type="number"]{
+  background:#0f172a;
+  color:#e6f0ff;
+  border:1px solid #22304a;
+}
+
+/* Radios/checkbox accents (native) */
+:root[data-theme="dark"] input[type="radio"],
+:root[data-theme="dark"] input[type="checkbox"]{
+  accent-color:#9ec1ff;
+}
+
+/* Our custom switch keeps contrast in dark */
+:root[data-theme="dark"] .switch .slider{ background:#31405f; }
+:root[data-theme="dark"] .switch input:checked + .slider{ background:#5da0ff; }
+
+/* Buttons in dark for better contrast */
+:root[data-theme="dark"] .primary{ background:#2b4f9e; color:#fff; }
+:root[data-theme="dark"] .secondary{
+  background:#0f172a; color:#e6f0ff; border:1px solid #22304a;
+}
+
+/* About modal text uses dark theme colors too */
+:root[data-theme="dark"] .modal-card{ background:#11192a; color:#e6f0ff; border:1px solid #22304a; }
+:root[data-theme="dark"] .modal-header{ border-bottom-color:#22304a; }

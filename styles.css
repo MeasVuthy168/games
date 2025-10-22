@@ -452,3 +452,21 @@ summary::-webkit-details-marker{ display:none; }
     width: min(700px, 100%);
   }
 }
+
+
+
+/* Single-column play layout (side panel removed) */
+.layout.layout-single { grid-template-columns: 1fr; }
+
+/* Board must not scroll/zoom/pan */
+.board {
+  touch-action: none;
+  -ms-touch-action: none;
+  overscroll-behavior: contain;
+}
+
+/* Chat panel look */
+.chat-panel { width:min(90vw, 520px); }
+
+/* Remove any leftover styles for .side-panel if present */
+.side-panel { display:none !important; }

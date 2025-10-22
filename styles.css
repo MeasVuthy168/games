@@ -1,7 +1,3 @@
-
-
-
-
 :root{
   --blue:#0d2d5c;
   --wood1:#a57a54;
@@ -470,3 +466,16 @@ summary::-webkit-details-marker{ display:none; }
 
 /* Remove any leftover styles for .side-panel if present */
 .side-panel { display:none !important; }
+/* ===== Portrait-only overlay (blocks landscape) ===== */
+.orientation-blocker{
+  position:fixed; inset:0; z-index:9999;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65); color:#fff; text-align:center;
+  -webkit-tap-highlight-color: transparent;
+}
+.orientation-blocker .ob-card{
+  background:#0d2d5c; color:#fff; padding:18px 22px;
+  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
+  font-weight:800;
+}
+.orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px; }

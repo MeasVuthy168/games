@@ -3,6 +3,10 @@ const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
+// Show in About modal (keep in sync with sw.js if you want)
+const APP_VERSION = '1.0.3';
+const APP_UPDATED = '2025-10-22';
+
 function loadSettings() {
   try { const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS }; }
   catch { return { ...DEFAULTS }; }
@@ -67,4 +71,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 
   themeRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked) setTheme(r.value); }));
+
+  // About modal wires
+  const aboutModal = document.getElementById('aboutModal');
+  const setModal = (show) => { show ? aboutModal.classList.add('show') : aboutModal.classList.remove('show'); };
+  document.getElementById('btnAbout').addEventListener('click', ()=>{
+    document.getElementById('aboutVersion').textContent = `v${APP_VERSION}`;
+    document.getElementById('aboutUpdated').textContent = APP_UPDATED;
+    setModal(true);
+  });
+  aboutModal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', ()=> setModal(false)));
+  aboutModal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) setModal(false); });
 });

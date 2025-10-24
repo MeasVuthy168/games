@@ -1,60 +1,35 @@
-// Registers the Service Worker + handles the install prompt button on Home.
-// Also applies the saved theme across all pages.
-(function () {
-  const log = (...a) => console.log('[PWA]', ...a);
+(async () => {
+  if (!('serviceWorker' in navigator)) return;
 
-  // ===== THEME boot =====
   try {
-    const theme = localStorage.getItem('kc_theme') || 'auto';
-    const root = document.documentElement;
-    if (theme === 'dark') root.setAttribute('data-theme', 'dark');
-    else if (theme === 'light') root.setAttribute('data-theme', 'light');
-    else root.removeAttribute('data-theme');
-  } catch {}
+    const reg = await navigator.serviceWorker.register('./sw.js');
 
-  // SW registration (scope './' for GitHub Pages subfolder)
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker
-      .register('./sw.js', { scope: './' })
-      .then(reg => {
-        log('SW registered', reg.scope);
-        return navigator.serviceWorker.ready;
-      })
-      .then(() => log('SW ready (controls this page)'))
-      .catch(err => console.error('[PWA] SW error', err));
+    // If waiting SW exists
+    if (reg.waiting) notifyUpdate(reg.waiting);
+
+    // Detect new installing SW
+    reg.addEventListener('updatefound', () => {
+      const newSW = reg.installing;
+      if (!newSW) return;
+      newSW.addEventListener('statechange', () => {
+        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+          notifyUpdate(newSW);
+        }
+      });
+    });
+
+    // When new SW takes control
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (window.__reloading) return;
+      window.__reloading = true;
+      location.reload();
+    });
+  } catch (err) {
+    console.error('Service Worker registration failed:', err);
   }
 
-  let deferredPrompt = null;
-  const btn = document.getElementById('installBtn');
-
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    log('beforeinstallprompt fired');
-    if (btn) btn.style.display = 'flex';
-  });
-
-  btn?.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    btn.disabled = true;
-    try {
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      log('install choice', choice);
-    } catch (err) {
-      console.error('[PWA] prompt error', err);
-    } finally {
-      btn.style.display = 'none';
-      deferredPrompt = null;
-    }
-  });
-
-  window.addEventListener('appinstalled', () => {
-    log('appinstalled');
-    if (btn) btn.style.display = 'none';
-  });
-
-  if (window.matchMedia('(display-mode: standalone)').matches) {
-    if (btn) btn.style.display = 'none';
+  function notifyUpdate(waitingSW) {
+    const ok = confirm('មានកំណែថ្មីរបស់ Khmer Chess។ តើចង់ធ្វើបច្ចុប្បន្នភាពឥឡូវនេះទេ?');
+    if (ok) waitingSW.postMessage({ type: 'SKIP_WAITING' });
   }
 })();

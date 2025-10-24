@@ -88,13 +88,13 @@ body{
   box-sizing:border-box;
 }
 
-/* Outer carved wood block (sits BEHIND everything) */
+/* Outer carved wood frame */
 .board::before{
   content:"";
   position:absolute; inset:0;
   border-radius:22px;
   background: linear-gradient(145deg,#5b3215,#2a170a);
-  /* deep carved look + drop shadow outside */
+  /* deep carved look + drop shadow */
   box-shadow:
     inset 0 3px 6px rgba(255,255,255,.22),
     inset 0 -6px 10px rgba(0,0,0,.55),
@@ -102,32 +102,21 @@ body{
   z-index:-2;
 }
 
-/* Golden engraved inlay with Khmer-style motif */
+/* ✅ iOS-safe engraved gold inlay ring */
 .board::after{
   content:"";
   position:absolute;
-  inset:8px;                    /* inset from outer edge */
-  border-radius:18px;
-  pointer-events:none;
-  /* 1) a subtle golden line, 2) repeating angled motif, 3) inner shadow */
-  background:
-    /* inner soft highlight band (thin gold line) */
-    linear-gradient(#e6c37a,#e6c37a) padding-box,
-    /* repeating motif — small diagonal chevrons like carved pattern */
-    repeating-linear-gradient(45deg,
-      rgba(240,205,130,.28) 0 6px,
-      rgba(140,95,32,.25) 6px 12px
-    ) border-box;
-  /* mask so the motif only appears as a thin ring (engraved channel) */
-  -webkit-mask:
-    radial-gradient(farthest-side,transparent calc(100% - 12px),#000 0) content-box,
-    radial-gradient(farthest-side,#000 0,#000) padding-box;
-  -webkit-mask-composite: destination-out;
-          mask-composite: exclude;
-  box-shadow: inset 0 0 14px rgba(0,0,0,.35);
+  inset:10px;                 /* distance from the outer edge */
+  border-radius:16px;
+  border:6px solid rgba(214,178,104,.95);   /* gold ring */
+  pointer-events:none;        /* never block taps */
+  /* light bevel + inner shadow to feel engraved */
+  box-shadow:
+    0 1px 2px rgba(255,255,255,.25),
+    inset 0 0 14px rgba(0,0,0,.35);
 }
 
-/* Individual squares */
+/* Squares */
 .cell{
   position:relative;
   display:flex; align-items:center; justify-content:center;
@@ -136,9 +125,10 @@ body{
   background-position:center;
   user-select:none;
   border-radius:2px;
+  z-index:1; /* ensures ring stays behind */
 }
 
-/* Textured cells (your images) */
+/* Textured cells */
 .cell.light{
   background-image: var(--board-light-img);
   filter: brightness(1.05);
@@ -180,7 +170,7 @@ body{
   background:var(--legal); border-radius:50%; opacity:.8;
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
-.cell.selected{ outline:3px solid var(--hi); z-index:1 }
+.cell.selected{ outline:3px solid var(--hi); z-index:2 }
 .cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow: inset 0 0 0 3px rgba(132,202,255,.45) }
 .cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45) }
 .cell.last-capture{ animation:capFlash .9s ease-out }
@@ -242,48 +232,7 @@ body{
 /* Leave room so content isn't hidden under nav */
 .app, .home-app, .shell { padding-bottom:76px }
 
-/* ===== Settings “credit card” style ===== */
-.settings-page{ padding-top:0 }
-.card-full{ width:100% }
-.card{
-  background:#fff; border-radius:12px; box-shadow:var(--shadow);
-  padding:12px; display:flex; align-items:center; justify-content:space-between;
-  border:1px solid #e9eef5;
-}
-.card + .card, .card + .exp, .exp + .card, .exp + .exp { margin-top:12px }
-.card.disabled{ opacity:.55; pointer-events:none }
-.card.clickable{ cursor:pointer }
-.card-list{ display:flex; flex-direction:column }
-.card-left{ display:flex; flex-direction:column; gap:2px }
-.card-title{ font-weight:800 }
-.card-sub{ font-size:.88rem; opacity:.7 }
-.card-right{ margin-left:12px; opacity:.45; display:flex; gap:8px; align-items:center }
-
-summary::-webkit-details-marker{ display:none }
-.exp{ background:#fff; border-radius:12px; box-shadow:var(--shadow); border:1px solid #e9eef5; overflow:hidden }
-.exp > summary{ list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer }
-.caret{ transition:transform .2s ease }
-.exp[open] > summary .caret{ transform:rotate(90deg) }
-.exp .card-body{ padding:0 12px 12px 12px; display:grid; gap:10px }
-
-.field{ display:flex; flex-direction:column; gap:6px }
-.field input[type="number"]{ padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px }
-.row-inline{ display:flex; gap:10px; flex-wrap:wrap }
-
-/* Full-width cards on phone */
-.settings-page{ padding:0 0 80px 0 }
-.card, .exp, .profile-bar{
-  width:calc(100vw - 16px); margin-left:auto; margin-right:auto; border-radius:14px;
-}
-.card + .card, .card + .exp, .exp + .card, .exp + .exp{ margin-top:14px }
-.card > *, .exp > summary, .exp .card-body, .profile-bar{
-  padding-left:12px; padding-right:12px; box-sizing:border-box;
-}
-@media (min-width:720px){
-  .card, .exp, .profile-bar{ width:min(700px,100%) }
-}
-
-/* ===== Orientation blocker overlay ===== */
+/* ===== Orientation blocker ===== */
 .orientation-blocker{
   position:fixed; inset:0; z-index:9999;
   display:none; align-items:center; justify-content:center;

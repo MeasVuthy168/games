@@ -23,6 +23,8 @@ body{
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Khmer", Arial, sans-serif;
   color:var(--ink);
   background:#f5f6f7;
+  -webkit-user-select:none;
+  user-select:none;
 }
 
 /* ===== Game App Wrapper ===== */
@@ -81,6 +83,12 @@ body{
   background:
     radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), transparent 60%),
     linear-gradient(to bottom right, #704c2a, #3b2412);
+  touch-action: none;
+  -ms-touch-action: none;
+  overscroll-behavior: contain;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Decorative outer wooden frame */
@@ -116,8 +124,10 @@ body{
   align-items: center;
   justify-content: center;
   user-select: none;
-  background-size: 256px 256px;
+  background-size: 512px 512px; /* Seamless scaling */
   background-repeat: repeat;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* Use your new seamless wood textures */
@@ -163,6 +173,9 @@ body{
   border-radius:.4rem;cursor:grab;touch-action:none;
   box-shadow:0 4px 10px rgba(0,0,0,.3);
   transition:transform .1s ease;
+  will-change: transform;
+  -webkit-user-select:none;
+  user-select:none;
 }
 .piece:active{transform:scale(.96)}
 
@@ -244,4 +257,6 @@ body{
 :root[data-theme="dark"]{
   --ink:#e6f0ff;
 }
-:root[data-theme="dark"] .board::before{background:radial-gradient(ellipse at center,rgba(255,255,255,.05),transparent 70%)}
+:root[data-theme="dark"] .board::before{
+  background:radial-gradient(ellipse at center,rgba(255,255,255,.05),transparent 70%);
+}

@@ -8,11 +8,23 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
-<meta name="screen-orientation" content="portrait">
-<meta name="x5-orientation" content="portrait">
-<meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="screen-orientation" content="portrait">
+  <meta name="x5-orientation" content="portrait">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
+
+  <!-- Preload board textures for faster first paint -->
+  <link rel="preload" as="image" href="assets/board/wood_light.jpg">
+  <link rel="preload" as="image" href="assets/board/wood_dark.jpg">
+
+  <!-- Set board texture variables (styles.css will use these) -->
+  <style>
+    :root{
+      --board-light-img: url("assets/board/wood_light.jpg");
+      --board-dark-img:  url("assets/board/wood_dark.jpg");
+    }
+  </style>
 
   <link rel="stylesheet" href="styles.css" />
 </head>
@@ -27,6 +39,8 @@
 
     <main class="layout layout-single">
       <section class="panel board-panel">
+
+        <!-- Top clock -->
         <div class="timers">
           <div class="player-row top">
             <div class="player-name">ខ្មៅ (Black)</div>
@@ -34,8 +48,10 @@
           </div>
         </div>
 
-        <div id="board" class="board" aria-label="Khmer Chess Board"></div>
+        <!-- Board (3D wood look via CSS variables) -->
+        <div id="board" class="board board-wood" aria-label="Khmer Chess Board"></div>
 
+        <!-- Bottom clock -->
         <div class="timers">
           <div class="player-row bottom">
             <div class="player-name">ស (White)</div>
@@ -43,20 +59,22 @@
           </div>
         </div>
 
+        <!-- Controls row -->
         <div class="controls">
           <button id="btnReset" class="primary">♻ ចាប់ផ្ដើមថ្មី</button>
-          <button id="btnPause" class="secondary">⏸️</button>
+          <button id="btnPause" class="secondary" title="Pause/Resume">⏸️</button>
           <button id="btnUndo" class="secondary">↩ ថយក្រោយ</button>
           <span class="turn" id="turnLabel">វេនខាង (ស)</span>
         </div>
 
-        <!-- New: Chat section (coming soon) -->
-        <section class="panel card chat-panel">
+        <!-- Chat (coming soon) -->
+        <section class="panel card chat-panel card-full">
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>
             <div class="card-sub">coming soon</div>
           </div>
         </section>
+
       </section>
     </main>
 
@@ -68,6 +86,14 @@
       <a class="nav-item" href="settings.html"><span class="ni">⚙️</span><span>Setting</span></a>
       <a class="nav-item" href="notifications.html"><span class="ni">🔔</span><span>Notification</span></a>
     </nav>
+  </div>
+
+  <!-- Portrait-only overlay (your CSS already included this class) -->
+  <div class="orientation-blocker" id="orientationBlock" aria-hidden="true">
+    <div class="ob-card">
+      សូមប្រើទម្រង់បញ្ឈរ<br/>
+      <small>Rotate back to portrait to continue</small>
+    </div>
   </div>
 
   <!-- JavaScript -->

@@ -11,7 +11,7 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* new wood board textures */
+  /* board textures (you added these images) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
@@ -23,16 +23,14 @@ body{
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Khmer", Arial, sans-serif;
   color:var(--ink);
   background:#f5f6f7;
-  -webkit-user-select:none;
-  user-select:none;
 }
 
-/* ===== Game App Wrapper ===== */
+/* ===== App shell ===== */
 .app{ min-height:100dvh; display:flex; flex-direction:column }
 
 /* ===== Top bar ===== */
 .topbar{
-  position:sticky;top:0;z-index:20;
+  position:sticky; top:0; z-index:20;
   background:var(--blue); color:#fff;
   display:flex; align-items:center; gap:.5rem;
   padding:.75rem 1rem;
@@ -47,216 +45,270 @@ body{
 .topbar .spacer{flex:1}
 
 /* ===== Layout ===== */
-.layout{display:grid;grid-template-columns:1fr 320px;gap:1rem;padding:1rem;flex:1}
-.layout.layout-single{grid-template-columns:1fr}
-.panel{background:var(--panel);border-radius:1rem;box-shadow:var(--shadow);padding:1rem}
-.board-panel{display:flex;flex-direction:column;align-items:center;gap:1rem}
+.layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
+.layout.layout-single{ grid-template-columns:1fr }
+.panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1rem }
+.board-panel{ display:flex; flex-direction:column; align-items:center; gap:1rem }
 
 /* ===== Timers ===== */
-.timers{width:min(90vw,520px)}
+.timers{ width:min(90vw,520px) }
 .player-row{
-  display:flex;align-items:center;justify-content:space-between;
-  background:#fff;border:1px solid #e6e6e6;border-radius:.6rem;
-  padding:.4rem .7rem;box-shadow:var(--shadow)
+  display:flex; align-items:center; justify-content:space-between;
+  background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
+  padding:.4rem .7rem; box-shadow:var(--shadow);
 }
-.player-name{font-weight:700}
+.player-name{ font-weight:700 }
 .clock{
   font-variant-numeric:tabular-nums;
-  font-weight:800;letter-spacing:.5px;
-  padding:.2rem .5rem;border-radius:.4rem;
-  background:#0b1220;color:#e6f0ff
+  font-weight:800; letter-spacing:.5px;
+  padding:.2rem .5rem; border-radius:.4rem;
+  background:#0b1220; color:#e6f0ff;
 }
 
-/* ===== BOARD (3D raised wooden frame) ===== */
+/* =================================================================== */
+/* =================== CHESS BOARD (3D frame outside) ================= */
+/* =================================================================== */
+
 .board{
-  width: min(90vw, 520px);
-  aspect-ratio: 1/1;
-  display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
-  position: relative;
-  border-radius: 20px;
-  overflow: hidden;
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  grid-template-rows:repeat(8,1fr);
+  width:min(88vw,500px);
+  aspect-ratio:1/1;
+  margin:14px auto;
+  border-radius:20px;
+
+  /* disable page gestures on board */
+  touch-action:none; overscroll-behavior:contain; -webkit-user-select:none; user-select:none;
+
+  /* create room inside for the frame thickness */
+  padding:18px;                 /* frame thickness */
+  background:#2a170a;           /* behind the cells */
+  box-sizing:border-box;
+}
+
+/* Outer carved wood block (sits BEHIND everything) */
+.board::before{
+  content:"";
+  position:absolute; inset:0;
+  border-radius:22px;
+  background: linear-gradient(145deg,#5b3215,#2a170a);
+  /* deep carved look + drop shadow outside */
   box-shadow:
-    0 12px 24px rgba(0, 0, 0, 0.35),
-    inset 0 0 0 3px rgba(0, 0, 0, 0.25);
+    inset 0 3px 6px rgba(255,255,255,.22),
+    inset 0 -6px 10px rgba(0,0,0,.55),
+    0 12px 26px rgba(0,0,0,.45);
+  z-index:-2;
+}
+
+/* Golden engraved inlay with Khmer-style motif */
+.board::after{
+  content:"";
+  position:absolute;
+  inset:8px;                    /* inset from outer edge */
+  border-radius:18px;
+  pointer-events:none;
+  /* 1) a subtle golden line, 2) repeating angled motif, 3) inner shadow */
   background:
-    radial-gradient(circle at 30% 30%, rgba(255,255,255,0.12), transparent 60%),
-    linear-gradient(to bottom right, #704c2a, #3b2412);
-  touch-action: none;
-  -ms-touch-action: none;
-  overscroll-behavior: contain;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
+    /* inner soft highlight band (thin gold line) */
+    linear-gradient(#e6c37a,#e6c37a) padding-box,
+    /* repeating motif — small diagonal chevrons like carved pattern */
+    repeating-linear-gradient(45deg,
+      rgba(240,205,130,.28) 0 6px,
+      rgba(140,95,32,.25) 6px 12px
+    ) border-box;
+  /* mask so the motif only appears as a thin ring (engraved channel) */
+  -webkit-mask:
+    radial-gradient(farthest-side,transparent calc(100% - 12px),#000 0) content-box,
+    radial-gradient(farthest-side,#000 0,#000) padding-box;
+  -webkit-mask-composite: destination-out;
+          mask-composite: exclude;
+  box-shadow: inset 0 0 14px rgba(0,0,0,.35);
 }
 
-/* Decorative outer wooden frame */
-.board::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(145deg, #6a3f1a, #3c2410);
-  box-shadow:
-    inset 0 3px 10px rgba(255,255,255,0.3),
-    inset 0 -5px 10px rgba(0,0,0,0.4);
-  border-radius: 20px;
-  padding: 12px;
-  background-clip: content-box;
-  pointer-events: none;
+/* Individual squares */
+.cell{
+  position:relative;
+  display:flex; align-items:center; justify-content:center;
+  background-repeat:repeat;
+  background-size:512px 512px;
+  background-position:center;
+  user-select:none;
+  border-radius:2px;
 }
 
-/* Inner shadow around squares */
-.board::after {
-  content: "";
-  position: absolute;
-  inset: 10px;
-  border-radius: 14px;
-  box-shadow: inset 0 0 18px rgba(0,0,0,0.45);
-  pointer-events: none;
-}
-
-/* Each cell square */
-.cell {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  user-select: none;
-  background-size: 512px 512px; /* Seamless scaling */
-  background-repeat: repeat;
-  -webkit-user-select: none;
-  -webkit-touch-callout: none;
-}
-
-/* Use your new seamless wood textures */
-.cell.light {
+/* Textured cells (your images) */
+.cell.light{
   background-image: var(--board-light-img);
-  background-position: center;
   filter: brightness(1.05);
 }
-
-.cell.dark {
+.cell.dark{
   background-image: var(--board-dark-img);
-  background-position: center;
   filter: brightness(0.9);
 }
 
-/* Square labels (A1, H8, etc.) */
-.cell::after {
-  content: attr(data-ax);
-  position: absolute;
-  bottom: 5px;
-  right: 7px;
-  font-size: 0.62rem;
-  color: rgba(0,0,0,0.6);
-  text-shadow: 1px 1px 2px rgba(255,255,255,0.7);
+/* Coordinates */
+.cell::after{
+  content:attr(data-ax);
+  position:absolute; bottom:5px; right:7px;
+  font-size:.62rem;
+  color:rgba(0,0,0,.6);
+  text-shadow:1px 1px 2px rgba(255,255,255,.8);
 }
 
-/* Hover / highlight glow */
-.cell:hover:not(.selected):not(.hint-capture):not(.hint-move) {
-  outline: 2px solid rgba(255, 255, 255, 0.4);
-  box-shadow: inset 0 0 10px rgba(255,255,255,0.25);
-}
-
-/* Optional subtle 3D tilt when tapping */
-.cell:active {
-  transform: scale(0.98);
-  transition: transform 0.05s;
-}
-
-/* ===== Pieces ===== */
-.piece{
-  width:86%;height:86%;
-  background-size:contain;background-repeat:no-repeat;background-position:center;
-  border-radius:.4rem;cursor:grab;touch-action:none;
-  box-shadow:0 4px 10px rgba(0,0,0,.3);
-  transition:transform .1s ease;
-  will-change: transform;
-  -webkit-user-select:none;
-  user-select:none;
-}
-.piece:active{transform:scale(.96)}
-
-/* ===== Highlights / Hints ===== */
-.cell.hint-move::before{
-  content:"";position:absolute;width:24%;height:24%;
-  background:var(--legal);border-radius:50%;opacity:.8;
-}
-.cell.hint-capture{outline:3px solid var(--danger)}
-.cell.selected{outline:3px solid var(--hi);z-index:1}
+/* Hover flair */
 .cell:hover:not(.selected):not(.hint-capture):not(.hint-move){
   outline:2px solid rgba(255,255,255,.4);
+  box-shadow:inset 0 0 10px rgba(255,255,255,.25);
+}
+.cell:active{ transform:scale(.98); transition:transform .05s }
+
+/* Pieces */
+.piece{
+  width:86%; height:86%;
+  background-size:contain; background-repeat:no-repeat; background-position:center;
+  border-radius:.4rem; cursor:grab; touch-action:none;
+  box-shadow:0 4px 10px rgba(0,0,0,.3);
+  transition:transform .1s ease;
+}
+.piece:active{ transform:scale(.96) }
+
+/* Highlights / hints */
+.cell.hint-move::before{
+  content:""; position:absolute; width:24%; height:24%;
+  background:var(--legal); border-radius:50%; opacity:.8;
+}
+.cell.hint-capture{ outline:3px solid var(--danger) }
+.cell.selected{ outline:3px solid var(--hi); z-index:1 }
+.cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow: inset 0 0 0 3px rgba(132,202,255,.45) }
+.cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45) }
+.cell.last-capture{ animation:capFlash .9s ease-out }
+@keyframes capFlash{
+  0%{box-shadow:inset 0 0 0 0 rgba(255,0,0,0), 0 0 0 0 rgba(255,0,0,0)}
+  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55), 0 0 14px 6px rgba(255,0,0,.25)}
+  100%{box-shadow:inset 0 0 0 0 rgba(255,0,0,0), 0 0 0 0 rgba(255,0,0,0)}
 }
 
 /* ===== Controls ===== */
-.controls{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
-.primary,.secondary{
-  padding:.55rem .8rem;border-radius:.6rem;border:none;cursor:pointer;font-weight:600
+.controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap }
+.primary,.secondary{ padding:.55rem .8rem; border-radius:.6rem; border:none; cursor:pointer; font-weight:600 }
+.primary{ background:var(--blue); color:#fff }
+.secondary{ background:#e7edf6 }
+.turn{ margin-left:auto; font-weight:600 }
+
+/* ===== Chat card ===== */
+.chat-panel{ width:min(90vw,520px) }
+
+/* ===== Home / simple pages ===== */
+.home-app, .shell { min-height:100dvh; display:flex; flex-direction:column; background:#f5f6f7; }
+.home-topbar{
+  position:sticky; top:0; z-index:10;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:.8rem 1rem; background:#0d2d5c; color:#fff;
+  box-shadow:0 4px 14px rgba(0,0,0,.12);
 }
-.primary{background:var(--blue);color:#fff}
-.secondary{background:#e7edf6}
-.turn{margin-left:auto;font-weight:600}
+.home-topbar h1{ margin:0; font-size:1.15rem }
+.home-topbar .back{ color:#fff; text-decoration:none; font-size:1.2rem }
 
-/* ===== Move list ===== */
-.moves{margin:0;padding-left:1.2rem;max-height:320px;overflow:auto}
+.home-main{ padding:1rem; display:grid; gap:1rem; grid-template-columns:1fr; max-width:700px; width:100%; margin:0 auto; }
+.home-card{
+  display:flex; align-items:center; gap:1rem; text-decoration:none;
+  padding:1rem; border-radius:1rem; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.08);
+  border:1px solid #e9eef5; color:#0f172a;
+}
+.home-card:active{ transform:translateY(1px) }
+.card-emoji{ font-size:2rem }
+.card-title{ font-size:1.2rem; font-weight:800 }
+.card-sub{ font-size:.9rem; opacity:.7 }
 
-/* ===== Chat panel ===== */
-.chat-panel{width:min(90vw,520px)}
-
-/* ===== Bottom nav ===== */
+/* ===== Bottom nav (fixed) ===== */
 .home-nav{
-  position:fixed;left:0;right:0;bottom:0;z-index:50;
-  background:#fff;border-top:1px solid #e6e6e6;
-  display:grid;grid-template-columns:repeat(5,1fr);gap:.2rem;
+  position:fixed; left:0; right:0; bottom:0; z-index:50;
+  background:#fff; border-top:1px solid #e6e6e6;
+  display:grid; grid-template-columns:repeat(5,1fr);
+  gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
 }
 .nav-item{
-  display:flex;flex-direction:column;align-items:center;gap:.15rem;
-  padding:.35rem 0;text-decoration:none;color:#0f172a;border-radius:.6rem;
-  font-size:.8rem
+  display:flex; flex-direction:column; align-items:center; gap:.15rem;
+  padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
+  font-size:.8rem;
 }
-.nav-item .ni{font-size:1.2rem;line-height:1}
-.nav-item.active{background:#eef4ff;color:#0d2d5c;font-weight:800}
+.nav-item .ni{ font-size:1.2rem; line-height:1 }
+.nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
-/* ===== Portrait-only overlay ===== */
+/* Leave room so content isn't hidden under nav */
+.app, .home-app, .shell { padding-bottom:76px }
+
+/* ===== Settings “credit card” style ===== */
+.settings-page{ padding-top:0 }
+.card-full{ width:100% }
+.card{
+  background:#fff; border-radius:12px; box-shadow:var(--shadow);
+  padding:12px; display:flex; align-items:center; justify-content:space-between;
+  border:1px solid #e9eef5;
+}
+.card + .card, .card + .exp, .exp + .card, .exp + .exp { margin-top:12px }
+.card.disabled{ opacity:.55; pointer-events:none }
+.card.clickable{ cursor:pointer }
+.card-list{ display:flex; flex-direction:column }
+.card-left{ display:flex; flex-direction:column; gap:2px }
+.card-title{ font-weight:800 }
+.card-sub{ font-size:.88rem; opacity:.7 }
+.card-right{ margin-left:12px; opacity:.45; display:flex; gap:8px; align-items:center }
+
+summary::-webkit-details-marker{ display:none }
+.exp{ background:#fff; border-radius:12px; box-shadow:var(--shadow); border:1px solid #e9eef5; overflow:hidden }
+.exp > summary{ list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer }
+.caret{ transition:transform .2s ease }
+.exp[open] > summary .caret{ transform:rotate(90deg) }
+.exp .card-body{ padding:0 12px 12px 12px; display:grid; gap:10px }
+
+.field{ display:flex; flex-direction:column; gap:6px }
+.field input[type="number"]{ padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px }
+.row-inline{ display:flex; gap:10px; flex-wrap:wrap }
+
+/* Full-width cards on phone */
+.settings-page{ padding:0 0 80px 0 }
+.card, .exp, .profile-bar{
+  width:calc(100vw - 16px); margin-left:auto; margin-right:auto; border-radius:14px;
+}
+.card + .card, .card + .exp, .exp + .card, .exp + .exp{ margin-top:14px }
+.card > *, .exp > summary, .exp .card-body, .profile-bar{
+  padding-left:12px; padding-right:12px; box-sizing:border-box;
+}
+@media (min-width:720px){
+  .card, .exp, .profile-bar{ width:min(700px,100%) }
+}
+
+/* ===== Orientation blocker overlay ===== */
 .orientation-blocker{
-  position:fixed;inset:0;z-index:9999;
-  display:none;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.65);color:#fff;text-align:center;
+  position:fixed; inset:0; z-index:9999;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65); color:#fff; text-align:center;
   -webkit-tap-highlight-color:transparent;
 }
 .orientation-blocker .ob-card{
-  background:#0d2d5c;color:#fff;padding:18px 22px;
-  border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.3);
-  font-weight:800;text-align:center;
+  background:#0d2d5c; color:#fff; padding:18px 22px;
+  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
+  font-weight:800; text-align:center;
 }
-.orientation-blocker .ob-card small{display:block;font-weight:600;opacity:.85;margin-top:6px}
-
-/* ===== Last move highlight ===== */
-.cell.last-from{outline:3px solid rgba(132,202,255,.95);box-shadow:inset 0 0 0 3px rgba(132,202,255,.45)}
-.cell.last-to{outline:3px solid rgba(147,231,158,.95);box-shadow:inset 0 0 0 3px rgba(147,231,158,.45)}
-.cell.last-capture{animation:capFlash .9s ease-out}
-@keyframes capFlash{
-  0%{box-shadow:inset 0 0 0 0 rgba(255,0,0,.0),0 0 0 0 rgba(255,0,0,.0)}
-  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55),0 0 14px 6px rgba(255,0,0,.25)}
-  100%{box-shadow:inset 0 0 0 0 rgba(255,0,0,.0),0 0 0 0 rgba(255,0,0,.0)}
-}
+.orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }
 
 /* ===== Responsive ===== */
-@media(max-width:920px){
-  .layout{grid-template-columns:1fr}
-}
-
-/* ===== Scroll-safe bottom spacing ===== */
-.app{padding-bottom:76px}
+@media(max-width:920px){ .layout{ grid-template-columns:1fr } }
 
 /* ===== Dark theme compatibility ===== */
-:root[data-theme="dark"]{
-  --ink:#e6f0ff;
-}
-:root[data-theme="dark"] .board::before{
-  background:radial-gradient(ellipse at center,rgba(255,255,255,.05),transparent 70%);
-}
+:root[data-theme="dark"]{ --ink:#e6f0ff }
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .exp,
+:root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a }
+:root[data-theme="dark"] .card-title{ color:var(--ink) }
+:root[data-theme="dark"] .card-sub{ color:rgba(230,240,255,.75) }
+:root[data-theme="dark"] .field input[type="number"]{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
+:root[data-theme="dark"] input[type="radio"],
+:root[data-theme="dark"] input[type="checkbox"]{ accent-color:#9ec1ff }
+:root[data-theme="dark"] .primary{ background:#2b4f9e; color:#fff }
+:root[data-theme="dark"] .secondary{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }

@@ -69,28 +69,34 @@ body{
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
 
-.panel.board-panel {
-  --card-pad: 16px;                 /* side padding inside the white card */
-  padding-left: var(--card-pad);
-  padding-right: var(--card-pad);
+/* fix equal left-right padding */
+.panel.board-panel{
+  padding-inline:16px;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
 }
 
-.board,
+/* board/timers/chat full width centered */
 .timers,
-.chat-panel {
-  width: 100%;                      /* fill the card’s inner width */
-  max-width: 720px;                 /* optional cap for large screens */
-  margin-left: auto; margin-right: auto;
+.board,
+.chat-panel{
+  inline-size:min(100%,720px);
+  margin-inline:auto;
 }
 
+/* hard center board */
 .board{
   position:relative;
+  left:50%;
+  transform:translateX(-50%);
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   aspect-ratio:1/1;
   border-radius:20px;
-  margin:10px auto;
+  margin-block:10px;
 
   /* disable gestures */
   touch-action:none; overscroll-behavior:contain; -webkit-user-select:none; user-select:none;
@@ -114,7 +120,7 @@ body{
   z-index:-2;
 }
 
-/* Engraved gold inlay ring (doesn't block taps) */
+/* Engraved gold inlay ring */
 .board::after{
   content:"";
   position:absolute;

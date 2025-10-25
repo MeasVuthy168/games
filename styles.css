@@ -1,4 +1,4 @@
-/* === Global Khmer font (Krasar) === */
+/* === Khmer UI Font (Krasar) ============================================ */
 @font-face{
   font-family: "Krasar";
   src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -7,13 +7,16 @@
   font-display: swap;
 }
 
-/* Make it the first in the stack */
+/* Global font stack uses Krasar first */
 :root{
-  --ui-font: "Krasar", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Khmer", Arial, sans-serif;
+  --ui-font: "Krasar", "Noto Sans Khmer",
+             system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
 }
 
-html, body{ font-family: var(--ui-font); }
-
+/* ONE place to apply it */
+html, body{
+  font-family: var(--ui-font);
+}
 
 
 :root{
@@ -38,7 +41,6 @@ html, body{ font-family: var(--ui-font); }
 html,body{height:100%}
 body{
   margin:0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans Khmer", Arial, sans-serif;
   color:var(--ink);
   background:#f5f6f7;
 }

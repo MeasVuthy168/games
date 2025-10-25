@@ -1,5 +1,5 @@
 /* Khmer Chess — Service Worker (Balanced Strategy) */
-const VERSION = 'v2.0.2';  // ⬅️ bump when you deploy new code
+const VERSION = 'v2.0.3';  // ⬅️ bump when you deploy new code
 const PREFIX = 'khmer-chess';
 const STATIC_CACHE = `${PREFIX}-static-${VERSION}`;
 const RUNTIME_CACHE = `${PREFIX}-runtime-${VERSION}`;

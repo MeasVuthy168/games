@@ -66,49 +66,38 @@ body{
 }
 
 /* =================================================================== */
-/* ========== Responsive board width (timers/chat match width) ======= */
-/* =================================================================== */
-.board-panel{
-  --side-pad: 24px;            /* inner side padding inside white card */
-  --overhead: 360px;           /* total UI above+below the board */
-  --board-size: min(
-    calc(100vw - (2 * var(--side-pad))),
-    calc(100dvh - var(--overhead))
-  );
-}
-.board,
-.timers,
-.chat-panel{
-  width: var(--board-size);
-  max-width: 100%;
-}
-.board{ aspect-ratio:1/1 }
-
-/* Tweak for small phones / larger screens */
-@media (max-width:380px){ .board-panel{ --overhead: 330px } }
-@media (min-width:480px){ .board-panel{ --overhead: 340px } }
-@media (min-width:900px){
-  .board-panel{ --board-size: min(720px, calc(100dvh - var(--overhead))) }
-}
-
-/* =================================================================== */
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
+
+.panel.board-panel {
+  --card-pad: 16px;                 /* side padding inside the white card */
+  padding-left: var(--card-pad);
+  padding-right: var(--card-pad);
+}
+
+.board,
+.timers,
+.chat-panel {
+  width: 100%;                      /* fill the card’s inner width */
+  max-width: 720px;                 /* optional cap for large screens */
+  margin-left: auto; margin-right: auto;
+}
 
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
-  margin:14px auto;
+  aspect-ratio:1/1;
   border-radius:20px;
+  margin:10px auto;
 
-  /* disable page gestures on board */
+  /* disable gestures */
   touch-action:none; overscroll-behavior:contain; -webkit-user-select:none; user-select:none;
 
-  /* room for frame thickness */
-  padding:18px;                 /* frame thickness */
-  background:#2a170a;           /* behind the cells */
+  /* frame thickness */
+  padding:18px;
+  background:#2a170a;
   box-sizing:border-box;
 }
 
@@ -189,9 +178,9 @@ body{
 .cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45) }
 .cell.last-capture{ animation:capFlash .9s ease-out }
 @keyframes capFlash{
-  0%{box-shadow:inset 0 0 0 0 rgba(255,0,0,0), 0 0 0 0 rgba(255,0,0,0)}
+  0%{box-shadow:none}
   30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55), 0 0 14px 6px rgba(255,0,0,.25)}
-  100%{box-shadow:inset 0 0 0 0 rgba(255,0,0,0), 0 0 0 0 rgba(255,0,0,0)}
+  100%{box-shadow:none}
 }
 
 /* ===== Controls ===== */
@@ -202,31 +191,9 @@ body{
 .turn{ margin-left:auto; font-weight:600 }
 
 /* ===== Chat card ===== */
-.chat-panel{ width:min(90vw,520px) }
+.chat-panel{ width:100%; max-width:720px; }
 
-/* ===== Home / simple pages ===== */
-.home-app, .shell { min-height:100dvh; display:flex; flex-direction:column; background:#f5f6f7; }
-.home-topbar{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:.8rem 1rem; background:#0d2d5c; color:#fff;
-  box-shadow:0 4px 14px rgba(0,0,0,.12);
-}
-.home-topbar h1{ margin:0; font-size:1.15rem }
-.home-topbar .back{ color:#fff; text-decoration:none; font-size:1.2rem }
-
-.home-main{ padding:1rem; display:grid; gap:1rem; grid-template-columns:1fr; max-width:700px; width:100%; margin:0 auto; }
-.home-card{
-  display:flex; align-items:center; gap:1rem; text-decoration:none;
-  padding:1rem; border-radius:1rem; background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.08);
-  border:1px solid #e9eef5; color:#0f172a;
-}
-.home-card:active{ transform:translateY(1px) }
-.card-emoji{ font-size:2rem }
-.card-title{ font-size:1.2rem; font-weight:800 }
-.card-sub{ font-size:.9rem; opacity:.7 }
-
-/* ===== Bottom nav (fixed) ===== */
+/* ===== Bottom nav ===== */
 .home-nav{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
@@ -243,26 +210,8 @@ body{
 .nav-item .ni{ font-size:1.2rem; line-height:1 }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
-/* Leave room so content isn't hidden under nav */
-.app, .home-app, .shell { padding-bottom:76px }
-
-/* ===== Orientation blocker ===== */
-.orientation-blocker{
-  position:fixed; inset:0; z-index:9999;
-  display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.65); color:#fff; text-align:center;
-  -webkit-tap-highlight-color:transparent;
-}
-.orientation-blocker .ob-card{
-  background:#0d2d5c; color:#fff; padding:18px 22px;
-  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
-  font-weight:800; text-align:center;
-}
-.orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }
-
-/* ===== Settings page – card UI (fixed & full-width) ===== */
-.settings-page{ padding: 0 0 90px 0 }        /* bottom room for nav */
-
+/* ===== Settings ===== */
+.settings-page{ padding: 0 0 90px 0 }
 .card,
 .exp,
 .profile-bar{
@@ -273,7 +222,6 @@ body{
   border-radius:14px;
   box-shadow:var(--shadow);
 }
-
 .card{ padding:12px; display:flex; align-items:center; justify-content:space-between }
 .card + .card, .card + .exp, .exp + .card, .exp + .exp{ margin-top:12px }
 .card.disabled{ opacity:.55; pointer-events:none }
@@ -283,7 +231,6 @@ body{
 .card-sub{ font-size:.88rem; opacity:.7 }
 .card-right{ margin-left:12px; opacity:.6; display:flex; gap:8px; align-items:center }
 
-/* Expanders */
 summary::-webkit-details-marker{ display:none }
 .exp{ overflow:hidden }
 .exp > summary{
@@ -294,14 +241,12 @@ summary::-webkit-details-marker{ display:none }
 .exp[open] > summary .caret{ transform: rotate(90deg) }
 .exp .card-body{ padding: 0 12px 12px 12px; display:grid; gap:10px }
 
-/* Form rows */
 .field{ display:flex; flex-direction:column; gap:6px }
 .field input[type="number"],
 .field input[type="text"]{
   padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px;
 }
 
-/* Custom switch */
 .switch{ position:relative; display:inline-block; width:46px; height:26px }
 .switch input{ position:absolute; opacity:0; width:0; height:0 }
 .switch .slider{
@@ -316,15 +261,13 @@ summary::-webkit-details-marker{ display:none }
 .switch input:checked + .slider{ background:#0d2d5c }
 .switch input:checked + .slider::after{ transform: translateX(20px) }
 
-/* On wider screens keep centered caps */
 @media (min-width:720px){
   .card, .exp, .profile-bar{ width: min(700px, 100%) }
 }
 
-/* ===== Responsive ===== */
 @media(max-width:920px){ .layout{ grid-template-columns:1fr } }
 
-/* ===== Dark theme compatibility ===== */
+/* ===== Dark theme ===== */
 :root[data-theme="dark"]{ --ink:#e6f0ff }
 :root[data-theme="dark"] .card,
 :root[data-theme="dark"] .exp,

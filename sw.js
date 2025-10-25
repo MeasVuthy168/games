@@ -1,5 +1,5 @@
 /* Khmer Chess — Service Worker */
-const VERSION = 'v2.1.1';                  // bump when anything changes
+const VERSION = 'v2.1.2';                  // bump when anything changes
 const CACHE   = `khmer-chess-${VERSION}`;
 
 const CORE = [
@@ -26,7 +26,7 @@ const CORE = [
   './assets/board/wood_light.jpg',
   './assets/board/wood_dark.jpg',
 
-  // icons & pieces
+  // app icons & pieces
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
   './assets/pieces/w-king.png',
@@ -41,6 +41,17 @@ const CORE = [
   './assets/pieces/b-knight.png',
   './assets/pieces/b-rook.png',
   './assets/pieces/b-pawn.png',
+
+  // UI PNGs (controls + bottom nav)
+  './assets/ui/reset.png',
+  './assets/ui/pause.png',
+  './assets/ui/undo.png',
+  './assets/ui/play.png',           // if you toggle pause->play icon
+  './assets/ui/nav-home.png',
+  './assets/ui/nav-friends.png',
+  './assets/ui/nav-play.png',
+  './assets/ui/nav-settings.png',
+  './assets/ui/nav-bell.png',
 
   // sounds
   './assets/sfx/move.mp3',
@@ -95,14 +106,12 @@ self.addEventListener('fetch', (e) => {
     e.respondWith(
       caches.match(req).then(cached => {
         const fetchAndUpdate = fetch(req).then(res => {
-          // Successful? clone & store
           if (res && res.status === 200) {
             const copy = res.clone();
             caches.open(CACHE).then(c => c.put(req, copy));
           }
           return res;
         }).catch(() => cached);
-        // return cached immediately if present, otherwise wait for network
         return cached || fetchAndUpdate;
       })
     );

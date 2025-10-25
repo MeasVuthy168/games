@@ -7,19 +7,11 @@
   font-display: swap;
 }
 
-/* Global font stack uses Krasar first */
+/* Global UI font stack uses Krasar first */
 :root{
   --ui-font: "Krasar", "Noto Sans Khmer",
              system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-}
 
-/* ONE place to apply it */
-html, body{
-  font-family: var(--ui-font);
-}
-
-
-:root{
   --blue:#0d2d5c;
   --wood1:#a57a54;
   --wood2:#d3a574;
@@ -32,13 +24,15 @@ html, body{
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* board textures */
+  /* board textures (populated in <head> too, kept as fallback) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
 
-*{box-sizing:border-box}
-html,body{height:100%}
+/* === Base =============================================================== */
+*{ box-sizing:border-box }
+html,body{ height:100% }
+html, body{ font-family: var(--ui-font); }
 body{
   margin:0;
   color:var(--ink);
@@ -48,7 +42,7 @@ body{
 /* ===== App shell ===== */
 .app{ min-height:100dvh; display:flex; flex-direction:column }
 
-/* ===== Top bar ===== */
+/* ===== Top bar (kept for other pages; play page can omit) ===== */
 .topbar{
   position:sticky; top:0; z-index:20;
   background:var(--blue); color:#fff;
@@ -56,13 +50,13 @@ body{
   padding:.75rem 1rem;
   transition: transform .25s ease, opacity .25s ease;
 }
-.topbar h1{font-size:1.1rem; margin:0}
+.topbar h1{ font-size:1.1rem; margin:0 }
 .icon-btn{
   background:#fff; color:var(--blue); border:none; border-radius:.75rem;
   padding:.4rem .7rem; font-weight:600; cursor:pointer;
 }
-.icon-btn:active{transform:translateY(1px)}
-.topbar .spacer{flex:1}
+.icon-btn:active{ transform:translateY(1px) }
+.topbar .spacer{ flex:1 }
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
@@ -89,7 +83,7 @@ body{
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
 
-/* fix equal left-right padding */
+/* equal left-right padding on the containing card */
 .panel.board-panel{
   padding-inline:16px;
   display:flex;
@@ -98,10 +92,8 @@ body{
   justify-content:center;
 }
 
-/* board/timers/chat full width centered */
-.timers,
-.board,
-.chat-panel{
+/* timers/board/chat full width centered */
+.timers, .board, .chat-panel{
   inline-size:min(100%,720px);
   margin-inline:auto;
 }
@@ -153,7 +145,7 @@ body{
     inset 0 0 14px rgba(0,0,0,.35);
 }
 
-/* hide algebraic labels on squares */
+/* Hide algebraic labels when .no-coords present on board */
 .board.no-coords .cell::after{ display:none; }
 
 /* Squares */
@@ -170,7 +162,7 @@ body{
 .cell.light{ background-image: var(--board-light-img); filter: brightness(1.05) }
 .cell.dark { background-image: var(--board-dark-img);  filter: brightness(0.90) }
 
-/* Coordinates */
+/* Coordinates (shown only if not hidden) */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
@@ -219,10 +211,26 @@ body{
 .secondary{ background:#e7edf6 }
 .turn{ margin-left:auto; font-weight:600 }
 
+/* --- Icon buttons (reset/pause/undo) --- */
+.btn-icon{
+  display:inline-flex;
+  align-items:center;
+  gap:.45rem;
+  padding:.55rem .8rem;
+  border-radius:.6rem;
+  border:none;
+  cursor:pointer;
+  font-weight:700;
+  line-height:1;
+}
+.btn-icon img{ width:22px; height:22px; display:block; }
+.primary.btn-icon{ background:#0d2d5c; color:#fff; }
+.secondary.btn-icon{ background:#e7edf6; color:#0f172a; }
+
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; }
 
-/* ===== Bottom nav ===== */
+/* ===== Bottom nav (PNG icons) ===== */
 .home-nav{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
@@ -236,7 +244,10 @@ body{
   padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
   font-size:.8rem;
 }
-.nav-item .ni{ font-size:1.2rem; line-height:1 }
+.ni-img{
+  width:24px; height:24px; display:block; line-height:1;
+  image-rendering:-webkit-optimize-contrast;
+}
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
 /* ===== Settings ===== */
@@ -290,11 +301,13 @@ summary::-webkit-details-marker{ display:none }
 .switch input:checked + .slider{ background:#0d2d5c }
 .switch input:checked + .slider::after{ transform: translateX(20px) }
 
+/* ===== Responsive ===== */
 @media (min-width:720px){
   .card, .exp, .profile-bar{ width: min(700px, 100%) }
 }
-
-@media(max-width:920px){ .layout{ grid-template-columns:1fr } }
+@media(max-width:920px){
+  .layout{ grid-template-columns:1fr }
+}
 
 /* ===== Dark theme ===== */
 :root[data-theme="dark"]{ --ink:#e6f0ff }
@@ -309,3 +322,19 @@ summary::-webkit-details-marker{ display:none }
 :root[data-theme="dark"] input[type="checkbox"]{ accent-color:#9ec1ff }
 :root[data-theme="dark"] .primary{ background:#2b4f9e; color:#fff }
 :root[data-theme="dark"] .secondary{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
+
+/* ===== Orientation blocker ===== */
+.orientation-blocker{
+  position:fixed; inset:0; z-index:9999;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.65); color:#fff; text-align:center;
+  -webkit-tap-highlight-color:transparent;
+}
+.orientation-blocker .ob-card{
+  background:#0d2d5c; color:#fff; padding:18px 22px;
+  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
+  font-weight:800; text-align:center;
+}
+.orientation-blocker .ob-card small{
+  display:block; font-weight:600; opacity:.85; margin-top:6px;
+}

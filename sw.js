@@ -1,18 +1,16 @@
-/* Khmer Chess — Service Worker (Balanced Strategy) */
-const VERSION = 'v2.0.6';  // ⬅️ bump when you deploy new code
-const PREFIX = 'khmer-chess';
-const STATIC_CACHE = `${PREFIX}-static-${VERSION}`;
-const RUNTIME_CACHE = `${PREFIX}-runtime-${VERSION}`;
-const IMG_CACHE = `${PREFIX}-img-${VERSION}`;
+/* Khmer Chess — Service Worker */
+const VERSION = 'v2.0.7';                  // bump when anything changes
+const CACHE   = `khmer-chess-${VERSION}`;
 
-/** Core pages & essential app files */
 const CORE = [
+  // pages
   './index.html',
   './play.html',
   './friends.html',
   './settings.html',
   './notifications.html',
 
+  // scripts & styles
   './styles.css',
   './js/main.js',
   './js/ui.js',
@@ -21,12 +19,16 @@ const CORE = [
   './js/settings.js',
   './manifest.webmanifest',
 
+  // font
+  './assets/fonts/Krasar-Regular.ttf',
+
+  // board textures
+  './assets/board/wood_light.jpg',
+  './assets/board/wood_dark.jpg',
+
+  // icons & pieces
   './assets/icons/icon-192.png',
   './assets/icons/icon-512.png',
-];
-
-/** Piece images → cache-first */
-const PIECES = [
   './assets/pieces/w-king.png',
   './assets/pieces/w-queen.png',
   './assets/pieces/w-bishop.png',
@@ -38,121 +40,81 @@ const PIECES = [
   './assets/pieces/b-bishop.png',
   './assets/pieces/b-knight.png',
   './assets/pieces/b-rook.png',
-  './assets/pieces/b-pawn.png'
+  './assets/pieces/b-pawn.png',
+
+  // sounds
+  './assets/sfx/move.mp3',
+  './assets/sfx/capture.mp3',
+  './assets/sfx/select.mp3',
+  './assets/sfx/error.mp3',
+  './assets/sfx/check.mp3'
 ];
 
-/** ✅ Board textures → also cache-first */
-const BOARDS = [
-  './assets/board/wood_light.jpg',
-  './assets/board/wood_dark.jpg'
-];
-
-/* ===== INSTALL ===== */
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    (async () => {
-      const staticCache = await caches.open(STATIC_CACHE);
-      await staticCache.addAll(CORE);
-
-      const imageCache = await caches.open(IMG_CACHE);
-      await imageCache.addAll(PIECES.concat(BOARDS));
-
-      // activate new service worker immediately
-      await self.skipWaiting();
-    })()
+/* ------------------------------ install ------------------------------ */
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(CORE))
+      .then(() => self.skipWaiting())
   );
 });
 
-/* ===== ACTIVATE ===== */
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter(k => ![STATIC_CACHE, RUNTIME_CACHE, IMG_CACHE].includes(k) && k.startsWith(PREFIX))
-          .map(k => caches.delete(k))
-      );
-      await self.clients.claim();
-    })()
+/* ------------------------------ activate ----------------------------- */
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys =>
+        Promise.all(
+          keys
+            .filter(k => k.startsWith('khmer-chess-') && k !== CACHE)
+            .map(k => caches.delete(k))
+        )
+      )
+      .then(() => self.clients.claim())
   );
 });
 
-/* ===== CACHING STRATEGIES ===== */
-
-// Stale-while-revalidate for images/icons
-async function staleWhileRevalidate(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(req);
-  const network = fetch(req).then(res => {
-    if (res && res.status === 200) cache.put(req, res.clone());
-    return res;
-  }).catch(() => null);
-  return cached || network || Response.error();
-}
-
-// Network-first for code (HTML/CSS/JS)
-async function networkFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  try {
-    const res = await fetch(req);
-    if (res && res.status === 200) cache.put(req, res.clone());
-    return res;
-  } catch {
-    const cached = await cache.match(req);
-    return cached || Response.error();
-  }
-}
-
-// Cache-first for small game assets (pieces, boards)
-async function cacheFirst(req, cacheName) {
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(req);
-  if (cached) return cached;
-  const res = await fetch(req);
-  if (res && res.status === 200) cache.put(req, res.clone());
-  return res;
-}
-
-/* ===== FETCH HANDLER ===== */
-self.addEventListener('fetch', (event) => {
-  const req = event.request;
+/* ------------------------------ fetch -------------------------------- */
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
   const url = new URL(req.url);
 
+  // Only handle same-origin GET
   if (req.method !== 'GET' || url.origin !== location.origin) return;
-  const path = url.pathname;
 
-  // 1. Navigations → always network-first
+  // Navigations → network-first (fallback to shell)
   if (req.mode === 'navigate') {
-    event.respondWith(networkFirst(req, RUNTIME_CACHE));
+    e.respondWith(
+      fetch(req).catch(() => caches.match('./index.html'))
+    );
     return;
   }
 
-  // 2. App code (HTML/CSS/JS/manifest)
-  if (/\.(?:html|css|js|webmanifest|map)$/.test(path)) {
-    event.respondWith(networkFirst(req, RUNTIME_CACHE));
+  // Static assets → cache-first (stale-while-revalidate lite)
+  if (/\.(css|js|png|jpg|jpeg|gif|svg|webp|ico|ttf|mp3|wav|ogg|webmanifest)$/.test(url.pathname)) {
+    e.respondWith(
+      caches.match(req).then(cached => {
+        const fetchAndUpdate = fetch(req).then(res => {
+          // Successful? clone & store
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(req, copy));
+          }
+          return res;
+        }).catch(() => cached);
+        // return cached immediately if present, otherwise wait for network
+        return cached || fetchAndUpdate;
+      })
+    );
     return;
   }
 
-  // 3. Chess pieces and board textures → cache-first
-  if (path.includes('/assets/pieces/') || path.includes('/assets/board/')) {
-    event.respondWith(cacheFirst(req, IMG_CACHE));
-    return;
-  }
-
-  // 4. Icons/images → stale-while-revalidate
-  if (/\.(?:png|jpg|jpeg|gif|svg|webp|ico)$/.test(path)) {
-    event.respondWith(staleWhileRevalidate(req, IMG_CACHE));
-    return;
-  }
-
-  // 5. Fallback → network-first
-  event.respondWith(networkFirst(req, RUNTIME_CACHE));
-});
-
-/* ===== UPDATE FLOW ===== */
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
+  // Everything else → network-first, fallback to cache
+  e.respondWith(
+    fetch(req).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+      return res;
+    }).catch(() => caches.match(req))
+  );
 });

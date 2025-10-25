@@ -153,6 +153,9 @@ body{
     inset 0 0 14px rgba(0,0,0,.35);
 }
 
+/* hide algebraic labels on squares */
+.board.no-coords .cell::after{ display:none; }
+
 /* Squares */
 .cell{
   position:relative;

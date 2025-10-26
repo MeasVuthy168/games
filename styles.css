@@ -62,7 +62,7 @@ body{
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
 .layout.layout-single{ grid-template-columns:1fr }
 .panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1rem }
-.board-panel{ display:flex; flex-direction:column; align-items:center; gap:1rem }
+.board-panel{ display:flex; flex-direction:column; align-items:center; gap:.8rem }
 
 /* ===== Timers ===== */
 .timers{ width:min(90vw,520px) }
@@ -204,12 +204,11 @@ body{
   100%{box-shadow:none}
 }
 
-/* ===== Controls ===== */
+/* ===== Controls (generic) ===== */
 .controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap }
 .primary,.secondary{ padding:.55rem .8rem; border-radius:.6rem; border:none; cursor:pointer; font-weight:600 }
 .primary{ background:var(--blue); color:#fff }
 .secondary{ background:#e7edf6 }
-.turn{ margin-left:auto; font-weight:600 }
 
 /* --- Icon buttons (reset/pause/undo) --- */
 .btn-icon{
@@ -223,9 +222,23 @@ body{
   font-weight:700;
   line-height:1;
 }
-.btn-icon img{ width:22px; height:22px; display:block; }
+.btn-icon img{ width:22px; height:22px; display:block; image-rendering:-webkit-optimize-contrast; }
 .primary.btn-icon{ background:#0d2d5c; color:#fff; }
 .secondary.btn-icon{ background:#e7edf6; color:#0f172a; }
+.btn-icon:active{ transform:scale(.97) }
+
+/* top controls row above the top clock */
+.top-controls{
+  display:flex;
+  justify-content:center;
+  gap:.6rem;
+  width:min(100%,720px);
+  margin:0 auto .2rem auto;
+}
+
+/* ===== Turn label ===== */
+.turn{ margin-left:auto; font-weight:600 }
+.turn-label{ margin:.4rem 0 .8rem; font-weight:700; text-align:center; }
 
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; }

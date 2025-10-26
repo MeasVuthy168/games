@@ -24,7 +24,7 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* board textures (fallback; also set in <head>) */
+  /* board textures (fallbacks; also set in <head>) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
@@ -42,7 +42,7 @@ body{
 /* ===== App shell ===== */
 .app{ min-height:100dvh; display:flex; flex-direction:column }
 
-/* ===== Top bar (used on non-play pages) ===== */
+/* ===== Top bar (for other pages) ===== */
 .topbar{
   position:sticky; top:0; z-index:20;
   background:var(--blue); color:#fff;
@@ -64,6 +64,47 @@ body{
 .panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1rem }
 .board-panel{ display:flex; flex-direction:column; align-items:center; gap:1rem }
 
+/* ===== Turn / status banner ===== */
+.turn-banner{
+  width:min(100%,720px);
+  margin: 2px auto 8px auto;
+  text-align:center;
+  font-weight:800;
+  font-size:1.05rem;
+  color:#0b1220;
+}
+
+/* ===== Controls on top ===== */
+.controls{ display:flex; align-items:center; gap:.6rem; flex-wrap:wrap }
+.controls-top{
+  width:min(100%,720px);
+  margin:0 auto 8px auto;
+  justify-content:center;
+}
+
+/* Icon buttons (reset/pause/undo) — same vibe as bottom bar */
+.btn-icon{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex-direction:column;
+  gap:.25rem;
+  padding:.75rem .9rem;
+  border-radius:14px;
+  border:1px solid #e7edf3;
+  background:#fff;
+  box-shadow:0 8px 24px rgba(0,0,0,.08);
+  cursor:pointer;
+  font-weight:700;
+  min-width:106px;
+}
+.btn-icon img{ width:26px; height:26px; display:block; }
+.btn-icon span{ font-size:.92rem; }
+.btn-icon.primary{ background:#fff; }
+.btn-icon.secondary{ background:#fff; }
+.btn-icon:active{ transform:translateY(1px) }
+.btn-icon.is-active{ outline:2px solid #d8e7ff; }
+
 /* ===== Timers ===== */
 .timers{ width:min(90vw,520px) }
 .player-row{
@@ -83,7 +124,6 @@ body{
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
 
-/* equal left-right padding on the containing card */
 .panel.board-panel{
   padding-inline:16px;
   display:flex;
@@ -92,7 +132,6 @@ body{
   justify-content:center;
 }
 
-/* timers/board/chat full width centered */
 .timers, .board, .chat-panel{
   inline-size:min(100%,720px);
   margin-inline:auto;
@@ -109,11 +148,7 @@ body{
   aspect-ratio:1/1;
   border-radius:20px;
   margin-block:10px;
-
-  /* disable gestures */
   touch-action:none; overscroll-behavior:contain; -webkit-user-select:none; user-select:none;
-
-  /* frame thickness */
   padding:18px;
   background:#2a170a;
   box-sizing:border-box;
@@ -145,7 +180,7 @@ body{
     inset 0 0 14px rgba(0,0,0,.35);
 }
 
-/* hide algebraic labels when .no-coords present on board */
+/* Hide algebraic labels when .no-coords on board */
 .board.no-coords .cell::after{ display:none; }
 
 /* Squares */
@@ -162,7 +197,7 @@ body{
 .cell.light{ background-image: var(--board-light-img); filter: brightness(1.05) }
 .cell.dark { background-image: var(--board-dark-img);  filter: brightness(0.90) }
 
-/* Coordinates (shown only if not hidden) */
+/* Coordinates (if not hidden) */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
@@ -204,47 +239,6 @@ body{
   100%{box-shadow:none}
 }
 
-/* ===== Controls (legacy buttons) ===== */
-.controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap }
-.primary,.secondary{ padding:.55rem .8rem; border-radius:.6rem; border:none; cursor:pointer; font-weight:600 }
-.primary{ background:var(--blue); color:#fff }
-.secondary{ background:#e7edf6 }
-.turn{ margin-left:auto; font-weight:600 }
-
-/* --- TOP CONTROL ICON BUTTONS (stacked like bottom bar) --- */
-.top-controls{
-  display:flex;
-  justify-content:center;
-  gap:.7rem;
-  width:min(100%,720px);
-  margin:0 auto .25rem auto;
-}
-.btn-stack{
-  display:flex;
-  flex-direction:column;            /* icon on top, text under */
-  align-items:center;
-  justify-content:center;
-  gap:.25rem;
-  width:92px;
-  min-height:64px;
-  padding:.55rem .6rem;
-  background:#fff;
-  color:#0f172a;
-  border:1px solid #e6e6e6;
-  border-radius:12px;
-  box-shadow:0 4px 12px rgba(0,0,0,.06);
-  font-weight:800;
-  line-height:1;
-  -webkit-tap-highlight-color:transparent;
-}
-.btn-stack img{
-  width:24px; height:24px; display:block;
-  image-rendering:-webkit-optimize-contrast;
-}
-.btn-stack span{ font-size:.82rem; }
-.btn-stack.is-active{ background:#eef4ff; color:#0d2d5c; border-color:#d7e2ff }
-.btn-stack:active{ transform:scale(.98) }
-
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; }
 
@@ -268,17 +262,7 @@ body{
 }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
-/* ===== Simple pages header ===== */
-.home-topbar{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:.8rem 1rem; background:#0d2d5c; color:#fff;
-  box-shadow:0 4px 14px rgba(0,0,0,.12);
-}
-.home-topbar h1{ margin:0; font-size:1.15rem }
-.home-topbar .back{ color:#fff; text-decoration:none; font-size:1.2rem }
-
-/* ===== Settings / Cards ===== */
+/* ===== Settings (other pages) ===== */
 .settings-page{ padding: 0 0 90px 0 }
 .card,
 .exp,

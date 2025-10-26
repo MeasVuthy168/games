@@ -1,45 +1,40 @@
-// js/pwa.js
-const SW_VERSION = 'v2.2.1';                          // keep in sync with sw.js
-const SW_URL     = `./sw.js?v=${encodeURIComponent(SW_VERSION)}`;
+// pwa.js — no version bumping required
+const SW_URL = './sw.js'; // keep sw.js at site root (or same directory as index.html)
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      // IMPORTANT: updateViaCache:'none' ensures the browser doesn't reuse a cached sw.js
       const reg = await navigator.serviceWorker.register(SW_URL, {
         scope: './',
-        updateViaCache: 'none'
+        updateViaCache: 'none' // don’t reuse a cached sw.js
       });
 
-      // Always check for a newer SW right away
+      // Always check for a newer SW on load
       reg.update();
 
-      // If a new worker is found, make it take control immediately
+      // If a new SW is installing, force it to take control ASAP
       reg.addEventListener('updatefound', () => {
         const sw = reg.installing;
         if (!sw) return;
         sw.addEventListener('statechange', () => {
-          // When the new SW finishes installing while an old one controls the page,
-          // tell it to skip waiting and take over now.
           if (sw.state === 'installed' && navigator.serviceWorker.controller) {
             sw.postMessage({ type: 'SKIP_WAITING' });
           }
         });
       });
 
-      // When control changes to a new SW, reload to pick up fresh assets
+      // When the new SW takes control, reload once to get fresh assets
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        // prevents infinite loops
-        if (!window._swRefreshing) {
-          window._swRefreshing = true;
-          window.location.reload();
+        if (!window.__reloadedForSW) {
+          window.__reloadedForSW = true;
+          location.reload();
         }
       });
 
-      // Optional: periodically check for updates while the page is open
+      // Optional: ping for updates while app is open
       setInterval(() => reg.update(), 60 * 1000);
     } catch (err) {
-      console.log('Service worker registration failed:', err);
+      console.log('SW registration failed:', err);
     }
   });
 }

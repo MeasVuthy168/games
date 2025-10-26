@@ -24,7 +24,7 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* board textures (populated in <head> too, kept as fallback) */
+  /* board textures (fallback; also set in <head>) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
@@ -42,7 +42,7 @@ body{
 /* ===== App shell ===== */
 .app{ min-height:100dvh; display:flex; flex-direction:column }
 
-/* ===== Top bar (kept for other pages; play page can omit) ===== */
+/* ===== Top bar (used on non-play pages) ===== */
 .topbar{
   position:sticky; top:0; z-index:20;
   background:var(--blue); color:#fff;
@@ -62,7 +62,7 @@ body{
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
 .layout.layout-single{ grid-template-columns:1fr }
 .panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1rem }
-.board-panel{ display:flex; flex-direction:column; align-items:center; gap:.8rem }
+.board-panel{ display:flex; flex-direction:column; align-items:center; gap:1rem }
 
 /* ===== Timers ===== */
 .timers{ width:min(90vw,520px) }
@@ -145,7 +145,7 @@ body{
     inset 0 0 14px rgba(0,0,0,.35);
 }
 
-/* Hide algebraic labels when .no-coords present on board */
+/* hide algebraic labels when .no-coords present on board */
 .board.no-coords .cell::after{ display:none; }
 
 /* Squares */
@@ -204,41 +204,46 @@ body{
   100%{box-shadow:none}
 }
 
-/* ===== Controls (generic) ===== */
+/* ===== Controls (legacy buttons) ===== */
 .controls{ display:flex; align-items:center; gap:.5rem; flex-wrap:wrap }
 .primary,.secondary{ padding:.55rem .8rem; border-radius:.6rem; border:none; cursor:pointer; font-weight:600 }
 .primary{ background:var(--blue); color:#fff }
 .secondary{ background:#e7edf6 }
+.turn{ margin-left:auto; font-weight:600 }
 
-/* --- Icon buttons (reset/pause/undo) --- */
-.btn-icon{
-  display:inline-flex;
-  align-items:center;
-  gap:.45rem;
-  padding:.55rem .8rem;
-  border-radius:.6rem;
-  border:none;
-  cursor:pointer;
-  font-weight:700;
-  line-height:1;
-}
-.btn-icon img{ width:22px; height:22px; display:block; image-rendering:-webkit-optimize-contrast; }
-.primary.btn-icon{ background:#0d2d5c; color:#fff; }
-.secondary.btn-icon{ background:#e7edf6; color:#0f172a; }
-.btn-icon:active{ transform:scale(.97) }
-
-/* top controls row above the top clock */
+/* --- TOP CONTROL ICON BUTTONS (stacked like bottom bar) --- */
 .top-controls{
   display:flex;
   justify-content:center;
-  gap:.6rem;
+  gap:.7rem;
   width:min(100%,720px);
-  margin:0 auto .2rem auto;
+  margin:0 auto .25rem auto;
 }
-
-/* ===== Turn label ===== */
-.turn{ margin-left:auto; font-weight:600 }
-.turn-label{ margin:.4rem 0 .8rem; font-weight:700; text-align:center; }
+.btn-stack{
+  display:flex;
+  flex-direction:column;            /* icon on top, text under */
+  align-items:center;
+  justify-content:center;
+  gap:.25rem;
+  width:92px;
+  min-height:64px;
+  padding:.55rem .6rem;
+  background:#fff;
+  color:#0f172a;
+  border:1px solid #e6e6e6;
+  border-radius:12px;
+  box-shadow:0 4px 12px rgba(0,0,0,.06);
+  font-weight:800;
+  line-height:1;
+  -webkit-tap-highlight-color:transparent;
+}
+.btn-stack img{
+  width:24px; height:24px; display:block;
+  image-rendering:-webkit-optimize-contrast;
+}
+.btn-stack span{ font-size:.82rem; }
+.btn-stack.is-active{ background:#eef4ff; color:#0d2d5c; border-color:#d7e2ff }
+.btn-stack:active{ transform:scale(.98) }
 
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; }
@@ -263,7 +268,17 @@ body{
 }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
-/* ===== Settings ===== */
+/* ===== Simple pages header ===== */
+.home-topbar{
+  position:sticky; top:0; z-index:10;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:.8rem 1rem; background:#0d2d5c; color:#fff;
+  box-shadow:0 4px 14px rgba(0,0,0,.12);
+}
+.home-topbar h1{ margin:0; font-size:1.15rem }
+.home-topbar .back{ color:#fff; text-decoration:none; font-size:1.2rem }
+
+/* ===== Settings / Cards ===== */
 .settings-page{ padding: 0 0 90px 0 }
 .card,
 .exp,

@@ -17,7 +17,7 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- Preload board textures -->
+  <!-- Preload board textures for faster first paint -->
   <link rel="preload" as="image" href="assets/board/wood_light.jpg">
   <link rel="preload" as="image" href="assets/board/wood_dark.jpg">
 
@@ -37,19 +37,19 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- === Controls moved to TOP (above Black) === -->
+        <!-- === Controls above Black (stacked PNG icons) === -->
         <div class="top-controls">
-          <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
+          <button id="btnReset" class="btn-stack" title="ចាប់ផ្ដើមថ្មី">
             <img src="assets/ui/reset.png" alt="">
             <span>ចាប់ផ្ដើមថ្មី</span>
           </button>
 
-          <button id="btnPause" class="btn-icon secondary" title="Pause/Resume">
-            <img src="assets/ui/pause.png" alt="">
-            <span>ផ្អាក</span>
+          <button id="btnPause" class="btn-stack" title="Pause/Resume">
+            <img id="pauseIcon" src="assets/ui/pause.png" alt="">
+            <span id="pauseLabel">ផ្អាក</span>
           </button>
 
-          <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
+          <button id="btnUndo" class="btn-stack" title="ថយក្រោយ">
             <img src="assets/ui/undo.png" alt="">
             <span>ថយក្រោយ</span>
           </button>
@@ -72,11 +72,6 @@
             <div class="player-name">ស (White)</div>
             <div class="clock" id="clockW">10:00.0</div>
           </div>
-        </div>
-
-        <!-- Turn label -->
-        <div class="turn-label">
-          <span id="turnLabel">វេនខាង (ស)</span>
         </div>
 
         <!-- Chat (coming soon) -->
@@ -125,5 +120,23 @@
 
   <!-- JavaScript -->
   <script type="module" src="./js/main.js"></script>
+
+  <!-- Small inline helper for pause/play swap (or move this to main.js) -->
+  <script>
+    const btnPause   = document.getElementById('btnPause');
+    const pauseIcon  = document.getElementById('pauseIcon');
+    const pauseLabel = document.getElementById('pauseLabel');
+    let isPaused = false;
+    btnPause?.addEventListener('click', () => {
+      isPaused = !isPaused;
+      pauseIcon.src = isPaused ? 'assets/ui/play.png' : 'assets/ui/pause.png';
+      pauseLabel.textContent = isPaused ? 'បន្ត' : 'ផ្អាក';
+      btnPause.classList.toggle('is-active', isPaused);
+    });
+    // Optional visual feedback for the other two:
+    const pulse = b => { b.classList.add('is-active'); setTimeout(()=>b.classList.remove('is-active'),180); };
+    document.getElementById('btnReset')?.addEventListener('click', e => pulse(e.currentTarget));
+    document.getElementById('btnUndo') ?.addEventListener('click', e => pulse(e.currentTarget));
+  </script>
 </body>
 </html>

@@ -17,7 +17,7 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- Preload board textures for faster first paint -->
+  <!-- Preload board textures -->
   <link rel="preload" as="image" href="assets/board/wood_light.jpg">
   <link rel="preload" as="image" href="assets/board/wood_dark.jpg">
 
@@ -36,6 +36,24 @@
 
     <main class="layout layout-single">
       <section class="panel board-panel">
+
+        <!-- === Controls moved to TOP (above Black) === -->
+        <div class="top-controls">
+          <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
+            <img src="assets/ui/reset.png" alt="">
+            <span>ចាប់ផ្ដើមថ្មី</span>
+          </button>
+
+          <button id="btnPause" class="btn-icon secondary" title="Pause/Resume">
+            <img src="assets/ui/pause.png" alt="">
+            <span>ផ្អាក</span>
+          </button>
+
+          <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
+            <img src="assets/ui/undo.png" alt="">
+            <span>ថយក្រោយ</span>
+          </button>
+        </div>
 
         <!-- Top clock -->
         <div class="timers">
@@ -56,24 +74,9 @@
           </div>
         </div>
 
-        <!-- Controls row (icon buttons) -->
-        <div class="controls">
-          <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
-            <img src="assets/ui/reset.png" width="22" height="22" alt="">
-            <span>ចាប់ផ្ដើមថ្មី</span>
-          </button>
-
-          <button id="btnPause" class="btn-icon secondary" title="Pause/Resume">
-            <img src="assets/ui/pause.png" width="22" height="22" alt="">
-            <span>ផ្អាក</span>
-          </button>
-
-          <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
-            <img src="assets/ui/undo.png" width="22" height="22" alt="">
-            <span>ថយក្រោយ</span>
-          </button>
-
-          <span class="turn" id="turnLabel">វេនខាង (ស)</span>
+        <!-- Turn label -->
+        <div class="turn-label">
+          <span id="turnLabel">វេនខាង (ស)</span>
         </div>
 
         <!-- Chat (coming soon) -->

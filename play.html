@@ -17,11 +17,11 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- Preload board textures for faster first paint -->
+  <!-- Preload board textures -->
   <link rel="preload" as="image" href="assets/board/wood_light.jpg">
   <link rel="preload" as="image" href="assets/board/wood_dark.jpg">
 
-  <!-- Let CSS read the board textures -->
+  <!-- Board textures for CSS -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
@@ -37,20 +37,23 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- === Controls above Black (stacked PNG icons) === -->
-        <div class="top-controls">
-          <button id="btnReset" class="btn-stack" title="ចាប់ផ្ដើមថ្មី">
-            <img src="assets/ui/reset.png" alt="">
+        <!-- 🔵 Turn / status banner (TOP) -->
+        <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
+
+        <!-- 🔵 Controls (icon buttons) -->
+        <div class="controls controls-top">
+          <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
+            <img src="assets/ui/reset.png" width="22" height="22" alt="">
             <span>ចាប់ផ្ដើមថ្មី</span>
           </button>
 
-          <button id="btnPause" class="btn-stack" title="Pause/Resume">
-            <img id="pauseIcon" src="assets/ui/pause.png" alt="">
-            <span id="pauseLabel">ផ្អាក</span>
+          <button id="btnPause" class="btn-icon secondary" title="Pause/Resume">
+            <img src="assets/ui/pause.png" width="22" height="22" alt="">
+            <span>ផ្អាក</span>
           </button>
 
-          <button id="btnUndo" class="btn-stack" title="ថយក្រោយ">
-            <img src="assets/ui/undo.png" alt="">
+          <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
+            <img src="assets/ui/undo.png" width="22" height="22" alt="">
             <span>ថយក្រោយ</span>
           </button>
         </div>
@@ -63,7 +66,7 @@
           </div>
         </div>
 
-        <!-- Board (single, with coords hidden) -->
+        <!-- Board (coords hidden) -->
         <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
 
         <!-- Bottom clock -->
@@ -85,7 +88,7 @@
       </section>
     </main>
 
-    <!-- Fixed bottom nav (PNG icons) -->
+    <!-- Bottom nav with PNG icons -->
     <nav class="home-nav">
       <a class="nav-item" href="index.html">
         <img class="ni-img" src="assets/ui/nav-home.png" alt="">
@@ -118,25 +121,7 @@
     </div>
   </div>
 
-  <!-- JavaScript -->
+  <!-- JS -->
   <script type="module" src="./js/main.js"></script>
-
-  <!-- Small inline helper for pause/play swap (or move this to main.js) -->
-  <script>
-    const btnPause   = document.getElementById('btnPause');
-    const pauseIcon  = document.getElementById('pauseIcon');
-    const pauseLabel = document.getElementById('pauseLabel');
-    let isPaused = false;
-    btnPause?.addEventListener('click', () => {
-      isPaused = !isPaused;
-      pauseIcon.src = isPaused ? 'assets/ui/play.png' : 'assets/ui/pause.png';
-      pauseLabel.textContent = isPaused ? 'បន្ត' : 'ផ្អាក';
-      btnPause.classList.toggle('is-active', isPaused);
-    });
-    // Optional visual feedback for the other two:
-    const pulse = b => { b.classList.add('is-active'); setTimeout(()=>b.classList.remove('is-active'),180); };
-    document.getElementById('btnReset')?.addEventListener('click', e => pulse(e.currentTarget));
-    document.getElementById('btnUndo') ?.addEventListener('click', e => pulse(e.currentTarget));
-  </script>
 </body>
 </html>

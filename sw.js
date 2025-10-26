@@ -1,5 +1,5 @@
 /* Khmer Chess — Service Worker */
-const VERSION = 'v2.2.0';                  // bump when anything changes
+const VERSION = 'v2.2.1';                  // bump when anything changes
 const CACHE   = `khmer-chess-${VERSION}`;
 
 const CORE = [

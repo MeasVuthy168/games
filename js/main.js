@@ -1,3 +1,4 @@
+// main.js — bootstrap
 import { initUI } from './ui.js';
 
 if (document.readyState === 'loading') {

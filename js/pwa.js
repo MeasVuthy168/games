@@ -1,35 +1,45 @@
-(async () => {
-  if (!('serviceWorker' in navigator)) return;
+// js/pwa.js
+const SW_VERSION = 'v2.2.1';                          // keep in sync with sw.js
+const SW_URL     = `./sw.js?v=${encodeURIComponent(SW_VERSION)}`;
 
-  try {
-    const reg = await navigator.serviceWorker.register('./sw.js');
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      // IMPORTANT: updateViaCache:'none' ensures the browser doesn't reuse a cached sw.js
+      const reg = await navigator.serviceWorker.register(SW_URL, {
+        scope: './',
+        updateViaCache: 'none'
+      });
 
-    // If waiting SW exists
-    if (reg.waiting) notifyUpdate(reg.waiting);
+      // Always check for a newer SW right away
+      reg.update();
 
-    // Detect new installing SW
-    reg.addEventListener('updatefound', () => {
-      const newSW = reg.installing;
-      if (!newSW) return;
-      newSW.addEventListener('statechange', () => {
-        if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-          notifyUpdate(newSW);
+      // If a new worker is found, make it take control immediately
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing;
+        if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          // When the new SW finishes installing while an old one controls the page,
+          // tell it to skip waiting and take over now.
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) {
+            sw.postMessage({ type: 'SKIP_WAITING' });
+          }
+        });
+      });
+
+      // When control changes to a new SW, reload to pick up fresh assets
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        // prevents infinite loops
+        if (!window._swRefreshing) {
+          window._swRefreshing = true;
+          window.location.reload();
         }
       });
-    });
 
-    // When new SW takes control
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (window.__reloading) return;
-      window.__reloading = true;
-      location.reload();
-    });
-  } catch (err) {
-    console.error('Service Worker registration failed:', err);
-  }
-
-  function notifyUpdate(waitingSW) {
-    const ok = confirm('មានកំណែថ្មីរបស់ Khmer Chess។ តើចង់ធ្វើបច្ចុប្បន្នភាពឥឡូវនេះទេ?');
-    if (ok) waitingSW.postMessage({ type: 'SKIP_WAITING' });
-  }
-})();
+      // Optional: periodically check for updates while the page is open
+      setInterval(() => reg.update(), 60 * 1000);
+    } catch (err) {
+      console.log('Service worker registration failed:', err);
+    }
+  });
+}

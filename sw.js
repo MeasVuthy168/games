@@ -127,3 +127,9 @@ self.addEventListener('fetch', (e) => {
     }).catch(() => caches.match(req))
   );
 });
+
+
+// allow the page to force activation immediately
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});

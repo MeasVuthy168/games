@@ -113,6 +113,8 @@ export function initUI(){
   const btnReset = document.getElementById('btnReset');
   const btnUndo  = document.getElementById('btnUndo');
   const btnPause = document.getElementById('btnPause');
+  const pauseIcon  = btnPause?.querySelector('img');
+  const pauseLabel = btnPause?.querySelector('span');
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
@@ -183,7 +185,7 @@ export function initUI(){
       toCell.classList.add('last-to');
       if(last.captured) toCell.classList.add('last-capture');
     }
-    elTurn.textContent = khTurnLabel();
+    if(elTurn) elTurn.textContent = khTurnLabel();
   }
 
   let selected=null, legal=[];
@@ -254,11 +256,21 @@ export function initUI(){
     render(); clocks.start();
   }
 
+  /* ---------------------- Pause/Play UI sync ---------------------- */
+  const updatePauseUI = ()=>{
+    if(!btnPause) return;
+    const paused = !clocks.running;
+    if(pauseIcon)  pauseIcon.src = paused ? 'assets/ui/play.png' : 'assets/ui/pause.png';
+    if(pauseLabel) pauseLabel.textContent = paused ? 'បន្ត' : 'ផ្អាក';
+    btnPause.classList.toggle('is-active', paused);
+  };
+  updatePauseUI();
+
   /* ---------------------------- controls ---------------------------- */
   btnReset?.addEventListener('click', ()=>{
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-    render(); clocks.start();
+    render(); clocks.start(); updatePauseUI();
   });
 
   btnUndo?.addEventListener('click', ()=>{
@@ -269,7 +281,7 @@ export function initUI(){
 
   btnPause?.addEventListener('click', ()=>{
     clocks.pauseResume();
-    btnPause.textContent = clocks.running ? '⏸️' : '▶️';
+    updatePauseUI();
   });
 
   // persist on unload

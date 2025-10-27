@@ -217,15 +217,22 @@ body{
 }
 .cell:active{ transform:scale(.98); transition:transform .05s }
 
-/* Pieces */
+/* Pieces — flat by default (no permanent 3D) */
 .piece{
   width:86%; height:86%;
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
-  box-shadow:0 4px 10px rgba(0,0,0,.3);
-  transition:transform .1s ease;
+  box-shadow:none; /* was: 0 4px 10px ... */
+  transition: transform .1s ease, box-shadow .15s ease, filter .15s ease;
 }
 .piece:active{ transform:scale(.96) }
+
+/* Side-to-move gets the 3D/raised accent */
+.turn-white .piece.white,
+.turn-black .piece.black{
+  box-shadow: 0 6px 14px rgba(0,0,0,.28);
+  filter: brightness(1.02);
+}
 
 /* Highlights / hints */
 .cell.hint-move::before{

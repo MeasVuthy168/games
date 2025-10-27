@@ -37,7 +37,7 @@ body{
   margin:0;
   color:var(--ink);
   background:#f5f6f7;
-  overscroll-behavior-y: none; /* prevent rubber band */
+  overscroll-behavior-y: none; /* prevent rubber band on iOS */
 }
 
 /* ===== App shell ===== */
@@ -61,50 +61,53 @@ body{
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
-.layout.layout-single{ grid-template-columns:1fr }
-.panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1rem }
+
+/* Play page = single column, remove all side padding so nothing is offset */
+.layout.layout-single{ grid-template-columns:1fr; padding:0 }
+
+/* Keep panel chrome, but reduce inner padding to kill side gaps on mobile */
+.panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:12px }
 
 /* === PLAY PAGE PANEL ==================================================== */
 .board-panel{
   display:flex; flex-direction:column; align-items:center; gap:.6rem;
-  padding:8px 0 12px 0;                 /* tighter top padding */
+  padding:8px 0 12px 0;                 /* no left/right padding at all */
   overscroll-behavior: contain;         /* don't let board drags scroll page */
 }
 
-/* --- Turn banner: now at very top --- */
+/* --- Turn banner: pinned right at the top --- */
 .turn-banner{
   font-weight:800;
   font-size:1.15rem;
   text-align:center;
-  margin:0;                             /* hug the top */
+  margin:0;                             /* hug the very top */
 }
 
 /* ===== Small control buttons row ===== */
 .ctrl-row{
-  display:flex; gap:14px; width:100%;
+  display:flex; gap:12px; width:100%;
   justify-content:center; align-items:stretch;
   padding:4px 8px 6px;
 }
 
 .ctrl-btn{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  width:112px; height:82px;             /* smaller tile */
-  background:#fff; border:1px solid #e9eef5; border-radius:16px;
+  width:108px; height:76px;             /* slightly smaller tiles */
+  background:#fff; border:1px solid #e9eef5; border-radius:14px;
   box-shadow:0 6px 16px rgba(0,0,0,.08);
-  font-family: var(--ui-font);          /* Krasar text */
+  font-family: var(--ui-font);          /* Krasar for labels */
 }
-
 .ctrl-btn .icon{
-  width:26px; height:26px; display:block;
+  width:24px; height:24px; display:block;
   margin-bottom:6px;
   image-rendering:-webkit-optimize-contrast;
 }
 .ctrl-btn .label{
-  font-size:.95rem; font-weight:800; line-height:1; color:#0f172a;
+  font-size:.92rem; font-weight:800; line-height:1; color:#0f172a;
 }
 
 /* ===== Timers ===== */
-.timers{ width:min(90vw,520px) }
+.timers{ width:100% }                    /* full width, no centering box */
 .player-row{
   display:flex; align-items:center; justify-content:space-between;
   background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
@@ -122,19 +125,20 @@ body{
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
 
-/* timers/board/chat centered; board uses full width of panel */
-.timers, .board, .chat-panel{ inline-size:min(100%,720px) }
+/* timers/board/chat are full width of the panel now */
+.timers, .board, .chat-panel{ inline-size:100% }
 
-/* Full-width board (no side margins) */
+/* Full-width board (no side margins); TALLER height with same width */
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   width:100%;
-  aspect-ratio:1/1;                     /* square; width drives height */
+  /* Taller than square: height = width / 0.94  (≈ +6% taller) */
+  aspect-ratio: 1 / 0.94;
   border-radius:20px;
-  margin:0;                              /* no outer margin */
+  margin:0;                              /* no outer margin at all */
   touch-action:none; overscroll-behavior:contain;
   -webkit-user-select:none; user-select:none;
 

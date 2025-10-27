@@ -1,4 +1,3 @@
-// pwa.js — instant updates, no version bumping
 const SW_URL = './sw.js';
 
 if ('serviceWorker' in navigator) {
@@ -6,14 +5,10 @@ if ('serviceWorker' in navigator) {
     try {
       const reg = await navigator.serviceWorker.register(SW_URL, {
         scope: './',
-        updateViaCache: 'none' // never use HTTP cache for sw.js
+        updateViaCache: 'none'
       });
-
-      // Check for updates on load and every minute
       reg.update();
-      setInterval(() => reg.update(), 60 * 1000);
 
-      // Promote a newly installed worker immediately
       reg.addEventListener('updatefound', () => {
         const sw = reg.installing;
         if (!sw) return;
@@ -24,7 +19,6 @@ if ('serviceWorker' in navigator) {
         });
       });
 
-      // When controller changes, reload once to pick up fresh assets
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!window.__reloadedForSW) {
           window.__reloadedForSW = true;
@@ -32,8 +26,7 @@ if ('serviceWorker' in navigator) {
         }
       });
 
-      // If there’s already a waiting worker (fresh after deploy), activate it
-      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      setInterval(() => reg.update(), 60 * 1000);
     } catch (err) {
       console.log('SW registration failed:', err);
     }

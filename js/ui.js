@@ -107,14 +107,17 @@ class Clocks{
 
 /* ------------------------------ UI init ------------------------------ */
 export function initUI(){
-  const app      = document.getElementById('app');
   const elBoard  = document.getElementById('board');
-  const elTurn   = document.getElementById('turnLabel');
-  const btnReset = document.getElementById('btnReset');
-  const btnUndo  = document.getElementById('btnUndo');
-  const btnPause = document.getElementById('btnPause');
-  const pauseIcon  = btnPause?.querySelector('img');
-  const pauseLabel = btnPause?.querySelector('span');
+
+  // Top status + controls
+  const elTurn     = document.getElementById('turnLabel');
+  const btnReset   = document.getElementById('btnReset');
+  const btnUndo    = document.getElementById('btnUndo');
+  const btnPause   = document.getElementById('btnPause');
+  const pauseIcon  = document.getElementById('pauseIcon');
+  const pauseLabel = document.getElementById('pauseLabel');
+
+  // Clocks
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
@@ -134,6 +137,7 @@ export function initUI(){
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
   // build board cells
+  elBoard.innerHTML = '';
   const cells=[];
   for(let y=0;y<SIZE;y++){
     for(let x=0;x<SIZE;x++){
@@ -185,7 +189,8 @@ export function initUI(){
       toCell.classList.add('last-to');
       if(last.captured) toCell.classList.add('last-capture');
     }
-    if(elTurn) elTurn.textContent = khTurnLabel();
+    // update status banner
+    if (elTurn) elTurn.textContent = khTurnLabel();
   }
 
   let selected=null, legal=[];
@@ -256,21 +261,25 @@ export function initUI(){
     render(); clocks.start();
   }
 
-  /* ---------------------- Pause/Play UI sync ---------------------- */
-  const updatePauseUI = ()=>{
-    if(!btnPause) return;
-    const paused = !clocks.running;
-    if(pauseIcon)  pauseIcon.src = paused ? 'assets/ui/play.png' : 'assets/ui/pause.png';
-    if(pauseLabel) pauseLabel.textContent = paused ? 'បន្ត' : 'ផ្អាក';
-    btnPause.classList.toggle('is-active', paused);
-  };
-  updatePauseUI();
+  // ensure pause button starts as "pause" (game running)
+  if (pauseIcon && pauseLabel) {
+    pauseIcon.src = 'assets/ui/pause.png';
+    pauseLabel.textContent = 'ផ្អាក';
+    btnPause?.setAttribute('aria-pressed','false');
+  }
 
   /* ---------------------------- controls ---------------------------- */
   btnReset?.addEventListener('click', ()=>{
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-    render(); clocks.start(); updatePauseUI();
+    render(); clocks.start();
+
+    // reset pause button to "pause" icon/label
+    if (pauseIcon && pauseLabel) {
+      pauseIcon.src = 'assets/ui/pause.png';
+      pauseLabel.textContent = 'ផ្អាក';
+      btnPause?.setAttribute('aria-pressed','false');
+    }
   });
 
   btnUndo?.addEventListener('click', ()=>{
@@ -279,14 +288,23 @@ export function initUI(){
     }
   });
 
+  // PNG-based pause/play toggle (no emoji)
   btnPause?.addEventListener('click', ()=>{
     clocks.pauseResume();
-    updatePauseUI();
+    const running = clocks.running;
+    if (running) {
+      pauseIcon.src = 'assets/ui/pause.png';
+      pauseLabel.textContent = 'ផ្អាក';
+      btnPause.setAttribute('aria-pressed','false');
+    } else {
+      pauseIcon.src = 'assets/ui/play.png';
+      pauseLabel.textContent = 'ចាប់ផ្ដើម';
+      btnPause.setAttribute('aria-pressed','true');
+    }
   });
 
   // persist on unload
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }
 
-// auto-init when module is loaded by main.js
-// (main.js will call initUI())
+// auto-init is handled by main.js (which calls initUI)

@@ -6,6 +6,12 @@ const SAVE_KEY = 'kc_game_state_v2';
 
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
+/* Absolute URLs for control icons (robust vs relative path issues) */
+const ICONS = {
+  pause: new URL('../assets/ui/pause.png', import.meta.url).toString(),
+  play:  new URL('../assets/ui/play.png',  import.meta.url).toString(),
+};
+
 /* ------------------------------ storage ------------------------------ */
 function saveGameState(game, clocks){
   const s = {
@@ -235,20 +241,24 @@ export function initUI(){
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // resume or start
+  /* ---------- Pause/Play UI helper (single source of truth) ---------- */
+  const setPauseUI = (paused) => {
+    if (!btnPause || !pauseIcon || !pauseLabel) return;
+    pauseIcon.src = paused ? ICONS.play : ICONS.pause;
+    pauseLabel.textContent = paused ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
+    btnPause.setAttribute('aria-pressed', paused ? 'true' : 'false');
+    btnPause.dataset.paused = paused ? '1' : '0';
+  };
+
+  // resume previous game silently if present; otherwise fresh
   const saved=loadGameState();
   if(saved){
     game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
     clocks.msW=saved.msW??clocks.msW; clocks.msB=saved.msB??clocks.msB; clocks.turn=saved.clockTurn??game.turn;
     clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
-    render(); clocks.start();
-  } else { render(); clocks.start(); }
-
-  // ensure pause button starts as "pause"
-  if (pauseIcon && pauseLabel) {
-    pauseIcon.src = 'assets/ui/pause.png';
-    pauseLabel.textContent = 'ផ្អាក';
-    btnPause?.setAttribute('aria-pressed','false');
+    render(); clocks.start(); setPauseUI(false);
+  } else {
+    render(); clocks.start(); setPauseUI(false);
   }
 
   /* ---------------------------- controls ---------------------------- */
@@ -256,13 +266,7 @@ export function initUI(){
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
-
-    // reset toggle visuals
-    if (pauseIcon && pauseLabel) {
-      pauseIcon.src = 'assets/ui/pause.png';
-      pauseLabel.textContent = 'ផ្អាក';
-      btnPause?.setAttribute('aria-pressed','false');
-    }
+    setPauseUI(false); // back to running
   });
 
   btnUndo?.addEventListener('click', ()=>{
@@ -274,16 +278,9 @@ export function initUI(){
   // PNG-based pause/play toggle (no emoji)
   btnPause?.addEventListener('click', ()=>{
     clocks.pauseResume();
-    const running = clocks.running;
-    if (running) {
-      pauseIcon.src = 'assets/ui/pause.png';
-      pauseLabel.textContent = 'ផ្អាក';
-      btnPause.setAttribute('aria-pressed','false');
-    } else {
-      pauseIcon.src = 'assets/ui/play.png';
-      pauseLabel.textContent = 'ចាប់ផ្ដើម';
-      btnPause.setAttribute('aria-pressed','true');
-    }
+    // After toggling, clocks.running is the NEW state
+    const paused = !clocks.running;
+    setPauseUI(paused);
   });
 
   // persist on unload

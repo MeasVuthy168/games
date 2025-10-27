@@ -1,18 +1,19 @@
-// pwa.js — no version bumping required
-const SW_URL = './sw.js'; // keep sw.js at site root (or same directory as index.html)
+// pwa.js — instant updates, no version bumping
+const SW_URL = './sw.js';
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const reg = await navigator.serviceWorker.register(SW_URL, {
         scope: './',
-        updateViaCache: 'none' // don’t reuse a cached sw.js
+        updateViaCache: 'none' // never use HTTP cache for sw.js
       });
 
-      // Always check for a newer SW on load
+      // Check for updates on load and every minute
       reg.update();
+      setInterval(() => reg.update(), 60 * 1000);
 
-      // If a new SW is installing, force it to take control ASAP
+      // Promote a newly installed worker immediately
       reg.addEventListener('updatefound', () => {
         const sw = reg.installing;
         if (!sw) return;
@@ -23,7 +24,7 @@ if ('serviceWorker' in navigator) {
         });
       });
 
-      // When the new SW takes control, reload once to get fresh assets
+      // When controller changes, reload once to pick up fresh assets
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!window.__reloadedForSW) {
           window.__reloadedForSW = true;
@@ -31,8 +32,8 @@ if ('serviceWorker' in navigator) {
         }
       });
 
-      // Optional: ping for updates while app is open
-      setInterval(() => reg.update(), 60 * 1000);
+      // If there’s already a waiting worker (fresh after deploy), activate it
+      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
     } catch (err) {
       console.log('SW registration failed:', err);
     }

@@ -65,16 +65,16 @@ self.addEventListener('install', (e) => {
         if (res.ok) await c.put(req, res.clone());
       })
     );
-    await self.skipWaiting(); // move to waiting -> activate immediately (we’ll claim in activate)
+    await self.skipWaiting(); // go to waiting; pwa.js will promote immediately
   })());
 });
 
-/* ---------------- activate: clean old caches (in case the name ever changes) + take control */
+/* ---------------- activate: clean old caches + take control */
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
     const names = await caches.keys();
     await Promise.all(names.filter(n => n !== CACHE).map(n => caches.delete(n)));
-    await self.clients.claim();
+    await self.clients.claim(); // control all open tabs now
   })());
 });
 
@@ -83,7 +83,7 @@ self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-/* ---------------- fetch: 
+/* ---------------- fetch:
    - HTML -> network-first (fresh pages after deploy)
    - Static assets -> stale-while-revalidate (fast, then refresh in background)
 */

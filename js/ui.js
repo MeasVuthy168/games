@@ -104,7 +104,7 @@ export function initUI(){
   const btnUndo    = document.getElementById('btnUndo');
   const btnPause   = document.getElementById('btnPause');
 
-  // IMPORTANT: select pause icon/label from inside the button (no ids needed)
+  // select pause icon/label from inside the button (no ids needed)
   const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
   const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
 
@@ -126,6 +126,13 @@ export function initUI(){
 
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+
+  // helper: apply .turn-white / .turn-black on the board element
+  function applyTurnClass(){
+    if (!elBoard) return;
+    elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
+    elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
+  }
 
   // build board cells
   elBoard.innerHTML = '';
@@ -178,6 +185,7 @@ export function initUI(){
       if(last.captured) toCell.classList.add('last-capture');
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
+    applyTurnClass(); // keep .turn-white / .turn-black in sync
   }
 
   let selected=null, legal=[];

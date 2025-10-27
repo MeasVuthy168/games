@@ -136,7 +136,7 @@ body{
   grid-template-rows:repeat(8,1fr);
   width:100%;
   /* Taller than square: height = width / 0.94  (≈ +6% taller) */
-  aspect-ratio: 1 / 0.70;
+  aspect-ratio: 0.70 / 1;
   border-radius:20px;
   margin:0;                              /* no outer margin at all */
   touch-action:none; overscroll-behavior:contain;

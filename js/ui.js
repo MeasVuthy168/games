@@ -1,12 +1,9 @@
 // ui.js — Khmer Chess (Play page)
-// Uses: game.js (export { Game, SIZE, COLORS })
-
 import { Game, SIZE, COLORS } from './game.js';
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
 
-// reasonable defaults if settings not found
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
 /* ------------------------------ storage ------------------------------ */
@@ -35,7 +32,7 @@ function loadSettings(){
   }
 }
 
-/* ------------------------------ audio beeper (file-based) ------------------------------ */
+/* ------------------------------ audio beeper ------------------------------ */
 class AudioBeeper{
   constructor(){
     this.enabled = true;
@@ -46,30 +43,23 @@ class AudioBeeper{
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
     };
-    for (const k in this.bank) {
-      this.bank[k].preload = 'auto';
-    }
+    for (const k in this.bank) this.bank[k].preload = 'auto';
   }
   play(name, vol=1){
     if(!this.enabled) return;
     const src = this.bank[name]; if(!src) return;
     const a = src.cloneNode(true);
     a.volume = Math.max(0, Math.min(1, vol));
-    a.play().catch(()=>{ /* autoplay guard ignored until first tap */ });
+    a.play().catch(()=>{});
   }
-  move(){this.play('move', .9);}
-  capture(){this.play('capture', 1);}
-  select(){this.play('select', .85);}
-  error(){this.play('error', .9);}
+  move(){this.play('move', .9);} capture(){this.play('capture', 1);}
+  select(){this.play('select', .85);} error(){this.play('error', .9);}
   check(){this.play('check', 1);}
 }
 const beeper = new AudioBeeper();
 
 /* ------------------------------ haptics ------------------------------ */
-function vibrate(x){
-  // accepts number or pattern
-  if (navigator.vibrate) navigator.vibrate(x);
-}
+function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
 /* ------------------------------ clocks ------------------------------ */
 class Clocks{
@@ -167,7 +157,7 @@ export function initUI(){
   }
 
   function render(){
-    // clear
+    // clear cells
     for(const c of cells){
       c.innerHTML='';
       c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
@@ -189,7 +179,6 @@ export function initUI(){
       toCell.classList.add('last-to');
       if(last.captured) toCell.classList.add('last-capture');
     }
-    // update status banner
     if (elTurn) elTurn.textContent = khTurnLabel();
   }
 
@@ -213,11 +202,7 @@ export function initUI(){
       if(beeper.enabled) beeper.select();
       return;
     }
-    if(!selected){
-      if(beeper.enabled) beeper.error();
-      vibrate(40);
-      return;
-    }
+    if(!selected){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
 
     const ok=legal.some(m=>m.x===x&&m.y===y);
     if(!ok){
@@ -250,18 +235,16 @@ export function initUI(){
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // resume previous game silently if present; otherwise fresh
+  // resume or start
   const saved=loadGameState();
   if(saved){
     game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
     clocks.msW=saved.msW??clocks.msW; clocks.msB=saved.msB??clocks.msB; clocks.turn=saved.clockTurn??game.turn;
     clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
     render(); clocks.start();
-  } else {
-    render(); clocks.start();
-  }
+  } else { render(); clocks.start(); }
 
-  // ensure pause button starts as "pause" (game running)
+  // ensure pause button starts as "pause"
   if (pauseIcon && pauseLabel) {
     pauseIcon.src = 'assets/ui/pause.png';
     pauseLabel.textContent = 'ផ្អាក';
@@ -274,7 +257,7 @@ export function initUI(){
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
 
-    // reset pause button to "pause" icon/label
+    // reset toggle visuals
     if (pauseIcon && pauseLabel) {
       pauseIcon.src = 'assets/ui/pause.png';
       pauseLabel.textContent = 'ផ្អាក';
@@ -306,5 +289,3 @@ export function initUI(){
   // persist on unload
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }
-
-// auto-init is handled by main.js (which calls initUI)

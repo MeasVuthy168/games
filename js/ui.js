@@ -103,8 +103,10 @@ export function initUI(){
   const btnReset   = document.getElementById('btnReset');
   const btnUndo    = document.getElementById('btnUndo');
   const btnPause   = document.getElementById('btnPause');
-  const pauseIcon  = document.getElementById('pauseIcon');
-  const pauseLabel = document.getElementById('pauseLabel');
+
+  // IMPORTANT: select pause icon/label from inside the button (no ids needed)
+  const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
+  const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
 
   // Clocks
   const clockW   = document.getElementById('clockW');
@@ -156,12 +158,10 @@ export function initUI(){
   }
 
   function render(){
-    // clear cells
     for(const c of cells){
       c.innerHTML='';
       c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
     }
-    // pieces
     for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
       const p=game.at(x,y); if(!p) continue;
       const cell=cells[y*SIZE+x];
@@ -170,7 +170,6 @@ export function initUI(){
       setPieceBG(span,p);
       cell.appendChild(span);
     }
-    // last move highlight
     const last = game.history[game.history.length-1];
     if(last){
       cells[last.from.y*SIZE+last.from.x].classList.add('last-from');
@@ -271,12 +270,11 @@ export function initUI(){
     }
   });
 
-  // Reliable toggle: compute new state ourselves and then update UI
+  // Reliable toggle: derive the new state and then update UI
   btnPause?.addEventListener('click', ()=>{
     const wasRunning = clocks.running;
     clocks.pauseResume();
-    const nowRunning = !wasRunning;  // because we just toggled
-    updatePauseUI(nowRunning);
+    updatePauseUI(!wasRunning);
   });
 
   // persist on unload

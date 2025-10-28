@@ -29,11 +29,11 @@ export function initialPosition(){
 export function piece(t,c){ return {t,c,moved:false}; }
 
 /*
-  KING = ស្តេច
-  QUEEN = នាង
+  Khmer mapping:
+  KING = ស្តេច, QUEEN = នាង
     - normal: 1-step diagonals
-    - first move only: straight forward 2 squares (NO jump; only from starting rank)
-  BISHOP = ខុន (General, 4 diagonals + 1 straight forward)
+    - first move only: straight forward 2 squares (NO jump; middle & landing must be empty)
+  BISHOP = ខុន (General, 5 directions: 4 diagonals + 1 straight forward)
   ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
 */
 
@@ -44,7 +44,7 @@ export class Game{
     this.board=initialPosition();
     this.turn='w';
     this.history=[];   // {from,to,captured,promo,prevMoved,prevType}
-    this.winner=null;
+    this.winner=null;  // 'w'|'b'|'draw'|null
   }
 
   inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
@@ -78,14 +78,13 @@ export class Game{
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
 
-        // Special first move: ONLY from starting rank AND not moved; NO jump
-        const d = this.pawnDir(p.c);          // -1 for white, +1 for black
-        const startRank = (p.c === 'w') ? 7 : 0;
-        if (!p.moved && y === startRank) {
-          const y1 = y + d;                   // middle
-          const y2 = y + 2*d;                 // landing
+        // First move special: straight forward 2 squares, non-capturing, NO jump
+        const d = this.pawnDir(p.c);                  // -1 (white up), +1 (black down)
+        if (!p.moved) {
+          const y1 = y + d;                           // middle
+          const y2 = y + 2*d;                         // landing
           if (this.inBounds(x,y2) && !this.at(x,y1) && !this.at(x,y2)) {
-            out.push({ x, y: y2 });           // e.g. White E1→E3, Black D8→D6
+            out.push({ x, y: y2 });                   // e.g., White E1→E3, Black D8→D6
           }
         }
         break;
@@ -146,10 +145,10 @@ export class Game{
   /* simulate move then revert (for self-check filtering) */
   _do(from,to){
     const p=this.at(from.x,from.y);
-    const prevMoved = p.moved;
-    const captured=this.at(to.x,to.y) || null;
+    const prevMoved = p.moved;                  // snapshot moved flag
+    const captured  = this.at(to.x,to.y) || null;
 
-    this.set(to.x,to.y,{...p,moved:true});   // once moved, it's moved forever
+    this.set(to.x,to.y,{...p, moved:true});     // after any real move, it's moved
     this.set(from.x,from.y,null);
 
     // promotion rule (Khmer pawn -> queen on far zone)
@@ -164,7 +163,7 @@ export class Game{
 
   _undo(from,to,snap){
     const p=this.at(to.x,to.y);
-    if(snap.promo) p.t = snap.prev.pType;
+    if(snap.promo) p.t = snap.prev.pType;       // revert promotion if needed
     this.set(from.x,from.y,{...p, moved: snap.prev.moved}); // restore exact moved flag
     this.set(to.x,to.y,snap.captured);
   }
@@ -211,7 +210,13 @@ export class Game{
     const captured=snap.captured;
     const promo=snap.promo;
 
-    this.history.push({from,to,captured,promo, prevMoved: snap.prev.moved, prevType: snap.prev.pType});
+    // keep info for user undo()
+    this.history.push({
+      from,to,captured,promo,
+      prevMoved: snap.prev.moved,
+      prevType:  snap.prev.pType
+    });
+
     this.turn = this.enemyColor(this.turn);
 
     const st=this.status();

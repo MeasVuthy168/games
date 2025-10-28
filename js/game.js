@@ -16,9 +16,10 @@ export function initialPosition(){
   board[2] = Array(SIZE).fill(piece(PT.PAWN,'b')); // black pawns
   // White pawns & back rank (bottom)
   board[5] = Array(SIZE).fill(piece(PT.PAWN,'w'));
+  // White back rank: Neang (Q) sits to the RIGHT of the King
   board[7] = [
-    piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.QUEEN,'w'),
-    piece(PT.KING,'w'), piece(PT.BISHOP,'w'), piece(PT.KNIGHT,'w'), piece(PT.ROOK,'w'),
+    piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.KING,'w'),
+    piece(PT.QUEEN,'w'), piece(PT.BISHOP,'w'), piece(PT.KNIGHT,'w'), piece(PT.ROOK,'w'),
   ];
   return board;
 }

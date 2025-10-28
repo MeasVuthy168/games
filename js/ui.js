@@ -287,4 +287,51 @@ export function initUI(){
 
   // persist on unload
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
+
+  /* ----------------------- Auto-hide bottom bar ---------------------- */
+  (function(){
+    const bar = document.getElementById('appTabbar');
+    const spacer = document.getElementById('bottomSpacer');
+    if(!bar || !spacer) return;
+
+    const setSpacer = () => { spacer.style.height = (bar.offsetHeight || 56) + 'px'; };
+    setSpacer();
+    window.addEventListener('resize', setSpacer, { passive:true });
+
+    let lastY = window.scrollY;
+    let ticking = false;
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      const dy = y - lastY;
+
+      if (y < 8) {
+        bar.classList.remove('is-hidden');
+        lastY = y;
+        ticking = false;
+        return;
+      }
+      if (Math.abs(dy) > 6) {
+        if (dy > 0) bar.classList.add('is-hidden');      // scrolling down -> hide
+        else        bar.classList.remove('is-hidden');   // scrolling up   -> show
+        lastY = y;
+      }
+      ticking = false;
+    };
+
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(onScroll);
+      }
+    }, { passive:true });
+
+    // Reveal when user taps near the bottom (useful on short pages)
+    window.addEventListener('touchstart', (e)=>{
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if ((vh - e.touches[0].clientY) < 72) {
+        bar.classList.remove('is-hidden');
+      }
+    }, { passive:true });
+  })();
 }

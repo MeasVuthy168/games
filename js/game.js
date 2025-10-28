@@ -18,7 +18,8 @@ export function initialPosition(){
 
   // White pawns & back rank (bottom)
   board[5] = Array(SIZE).fill(piece(PT.PAWN,'w'));
-  // White: Neang (Q) to the RIGHT of the King
+
+  // White back rank: Neang (Q) sits to the RIGHT of the King
   board[7] = [
     piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.KING,'w'),
     piece(PT.QUEEN,'w'), piece(PT.BISHOP,'w'), piece(PT.KNIGHT,'w'), piece(PT.ROOK,'w'),
@@ -29,10 +30,11 @@ export function piece(t,c){ return {t,c,moved:false}; }
 
 /*
   Khmer mapping:
-  - KING = ស្តេច
-  - QUEEN = នាង — 1-step diagonals + special FIRST move: 2 squares straight forward (no jumping)
-  - BISHOP = ខុន (General) — 4 diagonals (1) + straight forward (1)
-  - ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
+  KING = ស្តេច, QUEEN = នាង
+    - normal: 1-step diagonals
+    - first move only: straight forward 2 squares (NO jump; middle & landing must be empty)
+  BISHOP = ខុន (General, 5 directions: 4 diagonals + 1 straight forward)
+  ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
 */
 
 export class Game{
@@ -41,8 +43,8 @@ export class Game{
   reset(){
     this.board=initialPosition();
     this.turn='w';
-    this.history=[];   // push {from,to,captured,promo,prevMoved,prevType}
-    this.winner=null;
+    this.history=[];   // {from,to,captured,promo,prevMoved,prevType}
+    this.winner=null;  // 'w'|'b'|'draw'|null
   }
 
   inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
@@ -66,50 +68,55 @@ export class Game{
 
     switch(p.t){
       case PT.KING:
-        for(const dx of[-1,0,1]) for(const dy of[-1,0,1]) if(dx||dy) add(x+dx,y+dy,'both');
+        for (const dx of [-1,0,1]) for (const dy of [-1,0,1]) if (dx||dy) add(x+dx, y+dy, 'both');
         break;
 
-      // នាង (Neang / Queen)
       case PT.QUEEN: {
-        // normal 1-step diagonals
+        // Neang: 1-step diagonals (normal)
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
 
-        // special first move: two straight forward (both empty, non-capturing)
-        const d=this.pawnDir(p.c);
-        if(!p.moved){
-          const y1=y+d, y2=y+2*d;
-          if(this.inBounds(x,y1)&&!this.at(x,y1) && this.inBounds(x,y2)&&!this.at(x,y2)){
-            out.push({x, y:y2}); // e.g., White E1→E3, Black D8→D6
+        // First-move special: straight forward 2 squares, non-capturing, NO jump
+        const d = this.pawnDir(p.c);        // -1 (white up), +1 (black down)
+        if (!p.moved) {
+          const y1 = y + d;                 // middle
+          const y2 = y + 2*d;               // landing
+          if (this.inBounds(x,y2) && !this.at(x,y1) && !this.at(x,y2)) {
+            out.push({ x, y: y2 });         // e.g., White E1→E3, Black D8→D6
           }
         }
         break;
       }
 
-      // ខុន (General)
+      // ខុន (General): 4 diagonals (1 step) + straight forward 1
       case PT.BISHOP: {
-        const d=this.pawnDir(p.c);
+        const d = this.pawnDir(p.c);
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
-        add(x,   y+d, 'both'); // straight forward 1
+        add(x,   y+d, 'both');
         break;
       }
 
-      case PT.ROOK:   ray(1,0); ray(-1,0); ray(0,1); ray(0,-1); break;
-      case PT.KNIGHT: for(const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both'); break;
+      case PT.ROOK:
+        ray(1,0); ray(-1,0); ray(0,1); ray(0,-1);
+        break;
+
+      case PT.KNIGHT:
+        for (const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both');
+        break;
 
       case PT.PAWN: {
         const d=this.pawnDir(p.c);
-        if(this.inBounds(x,y+d)&&!this.at(x,y+d)) out.push({x,y:y+d});
-        for(const dx of[-1,1]){
+        if (this.inBounds(x,y+d) && !this.at(x,y+d)) out.push({x,y:y+d});
+        for (const dx of [-1,1]) {
           const nx=x+dx, ny=y+d;
-          if(this.inBounds(nx,ny)){
+          if (this.inBounds(nx,ny)) {
             const t=this.at(nx,ny);
-            if(t&&t.c!==p.c) out.push({x:nx,y:ny});
+            if (t && t.c!==p.c) out.push({x:nx,y:ny});
           }
         }
         break;
@@ -138,13 +145,13 @@ export class Game{
   /* simulate move then revert (for self-check filtering) */
   _do(from,to){
     const p=this.at(from.x,from.y);
-    const prevMoved = p.moved;                // remember previous moved state
+    const prevMoved = p.moved;                 // remember original moved state
     const captured=this.at(to.x,to.y) || null;
 
-    this.set(to.x,to.y,{...p,moved:true});    // after any real move, piece is "moved"
+    this.set(to.x,to.y,{...p,moved:true});     // after any move, mark moved=true
     this.set(from.x,from.y,null);
 
-    // Promotion rule (Khmer pawn -> queen on far zone)
+    // promotion rule (Khmer pawn -> queen on far zone)
     let promo=false;
     const now=this.at(to.x,to.y);
     if(now.t===PT.PAWN){
@@ -156,9 +163,8 @@ export class Game{
 
   _undo(from,to,snap){
     const p=this.at(to.x,to.y);
-    if(snap.promo) p.t = snap.prev.pType;  // revert promotion type if any
-    // restore the previous 'moved' state correctly
-    this.set(from.x,from.y,{...p, moved: snap.prev.moved});
+    if(snap.promo) p.t = snap.prev.pType;     // revert promotion type if any
+    this.set(from.x,from.y,{...p, moved: snap.prev.moved}); // restore exact moved flag
     this.set(to.x,to.y,snap.captured);
   }
 
@@ -204,7 +210,7 @@ export class Game{
     const captured=snap.captured;
     const promo=snap.promo;
 
-    // store previous moved/type so a later user "undo()" can restore it perfectly
+    // keep data so user-triggered undo() can restore perfectly
     this.history.push({from,to,captured,promo, prevMoved: snap.prev.moved, prevType: snap.prev.pType});
 
     this.turn = this.enemyColor(this.turn);

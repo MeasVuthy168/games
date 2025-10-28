@@ -14,10 +14,12 @@ export function initialPosition(){
     piece(PT.ROOK,'b'), piece(PT.KNIGHT,'b'), piece(PT.BISHOP,'b'), piece(PT.QUEEN,'b'),
     piece(PT.KING,'b'), piece(PT.BISHOP,'b'), piece(PT.KNIGHT,'b'), piece(PT.ROOK,'b'),
   ];
-  board[2] = Array(SIZE).fill(piece(PT.PAWN,'b')); // black pawns
 
-  // White pawns & back rank (bottom)
-  board[5] = Array(SIZE).fill(piece(PT.PAWN,'w'));
+  // Black pawns (unique objects)
+  board[2] = Array.from({length: SIZE}, () => piece(PT.PAWN, 'b'));
+
+  // White pawns (unique objects)
+  board[5] = Array.from({length: SIZE}, () => piece(PT.PAWN, 'w'));
 
   // White back rank: Neang (Q) sits to the RIGHT of the King
   board[7] = [
@@ -32,7 +34,7 @@ export function piece(t,c){ return {t,c,moved:false}; }
   Khmer mapping:
   KING = ស្តេច, QUEEN = នាង
     - normal: 1-step diagonals
-    - first move only: straight forward 2 squares (NO jump; middle & landing must be empty)
+    - first move only: straight forward 2 squares (NON-capturing, NO jump)
   BISHOP = ខុន (General, 5 directions: 4 diagonals + 1 straight forward)
   ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
 */
@@ -43,8 +45,8 @@ export class Game{
   reset(){
     this.board=initialPosition();
     this.turn='w';
-    this.history=[];   // {from,to,captured,promo,prevMoved,prevType}
-    this.winner=null;  // 'w'|'b'|'draw'|null
+    this.history=[];   // {from,to,captured,promo,prevType,prevMoved}
+    this.winner=null;
   }
 
   inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
@@ -78,13 +80,13 @@ export class Game{
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
 
-        // First move special: straight forward 2 squares, non-capturing, NO jump
-        const d = this.pawnDir(p.c);                  // -1 (white up), +1 (black down)
+        // First move special: straight forward 2 squares, NON-capturing, NO jump
+        const d = this.pawnDir(p.c);         // -1 (white), +1 (black)
         if (!p.moved) {
-          const y1 = y + d;                           // middle
-          const y2 = y + 2*d;                         // landing
+          const y1 = y + d;                  // middle square must be empty
+          const y2 = y + 2*d;                // landing must be empty
           if (this.inBounds(x,y2) && !this.at(x,y1) && !this.at(x,y2)) {
-            out.push({ x, y: y2 });                   // e.g., White E1→E3, Black D8→D6
+            out.push({ x, y: y2 });
           }
         }
         break;
@@ -142,13 +144,21 @@ export class Game{
     return false;
   }
 
+  inCheck(color){
+    const k=this.findKing(color);
+    if(!k) return false;
+    return this.squareAttacked(k.x,k.y,this.enemyColor(color));
+  }
+
   /* simulate move then revert (for self-check filtering) */
   _do(from,to){
     const p=this.at(from.x,from.y);
-    const prevMoved = p.moved;                  // snapshot moved flag
+    const prevMoved = p.moved;                 // snapshot moved flag
+    const prevType  = p.t;                     // snapshot piece type (for promo revert)
     const captured  = this.at(to.x,to.y) || null;
 
-    this.set(to.x,to.y,{...p, moved:true});     // after any real move, it's moved
+    // place moved piece on target
+    this.set(to.x,to.y,{...p, moved:true});
     this.set(from.x,from.y,null);
 
     // promotion rule (Khmer pawn -> queen on far zone)
@@ -158,13 +168,15 @@ export class Game{
       if(now.c==='w' && to.y<=2){ now.t=PT.QUEEN; promo=true; }
       if(now.c==='b' && to.y>=5){ now.t=PT.QUEEN; promo=true; }
     }
-    return {captured,promo,prev:{from,to,pType:p.t, moved: prevMoved}};
+    return {captured,promo,prevType,prevMoved};
   }
 
   _undo(from,to,snap){
-    const p=this.at(to.x,to.y);
-    if(snap.promo) p.t = snap.prev.pType;       // revert promotion if needed
-    this.set(from.x,from.y,{...p, moved: snap.prev.moved}); // restore exact moved flag
+    const p=this.at(to.x,to.y);           // piece currently on the 'to' square
+    if(snap.promo) p.t = snap.prevType;   // revert promotion if it happened
+    // restore original piece (including original moved flag)
+    this.set(from.x,from.y,{...p, moved: snap.prevMoved});
+    // restore whatever was on the target square
     this.set(to.x,to.y,snap.captured);
   }
 
@@ -211,11 +223,7 @@ export class Game{
     const promo=snap.promo;
 
     // keep info for user undo()
-    this.history.push({
-      from,to,captured,promo,
-      prevMoved: snap.prev.moved,
-      prevType:  snap.prev.pType
-    });
+    this.history.push({from,to,captured,promo,prevType:snap.prevType,prevMoved:snap.prevMoved});
 
     this.turn = this.enemyColor(this.turn);
 
@@ -232,7 +240,8 @@ export class Game{
     this._undo(last.from,last.to,{
       captured:last.captured,
       promo:last.promo,
-      prev:{ pType:last.prevType, moved:last.prevMoved }
+      prevType:last.prevType,
+      prevMoved:last.prevMoved
     });
     this.winner=null;
     return true;

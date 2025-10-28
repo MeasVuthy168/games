@@ -26,20 +26,25 @@ export function initialPosition(){
     piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.KING,'w'),
     piece(PT.QUEEN,'w'), piece(PT.BISHOP,'w'), piece(PT.KNIGHT,'w'), piece(PT.ROOK,'w'),
   ];
+
   return board;
 }
+
 export function piece(t,c){ return {t,c,moved:false}; }
 
 /*
   Khmer mapping:
   KING = ស្តេច
     - normal: 1-step in any direction
-    - first move only: may move two diagonals forward (like D1→B2 / F2)
+    - first move only: 2 files sideways + 1 rank forward (non-capturing, no jump)
   QUEEN = នាង
     - normal: 1-step diagonals
-    - first move only: straight forward 2 squares (NON-capturing, NO jump)
-  BISHOP = ខុន (General): 4 diagonals (1 step) + straight forward 1
-  ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
+    - first move only: straight forward 2 squares (non-capturing, no jump)
+  BISHOP = ខុន (General)
+    - 4 diagonals (1 step) + straight forward 1
+  ROOK = ទូក
+  KNIGHT = សេះ
+  PAWN = ត្រី
 */
 
 export class Game{
@@ -69,37 +74,48 @@ export class Game{
       if(t.c!==p.c && mode!=='move') out.push({x:nx,y:ny});
       return false;
     };
-    const ray=(dx,dy)=>{ let nx=x+dx,ny=y+dy; while(this.inBounds(nx,ny)){ const go=add(nx,ny,'both'); if(!go) break; nx+=dx; ny+=dy; } };
+    const ray=(dx,dy)=>{
+      let nx=x+dx,ny=y+dy;
+      while(this.inBounds(nx,ny)){
+        const go=add(nx,ny,'both');
+        if(!go) break;
+        nx+=dx; ny+=dy;
+      }
+    };
 
     switch(p.t){
       /* 🟦 KING = ស្តេច */
       case PT.KING: {
-        // Normal 1-step in any direction
-        for (const dx of [-1,0,1]) for (const dy of [-1,0,1]) if (dx||dy) add(x+dx, y+dy, 'both');
+        // Normal move: 1-step in any direction
+        for (const dx of [-1,0,1])
+          for (const dy of [-1,0,1])
+            if (dx || dy) add(x+dx, y+dy, 'both');
 
-        // First-move special: two diagonals forward (NO jump)
+        // Special first move: 2 files sideways + 1 rank forward (no jump, non-capturing)
         if (!p.moved) {
-          const d=this.pawnDir(p.c); // white:-1 black:+1
-          // left forward
-          const nx1 = x - 2, ny1 = y + 2*d;
+          const d = this.pawnDir(p.c); // white:-1, black:+1
+          // forward-left (e.g. White D1->B2, Black E8->C7)
           const mx1 = x - 1, my1 = y + d;
+          const nx1 = x - 2, ny1 = y + d;
           if (this.inBounds(nx1,ny1) && !this.at(mx1,my1) && !this.at(nx1,ny1))
-            out.push({x:nx1,y:ny1});
-          // right forward
-          const nx2 = x + 2, ny2 = y + 2*d;
+            out.push({x:nx1, y:ny1});
+          // forward-right (e.g. White D1->F2, Black E8->G7)
           const mx2 = x + 1, my2 = y + d;
+          const nx2 = x + 2, ny2 = y + d;
           if (this.inBounds(nx2,ny2) && !this.at(mx2,my2) && !this.at(nx2,ny2))
-            out.push({x:nx2,y:ny2});
+            out.push({x:nx2, y:ny2});
         }
         break;
       }
 
       /* 🟨 QUEEN = នាង */
       case PT.QUEEN: {
+        // Normal 1-step diagonals
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
+        // First move: straight forward 2 (no jump, non-capturing)
         const d=this.pawnDir(p.c);
         if (!p.moved) {
           const y1=y+d, y2=y+2*d;

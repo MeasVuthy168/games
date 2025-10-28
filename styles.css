@@ -71,8 +71,8 @@ body{
 /* === PLAY PAGE PANEL ==================================================== */
 .board-panel{
   display:flex; flex-direction:column; align-items:center; gap:.6rem;
-  padding:8px 0 12px 0;                 /* no left/right padding at all */
-  overscroll-behavior: contain;         /* don't let board drags scroll page */
+  padding:8px 0 12px 0;
+  overscroll-behavior: contain;
 }
 
 /* --- Turn banner: pinned right at the top --- */
@@ -80,7 +80,7 @@ body{
   font-weight:800;
   font-size:1.15rem;
   text-align:center;
-  margin:0;                             /* hug the very top */
+  margin:0;
 }
 
 /* ===== Small control buttons row ===== */
@@ -92,10 +92,10 @@ body{
 
 .ctrl-btn{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  width:108px; height:76px;             /* slightly smaller tiles */
+  width:108px; height:76px;
   background:#fff; border:1px solid #e9eef5; border-radius:14px;
   box-shadow:0 6px 16px rgba(0,0,0,.08);
-  font-family: var(--ui-font);          /* Krasar for labels */
+  font-family: var(--ui-font);
 }
 .ctrl-btn .icon{
   width:24px; height:24px; display:block;
@@ -116,7 +116,7 @@ body{
 }
 
 /* ===== Timers ===== */
-.timers{ width:100% }                    /* full width, no centering box */
+.timers{ width:100% }
 .player-row{
   display:flex; align-items:center; justify-content:space-between;
   background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
@@ -134,31 +134,27 @@ body{
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
 
-/* timers/board/chat are full width of the panel now */
 .timers, .board, .chat-panel{ inline-size:100% }
 
-/* Full-width board (slimmer frame, larger cells) */
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   width:100%;
-  aspect-ratio: 1 / 1.15;           /* slightly taller for balance */
+  aspect-ratio: 1 / 1.15;
   border-radius:18px;
   margin:0;
   touch-action:none;
   overscroll-behavior:contain;
   -webkit-user-select:none;
   user-select:none;
-
-  /* thinner frame (was 18px) */
-  padding:10px;                     /* reduce padding to make cells larger */
+  padding:10px;
   background:#2a170a;
   box-sizing:border-box;
 }
 
-/* Outer carved wood frame (adjusted ring thickness) */
+/* Outer carved wood frame */
 .board::before{
   content:"";
   position:absolute;
@@ -172,7 +168,7 @@ body{
   z-index:-2;
 }
 
-/* Engraved gold inlay ring — slimmer border */
+/* Engraved gold inlay ring */
 .board::after{
   content:"";
   position:absolute;
@@ -222,7 +218,7 @@ body{
   width:86%; height:86%;
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
-  box-shadow:none; /* was: 0 4px 10px ... */
+  box-shadow:none;
   transition: transform .1s ease, box-shadow .15s ease, filter .15s ease;
 }
 .piece:active{ transform:scale(.96) }
@@ -253,14 +249,22 @@ body{
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; margin-inline:auto }
 
-/* ===== Bottom nav (PNG icons) ===== */
-.home-nav{
+/* ===== Bottom nav (PNG icons) — auto-hide ===== */
+#appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
   display:grid; grid-template-columns:repeat(5,1fr);
   gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
+
+  transition: transform .25s ease, opacity .25s ease;
+  will-change: transform;
+}
+#appTabbar.is-hidden{
+  transform: translateY(100%);
+  opacity: 0;
+  pointer-events: none;
 }
 .nav-item{
   display:flex; flex-direction:column; align-items:center; gap:.15rem;
@@ -269,6 +273,16 @@ body{
 }
 .ni-img{ width:24px; height:24px; display:block; line-height:1 }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
+
+/* Spacer for fixed bottom bar */
+#bottomSpacer{
+  height: calc(56px + env(safe-area-inset-bottom));
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce){
+  #appTabbar{ transition: none; }
+}
 
 /* ===== Settings (unchanged) ===== */
 .settings-page{ padding: 0 0 90px 0 }

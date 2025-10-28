@@ -1,77 +1,94 @@
-<!doctype html>
+ <!doctype html>
 <html lang="km">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>អុកចត្រង្គ (Khmer Chess)</title>
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
+  <title>អុកចត្រង្គ (Khmer Chess) · Home</title>
+
+  <!-- Font (Krasar) -->
+  <link rel="preload" as="font" href="assets/fonts/Krasar-Regular.ttf" type="font/ttf" crossorigin>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
+  <!-- App styles -->
   <link rel="stylesheet" href="styles.css" />
-  <style>
-    /* small helpers so we don't rely on missing images */
-    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;padding:1rem}
-    .menu-card{display:flex;flex-direction:column;align-items:center;justify-content:center;background:#fff;
-      padding:1rem;border-radius:1rem;text-decoration:none;color:#0d2d5c;box-shadow:0 4px 12px rgba(0,0,0,.08);font-weight:700}
-    .menu-card:active{transform:scale(.98)}
-    .card-emoji{font-size:2.2rem;margin-bottom:.4rem}
-    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover}
-  </style>
 </head>
 <body>
-  <div class="app home-app">
-    <!-- Top bar -->
-    <header class="topbar">
-      <h1>អុកចត្រង្គ (Khmer Chess)</h1>
+  <div class="app">
+
+    <!-- Top bar (static) -->
+    <header class="topbar" role="banner">
+      <h1 style="margin:0; font-weight:800;">អុកចត្រង្គ (Khmer Chess)</h1>
       <div class="spacer"></div>
-      <!-- use the existing 192 icon as the avatar -->
-      <a href="settings.html" class="avatar-link" title="Setting">
-        <img src="assets/icons/icon-192.png" alt="user" class="avatar" />
+      <a href="notifications.html" title="Notifications" aria-label="Notifications"
+         style="display:inline-flex; align-items:center;">
+        <img src="assets/ui/nav-bell.png" alt="" width="22" height="22" />
       </a>
     </header>
 
-    <!-- Main -->
-    <main class="home-main">
-      <!-- Install PWA button -->
-      <button id="installBtn" class="install-btn" style="display:none">
-        📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
-      </button>
+    <!-- Main content -->
+    <main class="layout" style="grid-template-columns:1fr; padding:12px 12px 90px;">
+      <!-- Two quick actions (cards) -->
+      <section style="display:grid; grid-template-columns:1fr 1fr; gap:20px; margin-top:10px;">
+        <a href="play.html"
+           class="card clickable"
+           style="text-decoration:none; color:inherit; align-items:center; gap:14px; height:120px;">
+          <img src="assets/ui/robot.png" alt="" width="56" height="56" />
+          <div class="card-left">
+            <div class="card-title">លេងជាមួយ AI</div>
+            <div class="card-sub">Start a game vs computer</div>
+          </div>
+        </a>
 
-      <!-- Game Mode Menu -->
-      <div class="menu-grid">
-        <a class="menu-card" href="play.html?mode=ai">
-          <div class="card-emoji">🤖</div>
-          <span>លេងជាមួយ AI</span>
+        <a href="friends.html"
+           class="card clickable"
+           style="text-decoration:none; color:inherit; align-items:center; gap:14px; height:120px;">
+          <img src="assets/ui/friends-2.png" alt="" width="56" height="56" />
+          <div class="card-left">
+            <div class="card-title">លេងជាមួយមិត្ត</div>
+            <div class="card-sub">Play with a friend</div>
+          </div>
         </a>
-        <a class="menu-card" href="play.html?mode=friend">
-          <div class="card-emoji">👥</div>
-          <span>លេងជាមួយមិត្ត</span>
-        </a>
-      </div>
+      </section>
+
+      <!-- You can add more home content here if needed -->
+
     </main>
 
-    <!-- Bottom Navigation with PNG icons -->
-    <nav class="home-nav">
+    <!-- STATIC bottom nav for Home (NO auto-hide here) -->
+    <nav class="home-nav" role="navigation" aria-label="Bottom">
       <a class="nav-item active" href="index.html" aria-current="page">
-        <span class="ni"><img class="ni-img" src="assets/ui/nav-home.png" alt=""></span><span>Home</span>
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
       </a>
       <a class="nav-item" href="friends.html">
-        <span class="ni"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""></span><span>Friend</span>
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span>
       </a>
       <a class="nav-item" href="play.html">
-        <span class="ni"><img class="ni-img" src="assets/ui/nav-play.png" alt=""></span><span>Play</span>
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span>
       </a>
       <a class="nav-item" href="settings.html">
-        <span class="ni"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""></span><span>Setting</span>
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span>
       </a>
       <a class="nav-item" href="notifications.html">
-        <span class="ni"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""></span><span>Notification</span>
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
       </a>
     </nav>
   </div>
+
+  <!-- Portrait-only overlay (optional, matches your other pages) -->
+  <div class="orientation-blocker" id="orientationBlock" aria-hidden="true">
+    <div class="ob-card">
+      សូមប្រើទម្រង់បញ្ឈរ<br/>
+      <small>Rotate back to portrait to continue</small>
+    </div>
+  </div>
+
+  <!-- No Play-specific scripts here -->
 </body>
-</html>
+</html>       

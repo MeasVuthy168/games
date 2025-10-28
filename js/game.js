@@ -14,8 +14,10 @@ export function initialPosition(){
     piece(PT.KING,'b'), piece(PT.BISHOP,'b'), piece(PT.KNIGHT,'b'), piece(PT.ROOK,'b'),
   ];
   board[2] = Array(SIZE).fill(piece(PT.PAWN,'b')); // black pawns
+
   // White pawns & back rank (bottom)
   board[5] = Array(SIZE).fill(piece(PT.PAWN,'w'));
+
   // White back rank: Neang (Q) sits to the RIGHT of the King
   board[7] = [
     piece(PT.ROOK,'w'), piece(PT.KNIGHT,'w'), piece(PT.BISHOP,'w'), piece(PT.KING,'w'),
@@ -27,8 +29,10 @@ export function piece(t,c){ return {t,c,moved:false}; }
 
 /*
   Khmer mapping:
-  KING = ស្តេច, QUEEN = នាង (1-step diagonals),
-  BISHOP = ខុន (General, 5 directions: 4 diagonals + straight forward 1),
+  KING = ស្តេច, QUEEN = នាង
+    - normal: 1-step diagonals
+    - first move only: straight forward 2 squares (jump over middle, must land empty)
+  BISHOP = ខុន (General, 5 directions: 4 diagonals + 1 straight forward)
   ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
 */
 
@@ -62,29 +66,57 @@ export class Game{
     const ray=(dx,dy)=>{ let nx=x+dx,ny=y+dy; while(this.inBounds(nx,ny)){ const go=add(nx,ny,'both'); if(!go) break; nx+=dx; ny+=dy; } };
 
     switch(p.t){
-      case PT.KING: for(const dx of[-1,0,1])for(const dy of[-1,0,1]) if(dx||dy) add(x+dx,y+dy,'both'); break;
-      case PT.QUEEN: for(const dx of[-1,1])for(const dy of[-1,1]) add(x+dx,y+dy,'both'); break; // Khmer queen: 1-step diagonal
+      case PT.KING:
+        for (const dx of [-1,0,1]) for (const dy of [-1,0,1]) if (dx||dy) add(x+dx, y+dy, 'both');
+        break;
 
-      // ✅ FIXED: PT.BISHOP = ខុន (General)
-      // 4 diagonals (1 step) + straight forward 1 (relative to color)
-      case PT.BISHOP: {
-        const d=this.pawnDir(p.c); // forward: -1 (white), +1 (black)
-        // diagonals
+      case PT.QUEEN: {
+        // Khmer Neang: 1-step diagonals (normal move)
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
-        // forward straight
+
+        // Special FIRST move: straight forward 2 squares (jump over middle), non-capturing
+        const d = this.pawnDir(p.c);     // -1 (white up), +1 (black down)
+        if (!p.moved) {
+          const y2 = y + 2 * d;          // landing square
+          if (this.inBounds(x, y2) && !this.at(x, y2)) {
+            out.push({ x, y: y2 });      // e.g., White E1→E3, Black D8→D6
+          }
+        }
+        break;
+      }
+
+      // ខុន (General): 4 diagonals (1 step) + straight forward 1 (relative to color)
+      case PT.BISHOP: {
+        const d = this.pawnDir(p.c);
+        add(x-1, y-1, 'both');
+        add(x+1, y-1, 'both');
+        add(x-1, y+1, 'both');
+        add(x+1, y+1, 'both');
         add(x,   y+d, 'both');
         break;
       }
 
-      case PT.ROOK: ray(1,0); ray(-1,0); ray(0,1); ray(0,-1); break;
-      case PT.KNIGHT: for(const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both'); break;
+      case PT.ROOK:
+        ray(1,0); ray(-1,0); ray(0,1); ray(0,-1);
+        break;
+
+      case PT.KNIGHT:
+        for (const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both');
+        break;
+
       case PT.PAWN: {
         const d=this.pawnDir(p.c);
-        if(this.inBounds(x,y+d)&&!this.at(x,y+d)) out.push({x,y:y+d});
-        for(const dx of[-1,1]){ const nx=x+dx, ny=y+d; if(this.inBounds(nx,ny)){ const t=this.at(nx,ny); if(t&&t.c!==p.c) out.push({x:nx,y:ny}); } }
+        if (this.inBounds(x,y+d) && !this.at(x,y+d)) out.push({x,y:y+d});
+        for (const dx of [-1,1]) {
+          const nx=x+dx, ny=y+d;
+          if (this.inBounds(nx,ny)) {
+            const t=this.at(nx,ny);
+            if (t && t.c!==p.c) out.push({x:nx,y:ny});
+          }
+        }
         break;
       }
     }
@@ -99,7 +131,6 @@ export class Game{
   }
 
   squareAttacked(x,y,byColor){
-    // if any piece of byColor has a pseudo move to (x,y)
     for(let j=0;j<SIZE;j++) for(let i=0;i<SIZE;i++){
       const p=this.at(i,j);
       if(!p || p.c!==byColor) continue;
@@ -139,7 +170,6 @@ export class Game{
 
   legalMoves(x,y){
     const p=this.at(x,y); if(!p) return [];
-    // filter out moves that leave own king in check
     const raw=this.pseudoMoves(x,y);
     const keep=[];
     for(const mv of raw){
@@ -160,7 +190,6 @@ export class Game{
   }
 
   status(){
-    // returns {state:'ongoing'|'check'|'checkmate'|'stalemate', inCheck:boolean, toMove:'w'|'b'}
     const toMove=this.turn;
     const check=this.inCheck(toMove);
     const any=this.hasAnyLegalMove(toMove);
@@ -184,7 +213,6 @@ export class Game{
     this.history.push({from,to,captured,promo});
     this.turn = this.enemyColor(this.turn);
 
-    // compute terminal state
     const st=this.status();
     if(st.state==='checkmate'){ this.winner=this.enemyColor(st.toMove); }
     else if(st.state==='stalemate'){ this.winner='draw'; }

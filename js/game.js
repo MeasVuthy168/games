@@ -8,6 +8,7 @@ export const PT = {
 export function initialPosition(){
   const emptyRow = () => Array(SIZE).fill(null);
   const board = Array.from({length: SIZE}, emptyRow);
+
   // Black back rank (top)
   board[0] = [
     piece(PT.ROOK,'b'), piece(PT.KNIGHT,'b'), piece(PT.BISHOP,'b'), piece(PT.QUEEN,'b'),
@@ -25,14 +26,14 @@ export function initialPosition(){
   ];
   return board;
 }
+
 export function piece(t,c){ return {t,c,moved:false}; }
 
 /*
   Khmer mapping:
-  KING = ស្តេច, QUEEN = នាង
-    - normal: 1-step diagonals
-    - first move only: straight forward 2 squares (jump over middle, must land empty)
-  BISHOP = ខុន (General, 5 directions: 4 diagonals + 1 straight forward)
+  KING = ស្តេច
+  QUEEN = នាង — 1-step diagonals, plus 2-step forward on first move (both squares must be empty)
+  BISHOP = ខុន (General) — 5 directions: 4 diagonals + 1 straight forward
   ROOK = ទូក, KNIGHT = សេះ, PAWN = ត្រី
 */
 
@@ -42,8 +43,8 @@ export class Game{
   reset(){
     this.board=initialPosition();
     this.turn='w';
-    this.history=[];   // {from,to,captured,promo}
-    this.winner=null;  // 'w'|'b'|'draw'|null
+    this.history=[];
+    this.winner=null;
   }
 
   inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
@@ -66,36 +67,40 @@ export class Game{
     const ray=(dx,dy)=>{ let nx=x+dx,ny=y+dy; while(this.inBounds(nx,ny)){ const go=add(nx,ny,'both'); if(!go) break; nx+=dx; ny+=dy; } };
 
     switch(p.t){
+      // ស្តេច (King)
       case PT.KING:
-        for (const dx of [-1,0,1]) for (const dy of [-1,0,1]) if (dx||dy) add(x+dx, y+dy, 'both');
+        for(const dx of[-1,0,1])
+          for(const dy of[-1,0,1])
+            if(dx||dy) add(x+dx,y+dy,'both');
         break;
 
+      // នាង (Neang / Queen)
       case PT.QUEEN: {
-        // Khmer Neang: 1-step diagonals (normal move)
+        // Normal 1-step diagonals
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
 
-        // Special FIRST move: straight forward 2 squares (jump over middle), non-capturing
-        const d = this.pawnDir(p.c);     // -1 (white up), +1 (black down)
-        if (!p.moved) {
-          const y2 = y + 2 * d;          // landing square
-          if (this.inBounds(x, y2) && !this.at(x, y2)) {
-            out.push({ x, y: y2 });      // e.g., White E1→E3, Black D8→D6
+        // Special first move: 2 squares straight forward (both empty, non-capturing)
+        const d=this.pawnDir(p.c); // forward: -1 (white), +1 (black)
+        if(!p.moved){
+          const y1=y+d, y2=y+2*d;
+          if(this.inBounds(x,y1)&&!this.at(x,y1) && this.inBounds(x,y2)&&!this.at(x,y2)){
+            out.push({x, y:y2}); // e.g., White E1→E3, Black D8→D6
           }
         }
         break;
       }
 
-      // ខុន (General): 4 diagonals (1 step) + straight forward 1 (relative to color)
+      // ខុន (General)
       case PT.BISHOP: {
-        const d = this.pawnDir(p.c);
+        const d=this.pawnDir(p.c);
         add(x-1, y-1, 'both');
         add(x+1, y-1, 'both');
         add(x-1, y+1, 'both');
         add(x+1, y+1, 'both');
-        add(x,   y+d, 'both');
+        add(x,   y+d, 'both'); // straight forward 1
         break;
       }
 
@@ -104,17 +109,18 @@ export class Game{
         break;
 
       case PT.KNIGHT:
-        for (const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]]) add(x+dx,y+dy,'both');
+        for(const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]])
+          add(x+dx,y+dy,'both');
         break;
 
       case PT.PAWN: {
         const d=this.pawnDir(p.c);
-        if (this.inBounds(x,y+d) && !this.at(x,y+d)) out.push({x,y:y+d});
-        for (const dx of [-1,1]) {
+        if(this.inBounds(x,y+d)&&!this.at(x,y+d)) out.push({x,y:y+d});
+        for(const dx of[-1,1]){
           const nx=x+dx, ny=y+d;
-          if (this.inBounds(nx,ny)) {
+          if(this.inBounds(nx,ny)){
             const t=this.at(nx,ny);
-            if (t && t.c!==p.c) out.push({x:nx,y:ny});
+            if(t&&t.c!==p.c) out.push({x:nx,y:ny});
           }
         }
         break;
@@ -125,7 +131,8 @@ export class Game{
 
   findKing(color){
     for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
-      const p=this.at(x,y); if(p && p.c===color && p.t===PT.KING) return {x,y};
+      const p=this.at(x,y);
+      if(p && p.c===color && p.t===PT.KING) return {x,y};
     }
     return null;
   }
@@ -146,13 +153,13 @@ export class Game{
     return this.squareAttacked(k.x,k.y,this.enemyColor(color));
   }
 
-  /* simulate move then revert (for self-check filtering) */
   _do(from,to){
     const p=this.at(from.x,from.y);
     const captured=this.at(to.x,to.y) || null;
     this.set(to.x,to.y,{...p,moved:true});
     this.set(from.x,from.y,null);
-    // promotion rule (Khmer pawn -> queen on far zone)
+
+    // Promotion rule (Khmer pawn -> queen on far zone)
     let promo=false;
     const now=this.at(to.x,to.y);
     if(now.t===PT.PAWN){
@@ -161,9 +168,10 @@ export class Game{
     }
     return {captured,promo,prev:{from,to,pType:p.t}};
   }
+
   _undo(from,to,snap){
     const p=this.at(to.x,to.y);
-    if(snap.promo) p.t = snap.prev.pType;  // revert promotion
+    if(snap.promo) p.t=snap.prev.pType;
     this.set(from.x,from.y,{...p,moved:false});
     this.set(to.x,to.y,snap.captured);
   }
@@ -173,9 +181,9 @@ export class Game{
     const raw=this.pseudoMoves(x,y);
     const keep=[];
     for(const mv of raw){
-      const snap=this._do({x,y}, mv);
-      const ok = !this.inCheck(p.c);
-      this._undo({x,y}, mv, snap);
+      const snap=this._do({x,y},mv);
+      const ok=!this.inCheck(p.c);
+      this._undo({x,y},mv,snap);
       if(ok) keep.push(mv);
     }
     return keep;
@@ -183,7 +191,8 @@ export class Game{
 
   hasAnyLegalMove(color){
     for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
-      const p=this.at(x,y); if(!p || p.c!==color) continue;
+      const p=this.at(x,y);
+      if(!p || p.c!==color) continue;
       if(this.legalMoves(x,y).length) return true;
     }
     return false;
@@ -211,18 +220,18 @@ export class Game{
     const promo=snap.promo;
 
     this.history.push({from,to,captured,promo});
-    this.turn = this.enemyColor(this.turn);
+    this.turn=this.enemyColor(this.turn);
 
     const st=this.status();
     if(st.state==='checkmate'){ this.winner=this.enemyColor(st.toMove); }
     else if(st.state==='stalemate'){ this.winner='draw'; }
 
-    return {ok:true,promo,captured, status:st};
+    return {ok:true,promo,captured,status:st};
   }
 
   undo(){
     const last=this.history.pop(); if(!last) return false;
-    this.turn = this.enemyColor(this.turn);
+    this.turn=this.enemyColor(this.turn);
     this._undo(last.from,last.to,{captured:last.captured,promo:last.promo,prev:{pType:this.at(last.to.x,last.to.y)?.t}});
     this.winner=null;
     return true;

@@ -230,7 +230,7 @@ body{
 /* Side-to-move gets the 3D/raised accent */
 .turn-white .piece.white,
 .turn-black .piece.black{
-  box-shadow: 0 6px 14px rgba(0,0,0,.28);
+  box-shadow: 0 6px 14px rgba(0, 0, 255, 0.4);
   filter: brightness(1.02);
 }
 

@@ -88,8 +88,8 @@
       </section>
     </main>
 
-    <!-- Bottom nav with PNG icons -->
-    <nav class="home-nav">
+    <!-- ✅ Auto-hide bottom bar -->
+    <footer id="appTabbar" class="bottom-bar">
       <a class="nav-item" href="index.html">
         <img class="ni-img" src="assets/ui/nav-home.png" alt="">
         <span>Home</span>
@@ -110,7 +110,10 @@
         <img class="ni-img" src="assets/ui/nav-bell.png" alt="">
         <span>Notification</span>
       </a>
-    </nav>
+    </footer>
+
+    <!-- Spacer to prevent content jump -->
+    <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 
   <!-- Portrait-only overlay -->

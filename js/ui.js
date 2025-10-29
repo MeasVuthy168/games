@@ -112,13 +112,14 @@ export function initUI(){
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
-  const KH = {
-    white: 'ស',
-    black: 'ខ្មៅ',
-    check: 'ឆក់រាជា',
-    checkmate: 'ម៉ាត់',
-    stalemate: 'គប់ស្ដាំ (Stalemate)',
+    const KH = {
+    white: 'ស',                     // "White" (the white side in chess)
+    black: 'ខ្មៅ',                 // "Black" (the black side in chess)
+    check: 'អុក',             // "Check" — when the King is under threat ឆក់រាជា'
+    checkmate: 'អុកស្លាប់',            // "Checkmate" — when the King is trapped 'ម៉ាត់',
+    stalemate: 'អាប់' // "Stalemate" — draw situation (no legal moves) 'គប់ស្ដាំ (Stalemate)'
   };
+
 
   const game = new Game();
   let settings = loadSettings();
@@ -232,9 +233,9 @@ export function initUI(){
       saveGameState(game,clocks);
 
       if(res.status?.state==='checkmate'){
-        setTimeout(()=> alert('ម៉ាត់! ល្បែងបានបញ្ចប់'), 50);
+        setTimeout(()=> alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់'), 50);
       }else if(res.status?.state==='stalemate'){
-        setTimeout(()=> alert('គប់ស្ដាំ (Stalemate) — ល្បែងស្មើ!'), 50);
+        setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
       }
     }
   }

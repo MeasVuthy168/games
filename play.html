@@ -14,14 +14,9 @@
   <meta name="screen-orientation" content="portrait">
   <meta name="x5-orientation" content="portrait">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
-  <!-- Preload board textures -->
-  <link rel="preload" as="image" href="assets/board/wood_light.jpg">
-  <link rel="preload" as="image" href="assets/board/wood_dark.jpg">
-
-  <!-- Board textures for CSS -->
+  <!-- Board textures for CSS variables -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
@@ -37,23 +32,25 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
+        <!-- ======= Turn + Counting Draw ======= -->
         <div class="turn-wrap">
-  <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
+          <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
-  <!-- Counting Draw UI -->
-  <span id="count-label" class="count-label" style="display:none;">
-    ⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>
-  </span>
-  <div id="count-bar" class="count-bar" style="display:none;">
-    <div id="count-bar-fill" class="count-bar-fill"></div>
-  </div>
+          <!-- Counting Draw UI (initially hidden; JS will ensure/attach) -->
+          <span id="count-label" class="count-label" style="display:none;">
+            ⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>
+          </span>
+          <div id="count-bar" class="count-bar" style="display:none;">
+            <div id="count-bar-fill" class="count-bar-fill"></div>
+            <span id="count-badge" class="count-badge">–</span>
+          </div>
 
-  <!-- Sounds -->
-  <audio id="snd-count-start" preload="auto" src="assets/sfx/count-start.mp3"></audio>
-  <audio id="snd-count-end"   preload="auto" src="assets/sfx/count-end.mp3"></audio>
-</div>
+          <!-- Optional sounds -->
+          <audio id="snd-count-start" preload="auto" src="assets/sfx/count-start.mp3"></audio>
+          <audio id="snd-count-end"   preload="auto" src="assets/sfx/count-end.mp3"></audio>
+        </div>
 
-        <!-- 🔵 Controls (icon buttons) -->
+        <!-- Controls -->
         <div class="controls controls-top">
           <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
             <img src="assets/ui/reset.png" width="22" height="22" alt="">
@@ -79,7 +76,7 @@
           </div>
         </div>
 
-        <!-- Board (coords hidden) -->
+        <!-- Board -->
         <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
 
         <!-- Bottom clock -->
@@ -90,7 +87,7 @@
           </div>
         </div>
 
-        <!-- Chat (coming soon) -->
+        <!-- Chat placeholder -->
         <section class="panel card chat-panel card-full">
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>
@@ -101,7 +98,7 @@
       </section>
     </main>
 
-    <!-- ✅ Auto-hide bottom bar -->
+    <!-- Bottom nav -->
     <footer id="appTabbar" class="bottom-bar">
       <a class="nav-item" href="index.html">
         <img class="ni-img" src="assets/ui/nav-home.png" alt="">
@@ -125,7 +122,6 @@
       </a>
     </footer>
 
-    <!-- Spacer to prevent content jump -->
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 

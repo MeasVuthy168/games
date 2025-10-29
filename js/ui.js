@@ -43,7 +43,7 @@ class AudioBeeper{
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
 
-      // Optional extra SFX (Counting Draw)
+      // Counting Draw extras
       countStart: new Audio('assets/sfx/count-start.mp3'),
       countEnd:   new Audio('assets/sfx/count-end.mp3'),
     };
@@ -126,11 +126,12 @@ export function initUI(){
     stalemate: 'អាប់'
   };
 
-  // Counting Draw UI refs (optional elements)
+  // Counting Draw UI refs
   const elCountLabel = document.getElementById('count-label');
   const elCountNum   = document.getElementById('count-number');
   const elCountBar   = document.getElementById('count-bar');
   const elCountFill  = document.getElementById('count-bar-fill');
+  const elCountBadge = document.getElementById('count-badge');
 
   const auCountStart = document.getElementById('snd-count-start');
   const auCountEnd   = document.getElementById('snd-count-end');
@@ -192,61 +193,31 @@ export function initUI(){
 
   /* ----------------- Counting Draw (រាប់ស្មើ) ----------------- */
   const countState = {
-    active:false, side:null, initial:0, remaining:0
+    active:false, base:0, initial:0, remaining:0
   };
 
   function showCountUI(show){
-    if(!elCountLabel || !elCountBar) return;
-    elCountLabel.style.display = show ? 'inline' : 'none';
-    elCountBar.style.display   = show ? 'block'  : 'none';
-    elCountLabel.classList.toggle('pulse', !!show);
+    if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
+    if (elCountBar)   elCountBar.style.display   = show ? 'block'  : 'none';
+    elCountLabel?.classList.toggle('pulse', !!show);
     if(!show){
-      elCountBar.classList.remove('urgent');
+      elCountBar?.classList.remove('urgent');
       elCountFill?.classList.remove('low');
     }
   }
   function updateCountUI(){
-    if(elCountNum) elCountNum.textContent = String(countState.remaining);
+    if (elCountNum)   elCountNum.textContent   = String(countState.remaining);
+    if (elCountBadge) elCountBadge.textContent = String(countState.remaining);
     if(elCountFill && countState.initial){
-      const pct = (countState.remaining / countState.initial) * 100;
+      const pct = Math.max(0, (countState.remaining / countState.initial) * 100);
       elCountFill.style.width = `${pct}%`;
     }
-    if(elCountBar && elCountFill){
-      const urgent = countState.remaining <= 3;
-      elCountBar.classList.toggle('urgent', urgent);
-      elCountFill.classList.toggle('low', urgent);
-    }
-  }
-  function startCountingDraw(side, limit){
-    countState.active   = true;
-    countState.side     = side;     // 'w' or 'b'
-    countState.initial  = limit;
-    countState.remaining= limit;
-    showCountUI(true);
-    updateCountUI();
-    // sound
-    if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart);
-  }
-  function tickCountingDraw(){
-    if(!countState.active) return;
-    countState.remaining = Math.max(0, countState.remaining - 1);
-    updateCountUI();
-    if(countState.remaining === 0){
-      if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
-      alert('ស្មើតាមច្បាប់រាប់ (រាប់ស្មើ)');
-      stopCountingDraw('draw');
-      // Optionally: set a formal draw flag in your app state
-      // game.winner = 'draw';
-    }
-  }
-  function stopCountingDraw(/*reason*/){
-    if(!countState.active && countState.remaining===0) { showCountUI(false); return; }
-    countState.active=false; countState.side=null;
-    countState.initial=0; countState.remaining=0;
-    showCountUI(false);
+    const urgent = countState.remaining <= 3;
+    elCountBar?.classList.toggle('urgent', urgent);
+    elCountFill?.classList.toggle('low', urgent);
   }
 
-  // Summaries for material (maps to your Khmer pieces)
+  // Count material
   function summarizeMaterial(board){
     const cnt = (c,t) => {
       let n=0;
@@ -259,111 +230,100 @@ export function initUI(){
     const S = (c)=>({
       boats:   cnt(c, 'R'),   // ទូក
       horses:  cnt(c, 'N'),   // សេះ
-      generals:cnt(c, 'B'),   // ខុន (using Bishop slot)
+      generals:cnt(c, 'B'),   // ខុន
       queens:  cnt(c, 'Q'),   // នាង
       fishes:  cnt(c, 'P'),   // ត្រី
       kings:   cnt(c, 'K')    // ស្តេច
     });
-    return { w: S('w'), b: S('b') };
-  }
-
-  // Simple attacker inference: the side that matches the qualifying set
-  function inferAttackerFromPattern(board, limit){
-    const s = summarizeMaterial(board);
-    const matches = (S)=>{
-      if (S.boats===2 && limit===8) return true;
-      if (S.boats===1 && limit===16) return true;
-      if (S.boats===0 && S.generals===2 && limit===22) return true;
-      if (S.boats===0 && S.generals===1 && limit===44) return true;
-      if (S.boats===0 && S.generals===0 && S.horses===2 && limit===32) return true;
-      if (S.boats===0 && S.generals===0 && S.horses===1 && S.fishes===1 && limit===64) return true;
-      if (S.boats===0 && S.generals===0 && S.fishes===3 && limit===64) return true; // “3 fish” case (unless tied-fish special handling)
-      return false;
+    const w = S('w'), b = S('b');
+    const totals = {
+      boats: w.boats + b.boats,
+      horses: w.horses + b.horses,
+      generals: w.generals + b.generals,
+      queens: w.queens + b.queens,
+      fishes: w.fishes + b.fishes,
+      kings: w.kings + b.kings
     };
-    const wMatch = matches(s.w);
-    const bMatch = matches(s.b);
-    if (wMatch && !bMatch) return 'w';
-    if (bMatch && !wMatch) return 'b';
-    return game.turn; // fallback to side to move
+    const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
+    return { w, b, totals, nonKingPieces };
   }
 
-  // Detection per Khmer counting rule
-  // Returns: {active, limit, side} OR {active:false, immediateDraw:true} OR {active:false}
+  // Determine base per rule; handle immediate fish-only draws.
   function checkCountingDrawRule(board){
-    const s = summarizeMaterial(board);
-    const total = {
-      boats:   s.w.boats    + s.b.boats,
-      generals:s.w.generals + s.b.generals,
-      horses:  s.w.horses   + s.b.horses,
-      fishes:  s.w.fishes   + s.b.fishes,
-      queens:  s.w.queens   + s.b.queens
-    };
+    const { totals, nonKingPieces } = summarizeMaterial(board);
 
-    // Immediate draw (cannot mate): only fishes 1 or 2, no other pieces
-    if (total.boats===0 && total.generals===0 && total.horses===0 && total.queens===0){
-      if (total.fishes===1 || total.fishes===2){
+    // Immediate draw: only fish 1 or 2
+    if (totals.boats===0 && totals.generals===0 && totals.horses===0 && totals.queens===0){
+      if (totals.fishes===1 || totals.fishes===2){
         return { active:false, immediateDraw:true };
       }
-      if (total.fishes===3){
-        // If you later add precise “tied-fish (ត្រីចង)” detection, convert to immediate draw.
-        return { active:true, limit:64, side: inferAttackerFromPattern(board,64) };
+      // 3 fish -> base 64 rule applies
+      if (totals.fishes===3){
+        const base = 64;
+        const effective = Math.max(base - nonKingPieces, 1);
+        return { active:true, base, effective };
       }
     }
 
-    // Normal mapping
-    if (total.boats===2 && total.generals===0 && total.horses===0){
-      return { active:true, limit:8, side: inferAttackerFromPattern(board,8) };
-    }
-    if (total.boats===1 && total.generals===0 && total.horses===0){
-      return { active:true, limit:16, side: inferAttackerFromPattern(board,16) };
-    }
-    if (total.boats===0 && total.generals===2 && total.horses===0){
-      return { active:true, limit:22, side: inferAttackerFromPattern(board,22) };
-    }
-    if (total.boats===0 && total.generals===1 && total.horses===0){
-      return { active:true, limit:44, side: inferAttackerFromPattern(board,44) };
-    }
-    if (total.boats===0 && total.generals===0 && total.horses===2){
-      return { active:true, limit:32, side: inferAttackerFromPattern(board,32) };
-    }
-    if (total.boats===0 && total.generals===0 && total.horses===1 && total.fishes===1){
-      return { active:true, limit:64, side: inferAttackerFromPattern(board,64) };
-    }
+    // Base mapping
+    let base = 0;
+    if (totals.boats >= 2 && totals.generals===0 && totals.horses===0) base = 8;
+    else if (totals.boats === 1 && totals.generals===0 && totals.horses===0) base = 16;
+    else if (totals.boats === 0 && totals.generals >= 2 && totals.horses===0) base = 22;
+    else if (totals.boats === 0 && totals.generals === 1 && totals.horses===0) base = 44;
+    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 2) base = 32;
+    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 1 && totals.fishes >= 1) base = 64;
 
-    return { active:false };
+    if (!base) return { active:false };
+
+    const effective = Math.max(base - nonKingPieces, 1);
+    return { active:true, base, effective };
   }
 
-  function onPositionUpdated(){
+  function startCountingDraw(base, effective){
+    countState.active   = true;
+    countState.base     = base;
+    countState.initial  = effective;
+    countState.remaining= effective;
+    showCountUI(true);
+    updateCountUI();
+    if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart);
+  }
+  function stopCountingDraw(){
+    countState.active=false; countState.base=0; countState.initial=0; countState.remaining=0;
+    showCountUI(false);
+  }
+
+  // 🔁 Re-check rule; can force reseed (used on captures)
+  function refreshCountingRule({forceReseed=false}={}){
     const rule = checkCountingDrawRule(game.board);
 
-    // Immediate draw cases (fish only 1–2)
     if (rule.immediateDraw){
-      stopCountingDraw('immediate');
-      // Optional UX: alert once, or show a subtle banner instead of an alert
-      // alert('ស្មើ (មិនអាចអុកបាន — សល់តែត្រីតិច)');
+      stopCountingDraw();
       return;
     }
-
     if (rule.active){
-      const needsRestart = !countState.active
-        || countState.initial !== rule.limit
-        || countState.side    !== rule.side;
-
-      if (needsRestart){
-        startCountingDraw(rule.side, rule.limit);
+      if (!countState.active || forceReseed || countState.base !== rule.base){
+        startCountingDraw(rule.base, rule.effective);
       } else {
         showCountUI(true);
+        updateCountUI();
       }
-    } else if (countState.active){
-      // No longer qualifies (position changed)
-      stopCountingDraw('reset');
+    } else {
+      if (countState.active) stopCountingDraw();
     }
   }
 
-  function onMoveCommitted(sideJustMoved){
-    // Decrement ONLY if the attacking side (who must mate) just moved
-    if (countState.active && sideJustMoved === countState.side){
-      tickCountingDraw();
+  // Decrement every move (both sides)
+  function onMoveCommittedDecrement(){
+    if(!countState.active) return;
+    countState.remaining = Math.max(0, countState.remaining - 1);
+    updateCountUI();
+    if (countState.remaining === 0){
+      if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
+      alert('ស្មើតាមច្បាប់រាប់ (រាប់ស្មើ)');
+      stopCountingDraw();
+      // Optionally: game.winner = 'draw';
     }
   }
   /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
@@ -391,8 +351,8 @@ export function initUI(){
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
 
-    // Re-evaluate counting rule each paint
-    onPositionUpdated();
+    // Normal refresh (no force)
+    refreshCountingRule();
   }
 
   let selected=null, legal=[];
@@ -436,17 +396,22 @@ export function initUI(){
 
       clocks.switchedByMove(prevTurn);
 
-      // 🔵 Decrement the counting rule if the attacking side just moved
-      onMoveCommitted(prevTurn);
+      // 🔵 Force re-calc on captures (even if base unchanged)
+      if (res.captured) {
+        refreshCountingRule({ forceReseed:true });
+      }
+
+      // Per-move decrement (both sides)
+      onMoveCommittedDecrement();
 
       selected=null; legal=[]; clearHints(); render();
       saveGameState(game,clocks);
 
       if(res.status?.state==='checkmate'){
-        stopCountingDraw('mate');
+        stopCountingDraw();
         setTimeout(()=> alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់'), 50);
       }else if(res.status?.state==='stalemate'){
-        stopCountingDraw('draw');
+        stopCountingDraw();
         setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
       }
     }
@@ -455,8 +420,6 @@ export function initUI(){
 
   // --- Pause UI helper (single source of truth) ---
   function updatePauseUI(running){
-    // running=true  -> show PAUSE
-    // running=false -> show PLAY
     if (pauseIcon) pauseIcon.src = running ? 'assets/ui/pause.png' : 'assets/ui/play.png';
     if (pauseLabel) pauseLabel.textContent = running ? 'ផ្អាក' : 'ចាប់ផ្ដើម';
     if (btnPause) {
@@ -483,18 +446,16 @@ export function initUI(){
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
     updatePauseUI(true);
-    stopCountingDraw('reset'); // clear counting rule UI/state
+    stopCountingDraw();
   });
 
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      // Optionally stop to avoid stale UI after undo (render() will re-detect anyway)
-      stopCountingDraw('reset');
+      // We don't auto-increment back the counter on undo; render() refreshes rule.
     }
   });
 
-  // Reliable toggle: derive the new state and then update UI
   btnPause?.addEventListener('click', ()=>{
     const wasRunning = clocks.running;
     clocks.pauseResume();
@@ -528,8 +489,8 @@ export function initUI(){
         return;
       }
       if (Math.abs(dy) > 6) {
-        if (dy > 0) bar.classList.add('is-hidden');      // scrolling down -> hide
-        else        bar.classList.remove('is-hidden');   // scrolling up   -> show
+        if (dy > 0) bar.classList.add('is-hidden');      // down -> hide
+        else        bar.classList.remove('is-hidden');   // up   -> show
         lastY = y;
       }
       ticking = false;
@@ -542,7 +503,6 @@ export function initUI(){
       }
     }, { passive:true });
 
-    // Reveal when user taps near the bottom (useful on short pages)
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if ((vh - e.touches[0].clientY) < 72) {

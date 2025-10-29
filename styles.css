@@ -1,426 +1,513 @@
-/* === Khmer UI Font (Krasar) ============================================ */
-@font-face{
-  font-family: "Krasar";
-  src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
+// ui.js — Khmer Chess (Play page)
+import { Game, SIZE, COLORS } from './game.js';
+
+const LS_KEY   = 'kc_settings_v1';
+const SAVE_KEY = 'kc_game_state_v2';
+
+const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
+
+/* ------------------------------ storage ------------------------------ */
+function saveGameState(game, clocks){
+  const s = {
+    board: game.board,
+    turn: game.turn,
+    history: game.history,
+    msW: clocks.msW,
+    msB: clocks.msB,
+    clockTurn: clocks.turn
+  };
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch {}
+}
+function loadGameState(){
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; }
+}
+function clearGameState(){ try { localStorage.removeItem(SAVE_KEY); } catch {} }
+
+function loadSettings(){
+  try{
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+  }catch{
+    return { ...DEFAULTS };
+  }
 }
 
-/* Global UI font stack uses Krasar first */
-:root{
-  --ui-font: "Krasar", "Noto Sans Khmer",
-             system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+/* ------------------------------ audio ------------------------------ */
+class AudioBeeper{
+  constructor(){
+    this.enabled = true;
+    this.bank = {
+      move:    new Audio('assets/sfx/move.mp3'),
+      capture: new Audio('assets/sfx/capture.mp3'),
+      select:  new Audio('assets/sfx/select.mp3'),
+      error:   new Audio('assets/sfx/error.mp3'),
+      check:   new Audio('assets/sfx/check.mp3'),
 
-  --blue:#0d2d5c;
-  --wood1:#a57a54;
-  --wood2:#d3a574;
-  --cell-a:#e7cfa6;
-  --cell-b:#b88f5a;
-  --hi:#84caff;
-  --legal:#93e79e;
-  --danger:#ff9ba2;
-  --ink:#1b1f23;
-  --panel:#ffffff;
-  --shadow: 0 8px 24px rgba(0,0,0,.12);
-
-  /* board textures (fallbacks) */
-  --board-light-img:url("assets/board/wood_light.jpg");
-  --board-dark-img:url("assets/board/wood_dark.jpg");
+      // Counting Draw extras
+      countStart: new Audio('assets/sfx/count-start.mp3'),
+      countEnd:   new Audio('assets/sfx/count-end.mp3'),
+    };
+    for (const k in this.bank) this.bank[k].preload = 'auto';
+  }
+  play(name, vol=1){
+    if(!this.enabled) return;
+    const src = this.bank[name]; if(!src) return;
+    const a = src.cloneNode(true);
+    a.volume = Math.max(0, Math.min(1, vol));
+    a.play().catch(()=>{});
+  }
+  move(){this.play('move', .9);} capture(){this.play('capture', 1);}
+  select(){this.play('select', .85);} error(){this.play('error', .9);}
+  check(){this.play('check', 1);}
+  countStart(){this.play('countStart', 1);}
+  countEnd(){this.play('countEnd', 1);}
 }
+const beeper = new AudioBeeper();
 
-/* === Base =============================================================== */
-*{ box-sizing:border-box }
-html,body{ height:100% }
-html, body{ font-family: var(--ui-font); }
-body{
-  margin:0;
-  color:var(--ink);
-  background:#f5f6f7;
-  overscroll-behavior-y: none; /* prevent rubber band on iOS */
-}
+function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
-/* ===== App shell ===== */
-.app{ min-height:100dvh; display:flex; flex-direction:column }
-
-/* ===== Top bar (kept for other pages) ===== */
-.topbar{
-  position:sticky; top:0; z-index:20;
-  background:var(--blue); color:#fff;
-  display:flex; align-items:center; gap:.5rem;
-  padding:.75rem 1rem;
-  transition: transform .25s ease, opacity .25s ease;
-}
-.topbar h1{ font-size:1.1rem; margin:0 }
-.icon-btn{
-  background:#fff; color:var(--blue); border:none; border-radius:.75rem;
-  padding:.4rem .7rem; font-weight:600; cursor:pointer;
-}
-.icon-btn:active{ transform:translateY(1px) }
-.topbar .spacer{ flex:1 }
-
-/* ===== Layout ===== */
-.layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
-
-/* Play page = single column, remove all side padding so nothing is offset */
-.layout.layout-single{ grid-template-columns:1fr; padding:0 }
-
-/* Keep panel chrome, but reduce inner padding to kill side gaps on mobile */
-.panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:12px }
-
-/* === PLAY PAGE PANEL ==================================================== */
-.board-panel{
-  display:flex; flex-direction:column; align-items:center; gap:.6rem;
-  padding:8px 0 12px 0;
-  overscroll-behavior: contain;
-}
-
-/* --- Turn banner: pinned right at the top --- */
-.turn-banner{
-  font-weight:800;
-  font-size:1.15rem;
-  text-align:center;
-  margin:0;
+/* ------------------------------ clocks ------------------------------ */
+class Clocks{
+  constructor(update){
+    this.msW=0; this.msB=0; this.running=false; this.turn=COLORS.WHITE;
+    this.increment=0; this._t=null; this._u=update;
+  }
+  init(min, inc, turn=COLORS.WHITE){
+    this.msW=min*60*1000; this.msB=min*60*1000; this.increment=inc*1000; this.turn=turn;
+    this.stop(); this._u(this.msW,this.msB);
+  }
+  start(){
+    if(this.running) return; this.running=true; let last=performance.now();
+    const tick=()=>{
+      if(!this.running) return;
+      const now=performance.now(), dt=now-last; last=now;
+      if(this.turn===COLORS.WHITE) this.msW=Math.max(0,this.msW-dt); else this.msB=Math.max(0,this.msB-dt);
+      this._u(this.msW,this.msB);
+      if(this.msW<=0||this.msB<=0){ this.stop(); return; }
+      this._t=requestAnimationFrame(tick);
+    };
+    this._t=requestAnimationFrame(tick);
+  }
+  stop(){ this.running=false; if(this._t) cancelAnimationFrame(this._t); this._t=null; }
+  pauseResume(){ this.running?this.stop():this.start(); }
+  switchedByMove(prev){
+    if(prev===COLORS.WHITE) this.msW+=this.increment; else this.msB+=this.increment;
+    this.turn=(prev===COLORS.WHITE)?COLORS.BLACK:COLORS.WHITE; this._u(this.msW,this.msB); this.start();
+  }
+  format(ms){
+    const m=Math.floor(ms/60000), s=Math.floor((ms%60000)/1000), t=Math.floor((ms%1000)/100);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${t}`;
+  }
 }
 
-/* === Counting Draw UI (place near turn/board styles) === */
-.turn-wrap{
-  display:flex; align-items:center; justify-content:center;
-  gap:10px; flex-wrap:wrap; width:100%;
-}
+/* ------------------------------ UI init ------------------------------ */
+export function initUI(){
+  const elBoard  = document.getElementById('board');
 
-/* MOD: visible on light backgrounds + inherits text color */
-.count-label{
-  padding: 2px 10px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.95rem;
-  background: rgba(13,45,92,.10); /* was rgba(255,255,255,0.12) */
-  backdrop-filter: blur(2px);
-  white-space: nowrap;
-  user-select: none;
-  color: inherit; /* was #fff */
-}
-/* MOD: dark theme adjustment */
-:root[data-theme="dark"] .count-label{
-  background: rgba(255,255,255,.12);
-  color:#e6f0ff;
-}
+  // Top status + controls
+  const elTurn     = document.getElementById('turnLabel');
+  const btnReset   = document.getElementById('btnReset');
+  const btnUndo    = document.getElementById('btnUndo');
+  const btnPause   = document.getElementById('btnPause');
 
-.count-label.pulse{ animation: pulse 0.9s ease-in-out infinite; }
-@keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+  // select pause icon/label from inside the button (no ids needed)
+  const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
+  const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
 
-/* MOD: slightly taller bar + neutral bg works in light */
-.count-bar{
-  position: relative; /* for badge */
-  width: 160px; height: 10px; /* was 8px */
-  border-radius: 999px;
-  background: rgba(13,45,92,.12); /* was rgba(255,255,255,0.18) */
-  overflow: hidden;
-}
-/* MOD: dark theme bar background */
-:root[data-theme="dark"] .count-bar{ background: rgba(255,255,255,.18); }
+  // Clocks
+  const clockW   = document.getElementById('clockW');
+  const clockB   = document.getElementById('clockB');
 
-.count-bar-fill{
-  height:100%; width:100%; border-radius:inherit;
-  background: linear-gradient(90deg, #79e2ff, #32ff7e);
-  transform-origin: left center;
-  transition: width 180ms ease, background 220ms ease;
-}
-.count-bar-fill.low{
-  background: linear-gradient(90deg, #ffd479, #ff5e57);
-}
-.count-bar.urgent{ animation: shake .5s ease-in-out infinite; }
-@keyframes shake{
-  0%,100%{ transform: translateX(0) }
-  25%{ transform: translateX(-1px) }
-  75%{ transform: translateX(1px) }
-}
+  const KH = {
+    white: 'ស',
+    black: 'ខ្មៅ',
+    check: 'អុក',
+    checkmate: 'អុកស្លាប់',
+    stalemate: 'អាប់'
+  };
 
-/* MOD: numeric badge on the bar (right side) */
-.count-badge{
-  position:absolute; right:6px; top:50%; transform:translateY(-50%);
-  font-weight:800; font-size:.9rem; line-height:1;
-  padding:2px 6px; border-radius:8px;
-  background: rgba(255,255,255,.9); color:#0f172a;
-}
-:root[data-theme="dark"] .count-badge{
-  background: rgba(10,15,30,.9); color:#e6f0ff;
-}
+  // Counting Draw UI refs
+  const elCountLabel = document.getElementById('count-label');
+  const elCountNum   = document.getElementById('count-number');
+  const elCountBar   = document.getElementById('count-bar');
+  const elCountFill  = document.getElementById('count-bar-fill');
+  const elCountBadge = document.getElementById('count-badge');
 
-/* ===== Small control buttons row ===== */
-.ctrl-row{
-  display:flex; gap:12px; width:100%;
-  justify-content:center; align-items:stretch;
-  padding:4px 8px 6px;
-}
+  const auCountStart = document.getElementById('snd-count-start');
+  const auCountEnd   = document.getElementById('snd-count-end');
 
-.ctrl-btn{
-  display:flex; flex-direction:column; align-items:center; justify-content:center;
-  width:108px; height:76px;
-  background:#fff; border:1px solid #e9eef5; border-radius:14px;
-  box-shadow:0 6px 16px rgba(0,0,0,.08);
-  font-family: var(--ui-font);
-}
-.ctrl-btn .icon{
-  width:24px; height:24px; display:block;
-  margin-bottom:6px;
-  image-rendering:-webkit-optimize-contrast;
-}
-.ctrl-btn .label{
-  font-size:.92rem; font-weight:800; line-height:1; color:#0f172a;
-}
+  const game = new Game();
+  let settings = loadSettings();
+  beeper.enabled = !!settings.sound;
 
-/* Control buttons use Khmer font Krasar explicitly */
-.ctrl-btn span,
-.btn-icon span {
-  font-family: "Krasar", "Noto Sans Khmer", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 0.9rem;
-  letter-spacing: 0;
-}
+  // ---- Mobile audio unlock for <audio> fallbacks
+  function safePlay(el){
+    if(!el) return;
+    try{ el.currentTime = 0; el.play().catch(()=>{});}catch(e){}
+  }
+  window.addEventListener('pointerdown', ()=>{
+    [auCountStart, auCountEnd].forEach(a=>{
+      try{ a?.play()?.then(()=>a.pause()).catch(()=>{});}catch(e){}
+    });
+  }, { once:true });
 
-/* ===== Timers ===== */
-.timers{ width:100% }
-.player-row{
-  display:flex; align-items:center; justify-content:space-between;
-  background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
-  padding:.4rem .7rem; box-shadow:var(--shadow);
-}
-.player-name{ font-weight:700 }
-.clock{
-  font-variant-numeric:tabular-nums;
-  font-weight:800; letter-spacing:.5px;
-  padding:.2rem .5rem; border-radius:.4rem;
-  background:#0b1220; color:#e6f0ff;
-}
+  const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
+  clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
-/* =================================================================== */
-/* =================== CHESS BOARD (3D frame outside) ================= */
-/* =================================================================== */
+  // helper: apply .turn-white / .turn-black on the board element
+  function applyTurnClass(){
+    if (!elBoard) return;
+    elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
+    elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
+  }
 
-.timers, .board, .chat-panel{ inline-size:100% }
+  // build board cells
+  elBoard.innerHTML = '';
+  const cells=[];
+  for(let y=0;y<SIZE;y++){
+    for(let x=0;x<SIZE;x++){
+      const cell=document.createElement('div');
+      cell.className='cell '+((x+y)%2?'dark':'light');
+      cell.dataset.x=x; cell.dataset.y=y; cell.dataset.ax=(String.fromCharCode(97+x)+(8-y));
+      elBoard.appendChild(cell); cells.push(cell);
+    }
+  }
 
-.board{
-  position:relative;
-  display:grid;
-  grid-template-columns:repeat(8,1fr);
-  grid-template-rows:repeat(8,1fr);
-  width:100%;
-  aspect-ratio: 1 / 1.15;
-  border-radius:18px;
-  margin:0;
-  touch-action:none;
-  overscroll-behavior:contain;
-  -webkit-user-select:none;
-  user-select:none;
-  padding:10px;
-  background:#2a170a;
-  box-sizing:border-box;
-}
+  const setPieceBG=(span,p)=>{
+    const map={K:'king',Q:'queen',B:'bishop',R:'rook',N:'knight',P:'pawn'};
+    const name=`${p.c==='w'?'w':'b'}-${map[p.t]}`;
+    span.style.backgroundImage=`url(./assets/pieces/${name}.png)`;
+  };
 
-/* Outer carved wood frame */
-.board::before{
-  content:"";
-  position:absolute;
-  inset:0;
-  border-radius:20px;
-  background: linear-gradient(145deg,#5b3215,#2a170a);
-  box-shadow:
-    inset 0 2px 4px rgba(255,255,255,.22),
-    inset 0 -5px 8px rgba(0,0,0,.5),
-    0 10px 20px rgba(0,0,0,.4);
-  z-index:-2;
-}
+  function khTurnLabel(){
+    const side = game.turn===COLORS.WHITE ? KH.white : KH.black;
+    const st = game.status();
+    if(st.state==='checkmate'){
+      const winner = side==='ស' ? 'ខ្មៅ' : 'ស';
+      return `វេនខាង (${side}) · ${KH.checkmate} · ${winner} ឈ្នះ`;
+    }
+    if(st.state==='stalemate') return `${KH.stalemate}`;
+    if(st.state==='check')     return `វេនខាង (${side}) · ${KH.check}`;
+    return `វេនខាង (${side})`;
+  }
 
-/* Engraved gold inlay ring */
-.board::after{
-  content:"";
-  position:absolute;
-  inset:6px;
-  border-radius:14px;
-  border:4px solid rgba(214,178,104,.95);
-  pointer-events:none;
-  box-shadow:0 1px 2px rgba(255,255,255,.25),
-             inset 0 0 10px rgba(0,0,0,.35);
-}
+  /* ----------------- Counting Draw (រាប់ស្មើ) ----------------- */
+  const countState = {
+    active:false, base:0, initial:0, remaining:0
+  };
 
-/* Optional: hide algebraic labels when .no-coords is present */
-.board.no-coords .cell::after{ display:none; }
+  function showCountUI(show){
+    if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
+    if (elCountBar)   elCountBar.style.display   = show ? 'block'  : 'none';
+    elCountLabel?.classList.toggle('pulse', !!show);
+    if(!show){
+      elCountBar?.classList.remove('urgent');
+      elCountFill?.classList.remove('low');
+    }
+  }
+  function updateCountUI(){
+    if (elCountNum)   elCountNum.textContent   = String(countState.remaining);
+    if (elCountBadge) elCountBadge.textContent = String(countState.remaining);
+    if(elCountFill && countState.initial){
+      const pct = Math.max(0, (countState.remaining / countState.initial) * 100);
+      elCountFill.style.width = `${pct}%`;
+    }
+    const urgent = countState.remaining <= 3;
+    elCountBar?.classList.toggle('urgent', urgent);
+    elCountFill?.classList.toggle('low', urgent);
+  }
 
-/* Squares */
-.cell{
-  position:relative;
-  display:flex; align-items:center; justify-content:center;
-  background-repeat:repeat;
-  background-size:512px 512px;
-  background-position:center;
-  user-select:none;
-  border-radius:2px;
-  z-index:1;
-}
-.cell.light{ background-image: var(--board-light-img); filter: brightness(1.05) }
-.cell.dark { background-image: var(--board-dark-img);  filter: brightness(0.90) }
+  // Count material
+  function summarizeMaterial(board){
+    const cnt = (c,t) => {
+      let n=0;
+      for (let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
+        const p = board[y][x]; if(!p) continue;
+        if (p.c===c && p.t===t) n++;
+      }
+      return n;
+    };
+    const S = (c)=>({
+      boats:   cnt(c, 'R'),   // ទូក
+      horses:  cnt(c, 'N'),   // សេះ
+      generals:cnt(c, 'B'),   // ខុន
+      queens:  cnt(c, 'Q'),   // នាង
+      fishes:  cnt(c, 'P'),   // ត្រី
+      kings:   cnt(c, 'K')    // ស្តេច
+    });
+    const w = S('w'), b = S('b');
+    const totals = {
+      boats: w.boats + b.boats,
+      horses: w.horses + b.horses,
+      generals: w.generals + b.generals,
+      queens: w.queens + b.queens,
+      fishes: w.fishes + b.fishes,
+      kings: w.kings + b.kings
+    };
+    const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
+    return { w, b, totals, nonKingPieces };
+  }
 
-/* Coordinates (if not hidden) */
-.cell::after{
-  content:attr(data-ax);
-  position:absolute; bottom:5px; right:7px;
-  font-size:.62rem;
-  color:rgba(0,0,0,.6);
-  text-shadow:1px 1px 2px rgba(255,255,255,.8);
-}
+  // Determine base per rule; handle immediate fish-only draws.
+  function checkCountingDrawRule(board){
+    const { totals, nonKingPieces } = summarizeMaterial(board);
 
-/* Hover flair */
-.cell:hover:not(.selected):not(.hint-capture):not(.hint-move){
-  outline:2px solid rgba(255,255,255,.4);
-  box-shadow:inset 0 0 10px rgba(255,255,255,.25);
-}
-.cell:active{ transform:scale(.98); transition:transform .05s }
+    // Immediate draw: only fish 1 or 2
+    if (totals.boats===0 && totals.generals===0 && totals.horses===0 && totals.queens===0){
+      if (totals.fishes===1 || totals.fishes===2){
+        return { active:false, immediateDraw:true };
+      }
+      // 3 fish -> base 64 rule applies
+      if (totals.fishes===3){
+        const base = 64;
+        const effective = Math.max(base - nonKingPieces, 1);
+        return { active:true, base, effective };
+      }
+    }
 
-/* Pieces — flat by default (no permanent 3D) */
-.piece{
-  width:86%; height:86%;
-  background-size:contain; background-repeat:no-repeat; background-position:center;
-  border-radius:.4rem; cursor:grab; touch-action:none;
-  box-shadow:none;
-  transition: transform .1s ease, box-shadow .15s ease, filter .15s ease;
-}
-.piece:active{ transform:scale(.96) }
+    // Base mapping
+    let base = 0;
+    if (totals.boats >= 2 && totals.generals===0 && totals.horses===0) base = 8;
+    else if (totals.boats === 1 && totals.generals===0 && totals.horses===0) base = 16;
+    else if (totals.boats === 0 && totals.generals >= 2 && totals.horses===0) base = 22;
+    else if (totals.boats === 0 && totals.generals === 1 && totals.horses===0) base = 44;
+    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 2) base = 32;
+    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 1 && totals.fishes >= 1) base = 64;
 
-/* Side-to-move gets the 3D/raised accent */
-.turn-white .piece.white,
-.turn-black .piece.black{
-  box-shadow: 0 6px 14px rgba(0, 0, 255, 0.4);
-  filter: brightness(1.02);
-}
+    if (!base) return { active:false };
 
-/* Highlights / hints */
-.cell.hint-move::before{
-  content:""; position:absolute; width:24%; height:24%;
-  background:var(--legal); border-radius:50%; opacity:.8;
-}
-.cell.hint-capture{ outline:3px solid var(--danger) }
-.cell.selected{ outline:3px solid var(--hi); z-index:2 }
-.cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow: inset 0 0 0 3px rgba(132,202,255,.45) }
-.cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45) }
-.cell.last-capture{ animation:capFlash .9s ease-out }
-@keyframes capFlash{
-  0%{box-shadow:none}
-  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55), 0 0 14px 6px rgba(255,0,0,.25)}
-  100%{box-shadow:none}
-}
+    const effective = Math.max(base - nonKingPieces, 1);
+    return { active:true, base, effective };
+  }
 
-/* ===== Chat card ===== */
-.chat-panel{ width:100%; max-width:720px; margin-inline:auto }
+  function startCountingDraw(base, effective){
+    countState.active   = true;
+    countState.base     = base;
+    countState.initial  = effective;
+    countState.remaining= effective;
+    showCountUI(true);
+    updateCountUI();
+    if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart);
+  }
+  function stopCountingDraw(){
+    countState.active=false; countState.base=0; countState.initial=0; countState.remaining=0;
+    showCountUI(false);
+  }
 
-/* ===== Bottom nav (PNG icons) — auto-hide ===== */
-#appTabbar{
-  position:fixed; left:0; right:0; bottom:0; z-index:50;
-  background:#fff; border-top:1px solid #e6e6e6;
-  display:grid; grid-template-columns:repeat(5,1fr);
-  gap:.2rem;
-  padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
-  box-shadow:0 -6px 20px rgba(0,0,0,.06);
+  // 🔁 Re-check rule; can force reseed (used on captures)
+  function refreshCountingRule({forceReseed=false}={}){
+    const rule = checkCountingDrawRule(game.board);
 
-  transition: transform .25s ease, opacity .25s ease;
-  will-change: transform;
-}
-#appTabbar.is-hidden{
-  transform: translateY(100%);
-  opacity: 0;
-  pointer-events: none;
-}
-.nav-item{
-  display:flex; flex-direction:column; align-items:center; gap:.15rem;
-  padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
-  font-size:.8rem;
-}
-.ni-img{ width:24px; height:24px; display:block; line-height:1 }
-.nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
+    if (rule.immediateDraw){
+      stopCountingDraw();
+      return;
+    }
+    if (rule.active){
+      if (!countState.active || forceReseed || countState.base !== rule.base){
+        startCountingDraw(rule.base, rule.effective);
+      } else {
+        showCountUI(true);
+        updateCountUI();
+      }
+    } else {
+      if (countState.active) stopCountingDraw();
+    }
+  }
 
-/* Spacer for fixed bottom bar */
-#bottomSpacer{
-  height: calc(56px + env(safe-area-inset-bottom));
-}
+  // Decrement every move (both sides)
+  function onMoveCommittedDecrement(){
+    if(!countState.active) return;
+    countState.remaining = Math.max(0, countState.remaining - 1);
+    updateCountUI();
+    if (countState.remaining === 0){
+      if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
+      alert('ស្មើតាមច្បាប់រាប់ (រាប់ស្មើ)');
+      stopCountingDraw();
+      // Optionally: game.winner = 'draw';
+    }
+  }
+  /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
 
-/* Reduced motion preference */
-@media (prefers-reduced-motion: reduce){
-  #appTabbar{ transition: none; }
-}
+  function render(){
+    for(const c of cells){
+      c.innerHTML='';
+      c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
+    }
+    for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
+      const p=game.at(x,y); if(!p) continue;
+      const cell=cells[y*SIZE+x];
+      const span=document.createElement('div');
+      span.className=`piece ${p.c==='w'?'white':'black'}`;
+      setPieceBG(span,p);
+      cell.appendChild(span);
+    }
+    const last = game.history[game.history.length-1];
+    if(last){
+      cells[last.from.y*SIZE+last.from.x].classList.add('last-from');
+      const toCell = cells[last.to.y*SIZE+last.to.x];
+      toCell.classList.add('last-to');
+      if(last.captured) toCell.classList.add('last-capture');
+    }
+    if (elTurn) elTurn.textContent = khTurnLabel();
+    applyTurnClass();
 
-/* ===== Settings (unchanged) ===== */
-.settings-page{ padding: 0 0 90px 0 }
-.card, .exp, .profile-bar{
-  width: calc(100vw - 16px);
-  margin: 0 auto;
-  background:#fff; border:1px solid #e9eef5; border-radius:14px; box-shadow:var(--shadow);
-}
-.card{ padding:12px; display:flex; align-items:center; justify-content:space-between }
-.card + .card, .card + .exp, .exp + .card, .exp + .exp{ margin-top:12px }
-.card.disabled{ opacity:.55; pointer-events:none }
-.card.clickable{ cursor:pointer }
-.card-left{ display:flex; flex-direction:column; gap:2px }
-.card-title{ font-weight:800 }
-.card-sub{ font-size:.88rem; opacity:.7 }
-.card-right{ margin-left:12px; opacity:.6; display:flex; gap:8px; align-items:center }
+    // Normal refresh (no force)
+    refreshCountingRule();
+  }
 
-summary::-webkit-details-marker{ display:none }
-.exp{ overflow:hidden }
-.exp > summary{ list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer }
-.caret{ transition: transform .2s ease }
-.exp[open] > summary .caret{ transform: rotate(90deg) }
-.exp .card-body{ padding: 0 12px 12px 12px; display:grid; gap:10px }
+  let selected=null, legal=[];
+  const clearHints=()=>{ for(const c of cells) c.classList.remove('selected','hint-move','hint-capture'); };
+  const hintsEnabled = () => settings.hints !== false;
 
-.field{ display:flex; flex-direction:column; gap:6px }
-.field input[type="number"], .field input[type="text"]{
-  padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px;
-}
+  function showHints(x,y){
+    clearHints(); const cell=cells[y*SIZE+x]; cell.classList.add('selected');
+    legal=game.legalMoves(x,y); if(!hintsEnabled()) return;
+    for(const m of legal){
+      const t=game.at(m.x,m.y), c=cells[m.y*SIZE+m.x];
+      if(t) c.classList.add('hint-capture'); else c.classList.add('hint-move');
+    }
+  }
 
-.switch{ position:relative; display:inline-block; width:46px; height:26px }
-.switch input{ position:absolute; opacity:0; width:0; height:0 }
-.switch .slider{
-  position:absolute; inset:0; background:#d7dbe3; border-radius:999px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.12);
-  transition: background .18s ease;
-}
-.switch .slider::after{
-  content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
-  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition: transform .18s ease;
-}
-.switch input:checked + .slider{ background:#0d2d5c }
-.switch input:checked + .slider::after{ transform: translateX(20px) }
+  function onCellTap(e){
+    const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
+    if(p && p.c===game.turn){
+      selected={x,y}; showHints(x,y);
+      if(beeper.enabled) beeper.select();
+      return;
+    }
+    if(!selected){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
 
-/* ===== Responsive ===== */
-@media (min-width:720px){
-  .card, .exp, .profile-bar{ width: min(700px, 100%) }
-}
-@media(max-width:920px){
-  .layout{ grid-template-columns:1fr }
-}
+    const ok=legal.some(m=>m.x===x&&m.y===y);
+    if(!ok){
+      selected=null; legal=[]; clearHints();
+      if(beeper.enabled) beeper.error(); vibrate(40);
+      return;
+    }
 
-/* ===== Dark theme ===== */
-:root[data-theme="dark"]{ --ink:#e6f0ff }
-:root[data-theme="dark"] .card,
-:root[data-theme="dark"] .exp,
-:root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a }
-:root[data-theme="dark"] .card-title{ color:var(--ink) }
-:root[data-theme="dark"] .card-sub{ color:rgba(230,240,255,.75) }
-:root[data-theme="dark"] .field input[type="number"],
-:root[data-theme="dark"] .field input[type="text"]{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
-:root[data-theme="dark"] input[type="radio"],
-:root[data-theme="dark"] input[type="checkbox"]{ accent-color:#9ec1ff }
-:root[data-theme="dark"] .primary{ background:#2b4f9e; color:#fff }
-:root[data-theme="dark"] .secondary{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
+    const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prevTurn=game.turn;
+    const res=game.move(from,to);
 
-/* ===== Orientation blocker ===== */
-.orientation-blocker{
-  position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.65); color:#fff; text-align:center; -webkit-tap-highlight-color:transparent;
+    if(res.ok){
+      if(beeper.enabled){
+        if(before){ beeper.capture(); vibrate([20,40,30]); }
+        else beeper.move();
+      }
+      if(res.status?.state==='check' && beeper.enabled){ beeper.check(); vibrate(30); }
+
+      clocks.switchedByMove(prevTurn);
+
+      // 🔵 Force re-calc on captures (even if base unchanged)
+      if (res.captured) {
+        refreshCountingRule({ forceReseed:true });
+      }
+
+      // Per-move decrement (both sides)
+      onMoveCommittedDecrement();
+
+      selected=null; legal=[]; clearHints(); render();
+      saveGameState(game,clocks);
+
+      if(res.status?.state==='checkmate'){
+        stopCountingDraw();
+        setTimeout(()=> alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់'), 50);
+      }else if(res.status?.state==='stalemate'){
+        stopCountingDraw();
+        setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
+      }
+    }
+  }
+  for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
+
+  // --- Pause UI helper (single source of truth) ---
+  function updatePauseUI(running){
+    if (pauseIcon) pauseIcon.src = running ? 'assets/ui/pause.png' : 'assets/ui/play.png';
+    if (pauseLabel) pauseLabel.textContent = running ? 'ផ្អាក' : 'ចាប់ផ្ដើម';
+    if (btnPause) {
+      btnPause.setAttribute('aria-pressed', running ? 'false' : 'true');
+      btnPause.classList.toggle('is-paused', !running);
+    }
+  }
+
+  // resume previous game or start fresh
+  const saved=loadGameState();
+  if(saved){
+    game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
+    clocks.msW=saved.msW??clocks.msW; clocks.msB=saved.msB??clocks.msB; clocks.turn=saved.clockTurn??game.turn;
+    clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
+    render(); clocks.start();
+  } else { render(); clocks.start(); }
+
+  // ensure pause button shows PAUSE on first paint
+  updatePauseUI(true);
+
+  /* ---------------------------- controls ---------------------------- */
+  btnReset?.addEventListener('click', ()=>{
+    game.reset(); selected=null; legal=[]; clearHints();
+    clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+    render(); clocks.start();
+    updatePauseUI(true);
+    stopCountingDraw();
+  });
+
+  btnUndo?.addEventListener('click', ()=>{
+    if(game.undo()){
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      // We don't auto-increment back the counter on undo; render() refreshes rule.
+    }
+  });
+
+  btnPause?.addEventListener('click', ()=>{
+    const wasRunning = clocks.running;
+    clocks.pauseResume();
+    updatePauseUI(!wasRunning);
+  });
+
+  // persist on unload
+  window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
+
+  /* ----------------------- Auto-hide bottom bar ---------------------- */
+  (function(){
+    const bar = document.getElementById('appTabbar');
+    const spacer = document.getElementById('bottomSpacer');
+    if(!bar || !spacer) return;
+
+    const setSpacer = () => { spacer.style.height = (bar.offsetHeight || 56) + 'px'; };
+    setSpacer();
+    window.addEventListener('resize', setSpacer, { passive:true });
+
+    let lastY = window.scrollY;
+    let ticking = false;
+
+    const onScroll = () => {
+      const y = window.scrollY;
+      const dy = y - lastY;
+
+      if (y < 8) {
+        bar.classList.remove('is-hidden');
+        lastY = y;
+        ticking = false;
+        return;
+      }
+      if (Math.abs(dy) > 6) {
+        if (dy > 0) bar.classList.add('is-hidden');      // down -> hide
+        else        bar.classList.remove('is-hidden');   // up   -> show
+        lastY = y;
+      }
+      ticking = false;
+    };
+
+    window.addEventListener('scroll', () => {
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(onScroll);
+      }
+    }, { passive:true });
+
+    window.addEventListener('touchstart', (e)=>{
+      const vh = window.innerHeight || document.documentElement.clientHeight;
+      if ((vh - e.touches[0].clientY) < 72) {
+        bar.classList.remove('is-hidden');
+      }
+    }, { passive:true });
+  })();
 }
-.orientation-blocker .ob-card{
-  background:#0d2d5c; color:#fff; padding:18px 22px;
-  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
-  font-weight:800; text-align:center;
-}
-.orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }

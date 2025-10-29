@@ -3,6 +3,7 @@ import { Game, SIZE, COLORS } from './game.js';
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
+
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
 /* ------------------------------ storage ------------------------------ */
@@ -21,11 +22,14 @@ function loadGameState(){
   try { return JSON.parse(localStorage.getItem(SAVE_KEY)); } catch { return null; }
 }
 function clearGameState(){ try { localStorage.removeItem(SAVE_KEY); } catch {} }
+
 function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-  }catch{ return { ...DEFAULTS }; }
+  }catch{
+    return { ...DEFAULTS };
+  }
 }
 
 /* ------------------------------ audio ------------------------------ */
@@ -38,6 +42,7 @@ class AudioBeeper{
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
+      // optional SFX for counting-draw
       countStart: new Audio('assets/sfx/count-start.mp3'),
       countEnd:   new Audio('assets/sfx/count-end.mp3'),
     };
@@ -46,15 +51,18 @@ class AudioBeeper{
   play(name, vol=1){
     if(!this.enabled) return;
     const src = this.bank[name]; if(!src) return;
-    const a = src.cloneNode(true); a.volume = Math.max(0, Math.min(1, vol));
+    const a = src.cloneNode(true);
+    a.volume = Math.max(0, Math.min(1, vol));
     a.play().catch(()=>{});
   }
   move(){this.play('move', .9);} capture(){this.play('capture', 1);}
   select(){this.play('select', .85);} error(){this.play('error', .9);}
-  check(){this.play('check', 1);} countStart(){this.play('countStart', 1);}
+  check(){this.play('check', 1);}
+  countStart(){this.play('countStart', 1);}
   countEnd(){this.play('countEnd', 1);}
 }
 const beeper = new AudioBeeper();
+
 function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
 /* ------------------------------ clocks ------------------------------ */
@@ -102,6 +110,7 @@ export function initUI(){
   const btnUndo    = document.getElementById('btnUndo');
   const btnPause   = document.getElementById('btnPause');
 
+  // select pause icon/label from inside the button (no ids needed)
   const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
   const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
 
@@ -110,60 +119,106 @@ export function initUI(){
   const clockB   = document.getElementById('clockB');
 
   const KH = {
-    white: 'ស', black: 'ខ្មៅ', check: 'អុក', checkmate: 'អុកស្លាប់', stalemate: 'អាប់'
+    white: 'ស',
+    black: 'ខ្មៅ',
+    check: 'អុក',
+    checkmate: 'អុកស្លាប់',
+    stalemate: 'អាប់'
   };
 
-  /* ---------- Ensure Counting-Draw UI exists/attached ---------- */
-  function ensureCountUI(){
-    const wrap = document.querySelector('.turn-wrap');
-    if(!wrap) return;
+  // Counting Draw UI refs (may be auto-injected below)
+  let elCountLabel = document.getElementById('count-label');
+  let elCountNum   = document.getElementById('count-number');
+  let elCountBar   = document.getElementById('count-bar');
+  let elCountFill  = document.getElementById('count-bar-fill');
+  let elCountBadge = document.getElementById('count-badge');
 
-    const need = (id, html) => {
-      let el = document.getElementById(id);
-      if (!el){
-        wrap.insertAdjacentHTML('beforeend', html);
-        el = document.getElementById(id);
-        console.log('[ensure] injected', id);
-      }
-      return el;
-    };
-
-    need('count-label',
-      '<span id="count-label" class="count-label" style="display:none;">⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b></span>');
-    need('count-bar',
-      '<div id="count-bar" class="count-bar" style="display:none;"><div id="count-bar-fill" class="count-bar-fill"></div><span id="count-badge" class="count-badge">–</span></div>');
-    need('snd-count-start', '<audio id="snd-count-start" preload="auto" src="assets/sfx/count-start.mp3"></audio>');
-    need('snd-count-end',   '<audio id="snd-count-end"   preload="auto" src="assets/sfx/count-end.mp3"></audio>');
-  }
-  ensureCountUI();
-
-  // Re-query after ensure
-  const elCountLabel = document.getElementById('count-label');
-  const elCountNum   = document.getElementById('count-number');
-  const elCountBar   = document.getElementById('count-bar');
-  const elCountFill  = document.getElementById('count-bar-fill');
-  const elCountBadge = document.getElementById('count-badge');
   const auCountStart = document.getElementById('snd-count-start');
   const auCountEnd   = document.getElementById('snd-count-end');
 
-  // Mobile audio unlock for <audio> fallbacks
-  function safePlay(el){ if(!el) return; try{ el.currentTime=0; el.play().then(()=>el.pause()).catch(()=>{});}catch(e){} }
-  window.addEventListener('pointerdown', ()=>[auCountStart,auCountEnd].forEach(safePlay), { once:true });
+  // ---- Ensure Count UI exists even if cached HTML is old
+  (function ensureCountUI(){
+    const wrap = document.querySelector('.turn-wrap') || document.body;
 
+    let lbl  = document.getElementById('count-label');
+    let num  = document.getElementById('count-number');
+    let bar  = document.getElementById('count-bar');
+    let fill = document.getElementById('count-bar-fill');
+    let badge= document.getElementById('count-badge');
+
+    if (!lbl || !num || !bar || !fill) {
+      console.warn('[CountUI] Missing nodes in DOM. Injecting fallback UI.');
+      const frag = document.createDocumentFragment();
+
+      if (!lbl) {
+        lbl = document.createElement('span');
+        lbl.id = 'count-label';
+        lbl.className = 'count-label';
+        lbl.style.display = 'none';
+        lbl.innerHTML = '⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>';
+        frag.appendChild(lbl);
+        num = lbl.querySelector('#count-number');
+      }
+
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'count-bar';
+        bar.className = 'count-bar';
+        bar.style.display = 'none';
+
+        fill = document.createElement('div');
+        fill.id = 'count-bar-fill';
+        fill.className = 'count-bar-fill';
+
+        badge = document.createElement('span');
+        badge.id = 'count-badge';
+        badge.className = 'count-badge';
+        badge.textContent = '–';
+
+        bar.appendChild(fill);
+        bar.appendChild(badge);
+        frag.appendChild(bar);
+      }
+
+      wrap.appendChild(frag);
+    }
+
+    // Rebind refs
+    elCountLabel = document.getElementById('count-label');
+    elCountNum   = document.getElementById('count-number');
+    elCountBar   = document.getElementById('count-bar');
+    elCountFill  = document.getElementById('count-bar-fill');
+    elCountBadge = document.getElementById('count-badge');
+  })();
+
+  // ---- Mobile audio unlock for <audio> fallbacks
+  function safePlay(el){
+    if(!el) return;
+    try{ el.currentTime = 0; el.play().catch(()=>{});}catch(e){}
+  }
+  window.addEventListener('pointerdown', ()=>{
+    [auCountStart, auCountEnd].forEach(a=>{
+      try{ a?.play()?.then(()=>a.pause()).catch(()=>{});}catch(e){}
+    });
+  }, { once:true });
+
+  /* ✅ Create game + settings BEFORE using them anywhere */
   const game = new Game();
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
-  const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
-  clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-
+  // helper: apply .turn-white / .turn-black on the board element
   function applyTurnClass(){
     if (!elBoard) return;
     elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
     elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
   }
 
-  // Build board cells
+  // Create clocks AFTER settings exist
+  const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
+  clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+
+  // build board cells
   elBoard.innerHTML = '';
   const cells=[];
   for(let y=0;y<SIZE;y++){
@@ -194,13 +249,18 @@ export function initUI(){
   }
 
   /* ----------------- Counting Draw (រាប់ស្មើ) ----------------- */
-  const countState = { active:false, base:0, initial:0, remaining:0 };
+  const countState = {
+    active:false, base:0, initial:0, remaining:0
+  };
 
   function showCountUI(show){
     if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
     if (elCountBar)   elCountBar.style.display   = show ? 'block'  : 'none';
     elCountLabel?.classList.toggle('pulse', !!show);
-    if(!show){ elCountBar?.classList.remove('urgent'); elCountFill?.classList.remove('low'); }
+    if(!show){
+      elCountBar?.classList.remove('urgent');
+      elCountFill?.classList.remove('low');
+    }
   }
   function updateCountUI(){
     if (elCountNum)   elCountNum.textContent   = String(countState.remaining);
@@ -226,7 +286,7 @@ export function initUI(){
     const S = (c)=>({
       boats:   cnt(c, 'R'),   // ទូក
       horses:  cnt(c, 'N'),   // សេះ
-      generals:cnt(c, 'B'),   // ខុន (mapped to bishop)
+      generals:cnt(c, 'B'),   // ខុន
       queens:  cnt(c, 'Q'),   // នាង
       fishes:  cnt(c, 'P'),   // ត្រី
       kings:   cnt(c, 'K')    // ស្តេច
@@ -250,13 +310,11 @@ export function initUI(){
     // Fish-only quick cases
     if (totals.boats===0 && totals.generals===0 && totals.horses===0 && totals.queens===0){
       if (totals.fishes===1 || totals.fishes===2){
-        console.log('[CountRule] immediate fish draw (no bar)');
         return { active:false, immediateDraw:true };
       }
       if (totals.fishes===3){
         const base = 64;
         const effective = Math.max(base - nonKingPieces, 1);
-        console.log('[CountRule] base 64 (3 fish)', {effective});
         return { active:true, base, effective };
       }
     }
@@ -269,10 +327,9 @@ export function initUI(){
     else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 2) base = 32;
     else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 1 && totals.fishes >= 1) base = 64;
 
-    if (!base){ console.log('[CountRule] inactive'); return { active:false }; }
+    if (!base) return { active:false };
 
     const effective = Math.max(base - nonKingPieces, 1);
-    console.log('[CountRule] start', { base, effective, nonKingPieces, totals });
     return { active:true, base, effective };
   }
 
@@ -292,11 +349,22 @@ export function initUI(){
 
   function evaluateRuleAndMaybeStart(withSound=true){
     const rule = checkCountingDrawRule(game.board);
-    if (rule.immediateDraw){ stopCountingDraw(); return; }
+    // debug helper
+    console.log('[CountRule]', rule);
+
+    if (rule.immediateDraw){
+      stopCountingDraw();
+      return;
+    }
     if (rule.active){
-      if (!countState.active) startCountingDraw(rule.base, rule.effective, withSound);
-      else if (countState.base !== rule.base) startCountingDraw(rule.base, rule.effective, withSound);
-    } else if (countState.active) stopCountingDraw();
+      if (!countState.active){
+        startCountingDraw(rule.base, rule.effective, withSound);
+      } else if (countState.base !== rule.base){
+        startCountingDraw(rule.base, rule.effective, withSound);
+      }
+    } else {
+      if (countState.active) stopCountingDraw();
+    }
   }
 
   function onMoveCommittedDecrement(){
@@ -310,13 +378,17 @@ export function initUI(){
     }
   }
 
+  // Reseed counter after any capture (even if base unchanged)
   function reseedCounterAfterCapture(){
     const rule = checkCountingDrawRule(game.board);
     if (rule.immediateDraw){ stopCountingDraw(); return; }
-    if (rule.active){ startCountingDraw(rule.base, rule.effective, /*withSound=*/false); }
-    else{ stopCountingDraw(); }
+    if (rule.active){
+      startCountingDraw(rule.base, rule.effective, /*withSound=*/false);
+    }else{
+      stopCountingDraw();
+    }
   }
-  /* ----------------- /Counting Draw ----------------- */
+  /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
 
   function render(){
     for(const c of cells){
@@ -340,7 +412,7 @@ export function initUI(){
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
-    evaluateRuleAndMaybeStart(false);
+    evaluateRuleAndMaybeStart(/*withSound=*/false);
   }
 
   let selected=null, legal=[];
@@ -376,15 +448,18 @@ export function initUI(){
     const res=game.move(from,to);
 
     if(res.ok){
-      if(beeper.enabled){ if(before){ beeper.capture(); vibrate([20,40,30]); } else beeper.move(); }
+      if(beeper.enabled){
+        if(before){ beeper.capture(); vibrate([20,40,30]); }
+        else beeper.move();
+      }
       if(res.status?.state==='check' && beeper.enabled){ beeper.check(); vibrate(30); }
 
       clocks.switchedByMove(prevTurn);
 
-      // 1) decrement for this move (both sides)
+      // Decrement for the move
       onMoveCommittedDecrement();
 
-      // 2) if it was a capture, re-seed using fresh effective value
+      // If capture, reseed counter with new effective value
       if (before){ reseedCounterAfterCapture(); }
 
       selected=null; legal=[]; clearHints(); render();
@@ -411,7 +486,7 @@ export function initUI(){
     }
   }
 
-  // Resume previous or start new
+  // resume previous game or start fresh
   const saved=loadGameState();
   if(saved){
     game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
@@ -434,7 +509,7 @@ export function initUI(){
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      // render() re-evaluates counting rule from current position
+      // render() re-evaluates counting rule from the current position
     }
   });
 
@@ -445,7 +520,7 @@ export function initUI(){
   });
 
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
-  
+
   /* ----------------------- Auto-hide bottom bar ---------------------- */
   (function(){
     const bar = document.getElementById('appTabbar');
@@ -465,7 +540,9 @@ export function initUI(){
 
       if (y < 8) {
         bar?.classList.remove('is-hidden');
-        lastY = y; ticking = false; return;
+        lastY = y;
+        ticking = false;
+        return;
       }
       if (Math.abs(dy) > 6) {
         if (dy > 0) bar.classList.add('is-hidden');      // down -> hide
@@ -476,22 +553,14 @@ export function initUI(){
     };
 
     window.addEventListener('scroll', () => {
-      if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
+      if (!ticking) requestAnimationFrame(() => onScroll());
     }, { passive:true });
 
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
-      if ((vh - e.touches[0].clientY) < 72) bar.classList.remove('is-hidden');
+      if ((vh - e.touches[0].clientY) < 72) {
+        bar?.classList.remove('is-hidden');
+      }
     }, { passive:true });
   })();
-
-  // --- optional: quick debug to verify UI shows ---
-  window.__countShow = (n=16)=>{
-    elCountLabel.style.display='inline';
-    elCountBar.style.display='block';
-    elCountNum.textContent = String(n);
-    elCountBadge.textContent = String(n);
-    elCountFill.style.width = '100%';
-    console.log('[debug] forced counter visible with n =', n);
-  };
 }

@@ -24,7 +24,6 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* board textures (fallbacks) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
@@ -37,13 +36,13 @@ body{
   margin:0;
   color:var(--ink);
   background:#f5f6f7;
-  overscroll-behavior-y: none; /* prevent rubber band on iOS */
+  overscroll-behavior-y: none;
 }
 
 /* ===== App shell ===== */
 .app{ min-height:100dvh; display:flex; flex-direction:column }
 
-/* ===== Top bar (kept for other pages) ===== */
+/* ===== Top bar ===== */
 .topbar{
   position:sticky; top:0; z-index:20;
   background:var(--blue); color:#fff;
@@ -61,11 +60,7 @@ body{
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
-
-/* Play page = single column, remove all side padding so nothing is offset */
 .layout.layout-single{ grid-template-columns:1fr; padding:0 }
-
-/* Keep panel chrome, but reduce inner padding to kill side gaps on mobile */
 .panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:12px }
 
 /* === PLAY PAGE PANEL ==================================================== */
@@ -75,7 +70,7 @@ body{
   overscroll-behavior: contain;
 }
 
-/* --- Turn banner: pinned right at the top --- */
+/* --- Turn banner --- */
 .turn-banner{
   font-weight:800;
   font-size:1.15rem;
@@ -83,70 +78,71 @@ body{
   margin:0;
 }
 
-/* === Counting Draw UI (place near turn/board styles) === */
+/* === Counting Draw UI ================================================ */
 .turn-wrap{
-  display:flex; align-items:center; justify-content:center;
-  gap:10px; flex-wrap:wrap; width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  width:100%;
 }
 
-/* MOD: visible on light backgrounds + inherits text color */
 .count-label{
-  padding: 2px 10px;
-  border-radius: 8px;
-  font-weight: 700;
-  font-size: 0.95rem;
-  background: rgba(13,45,92,.10); /* was rgba(255,255,255,0.12) */
-  backdrop-filter: blur(2px);
-  white-space: nowrap;
-  user-select: none;
-  color: inherit; /* was #fff */
+  padding:2px 10px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:.95rem;
+  background:rgba(13,45,92,.10);
+  backdrop-filter:blur(2px);
+  white-space:nowrap;
+  user-select:none;
+  color:inherit;
 }
-/* MOD: dark theme adjustment */
-:root[data-theme="dark"] .count-label{
-  background: rgba(255,255,255,.12);
-  color:#e6f0ff;
-}
-
-.count-label.pulse{ animation: pulse 0.9s ease-in-out infinite; }
+:root[data-theme="dark"] .count-label{ background:rgba(255,255,255,.12); color:#e6f0ff }
+.count-label.pulse{ animation:pulse .9s ease-in-out infinite }
 @keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
 
-/* MOD: slightly taller bar + neutral bg works in light */
 .count-bar{
-  position: relative; /* for badge */
-  width: 160px; height: 10px; /* was 8px */
-  border-radius: 999px;
-  background: rgba(13,45,92,.12); /* was rgba(255,255,255,0.18) */
-  overflow: hidden;
+  position:relative;
+  width:160px;
+  height:10px;
+  border-radius:999px;
+  background:rgba(13,45,92,.12);
+  overflow:hidden;
 }
-/* MOD: dark theme bar background */
-:root[data-theme="dark"] .count-bar{ background: rgba(255,255,255,.18); }
+:root[data-theme="dark"] .count-bar{ background:rgba(255,255,255,.18) }
 
 .count-bar-fill{
-  height:100%; width:100%; border-radius:inherit;
-  background: linear-gradient(90deg, #79e2ff, #32ff7e);
-  transform-origin: left center;
-  transition: width 180ms ease, background 220ms ease;
+  height:100%;
+  width:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#79e2ff,#32ff7e);
+  transform-origin:left center;
+  transition:width 180ms ease, background 220ms ease;
 }
-.count-bar-fill.low{
-  background: linear-gradient(90deg, #ffd479, #ff5e57);
-}
-.count-bar.urgent{ animation: shake .5s ease-in-out infinite; }
+.count-bar-fill.low{ background:linear-gradient(90deg,#ffd479,#ff5e57) }
+.count-bar.urgent{ animation:shake .5s ease-in-out infinite }
 @keyframes shake{
-  0%,100%{ transform: translateX(0) }
-  25%{ transform: translateX(-1px) }
-  75%{ transform: translateX(1px) }
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-1px)}
+  75%{transform:translateX(1px)}
 }
 
-/* MOD: numeric badge on the bar (right side) */
 .count-badge{
-  position:absolute; right:6px; top:50%; transform:translateY(-50%);
-  font-weight:800; font-size:.9rem; line-height:1;
-  padding:2px 6px; border-radius:8px;
-  background: rgba(255,255,255,.9); color:#0f172a;
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  font-weight:800;
+  font-size:.9rem;
+  line-height:1;
+  padding:2px 6px;
+  border-radius:8px;
+  background:rgba(255,255,255,.9);
+  color:#0f172a;
 }
-:root[data-theme="dark"] .count-badge{
-  background: rgba(10,15,30,.9); color:#e6f0ff;
-}
+:root[data-theme="dark"] .count-badge{ background:rgba(10,15,30,.9); color:#e6f0ff }
 
 /* ===== Small control buttons row ===== */
 .ctrl-row{
@@ -154,7 +150,6 @@ body{
   justify-content:center; align-items:stretch;
   padding:4px 8px 6px;
 }
-
 .ctrl-btn{
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   width:108px; height:76px;
@@ -170,14 +165,9 @@ body{
 .ctrl-btn .label{
   font-size:.92rem; font-weight:800; line-height:1; color:#0f172a;
 }
-
-/* Control buttons use Khmer font Krasar explicitly */
-.ctrl-btn span,
-.btn-icon span {
-  font-family: "Krasar", "Noto Sans Khmer", system-ui, sans-serif;
-  font-weight: 800;
-  font-size: 0.9rem;
-  letter-spacing: 0;
+.ctrl-btn span,.btn-icon span{
+  font-family:"Krasar","Noto Sans Khmer",system-ui,sans-serif;
+  font-weight:800; font-size:.9rem;
 }
 
 /* ===== Timers ===== */
@@ -198,8 +188,7 @@ body{
 /* =================================================================== */
 /* =================== CHESS BOARD (3D frame outside) ================= */
 /* =================================================================== */
-
-.timers, .board, .chat-panel{ inline-size:100% }
+.timers,.board,.chat-panel{ inline-size:100% }
 
 .board{
   position:relative;
@@ -207,12 +196,11 @@ body{
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   width:100%;
-  aspect-ratio: 1 / 1.15;
+  aspect-ratio:1/1.15;
   border-radius:18px;
   margin:0;
   touch-action:none;
   overscroll-behavior:contain;
-  -webkit-user-select:none;
   user-select:none;
   padding:10px;
   background:#2a170a;
@@ -222,33 +210,26 @@ body{
 /* Outer carved wood frame */
 .board::before{
   content:"";
-  position:absolute;
-  inset:0;
+  position:absolute; inset:0;
   border-radius:20px;
-  background: linear-gradient(145deg,#5b3215,#2a170a);
+  background:linear-gradient(145deg,#5b3215,#2a170a);
   box-shadow:
     inset 0 2px 4px rgba(255,255,255,.22),
     inset 0 -5px 8px rgba(0,0,0,.5),
     0 10px 20px rgba(0,0,0,.4);
   z-index:-2;
 }
-
-/* Engraved gold inlay ring */
+/* Engraved gold ring */
 .board::after{
   content:"";
-  position:absolute;
-  inset:6px;
+  position:absolute; inset:6px;
   border-radius:14px;
   border:4px solid rgba(214,178,104,.95);
   pointer-events:none;
-  box-shadow:0 1px 2px rgba(255,255,255,.25),
-             inset 0 0 10px rgba(0,0,0,.35);
+  box-shadow:0 1px 2px rgba(255,255,255,.25), inset 0 0 10px rgba(0,0,0,.35);
 }
 
-/* Optional: hide algebraic labels when .no-coords is present */
-.board.no-coords .cell::after{ display:none; }
-
-/* Squares */
+/* Cells */
 .cell{
   position:relative;
   display:flex; align-items:center; justify-content:center;
@@ -259,15 +240,14 @@ body{
   border-radius:2px;
   z-index:1;
 }
-.cell.light{ background-image: var(--board-light-img); filter: brightness(1.05) }
-.cell.dark { background-image: var(--board-dark-img);  filter: brightness(0.90) }
+.cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
+.cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
-/* Coordinates (if not hidden) */
+/* Coordinates */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
-  font-size:.62rem;
-  color:rgba(0,0,0,.6);
+  font-size:.62rem; color:rgba(0,0,0,.6);
   text-shadow:1px 1px 2px rgba(255,255,255,.8);
 }
 
@@ -278,43 +258,42 @@ body{
 }
 .cell:active{ transform:scale(.98); transition:transform .05s }
 
-/* Pieces — flat by default (no permanent 3D) */
+/* Pieces */
 .piece{
   width:86%; height:86%;
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
   box-shadow:none;
-  transition: transform .1s ease, box-shadow .15s ease, filter .15s ease;
+  transition:transform .1s ease, box-shadow .15s ease, filter .15s ease;
 }
 .piece:active{ transform:scale(.96) }
-
-/* Side-to-move gets the 3D/raised accent */
+/* Active side 3D effect */
 .turn-white .piece.white,
 .turn-black .piece.black{
-  box-shadow: 0 6px 14px rgba(0, 0, 255, 0.4);
-  filter: brightness(1.02);
+  box-shadow:0 6px 14px rgba(0,0,255,0.4);
+  filter:brightness(1.02);
 }
 
-/* Highlights / hints */
+/* Highlights */
 .cell.hint-move::before{
   content:""; position:absolute; width:24%; height:24%;
   background:var(--legal); border-radius:50%; opacity:.8;
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
 .cell.selected{ outline:3px solid var(--hi); z-index:2 }
-.cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow: inset 0 0 0 3px rgba(132,202,255,.45) }
-.cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow: inset 0 0 0 3px rgba(147,231,158,.45) }
+.cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow:inset 0 0 0 3px rgba(132,202,255,.45) }
+.cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow:inset 0 0 0 3px rgba(147,231,158,.45) }
 .cell.last-capture{ animation:capFlash .9s ease-out }
 @keyframes capFlash{
   0%{box-shadow:none}
-  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55), 0 0 14px 6px rgba(255,0,0,.25)}
+  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55),0 0 14px 6px rgba(255,0,0,.25)}
   100%{box-shadow:none}
 }
 
 /* ===== Chat card ===== */
 .chat-panel{ width:100%; max-width:720px; margin-inline:auto }
 
-/* ===== Bottom nav (PNG icons) — auto-hide ===== */
+/* ===== Bottom nav ===== */
 #appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
@@ -322,15 +301,9 @@ body{
   gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
-
-  transition: transform .25s ease, opacity .25s ease;
-  will-change: transform;
+  transition:transform .25s ease, opacity .25s ease;
 }
-#appTabbar.is-hidden{
-  transform: translateY(100%);
-  opacity: 0;
-  pointer-events: none;
-}
+#appTabbar.is-hidden{ transform:translateY(100%); opacity:0; pointer-events:none }
 .nav-item{
   display:flex; flex-direction:column; align-items:center; gap:.15rem;
   padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
@@ -339,61 +312,12 @@ body{
 .ni-img{ width:24px; height:24px; display:block; line-height:1 }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 
-/* Spacer for fixed bottom bar */
-#bottomSpacer{
-  height: calc(56px + env(safe-area-inset-bottom));
-}
-
-/* Reduced motion preference */
-@media (prefers-reduced-motion: reduce){
-  #appTabbar{ transition: none; }
-}
-
-/* ===== Settings (unchanged) ===== */
-.settings-page{ padding: 0 0 90px 0 }
-.card, .exp, .profile-bar{
-  width: calc(100vw - 16px);
-  margin: 0 auto;
-  background:#fff; border:1px solid #e9eef5; border-radius:14px; box-shadow:var(--shadow);
-}
-.card{ padding:12px; display:flex; align-items:center; justify-content:space-between }
-.card + .card, .card + .exp, .exp + .card, .exp + .exp{ margin-top:12px }
-.card.disabled{ opacity:.55; pointer-events:none }
-.card.clickable{ cursor:pointer }
-.card-left{ display:flex; flex-direction:column; gap:2px }
-.card-title{ font-weight:800 }
-.card-sub{ font-size:.88rem; opacity:.7 }
-.card-right{ margin-left:12px; opacity:.6; display:flex; gap:8px; align-items:center }
-
-summary::-webkit-details-marker{ display:none }
-.exp{ overflow:hidden }
-.exp > summary{ list-style:none; display:flex; align-items:center; justify-content:space-between; padding:12px; cursor:pointer }
-.caret{ transition: transform .2s ease }
-.exp[open] > summary .caret{ transform: rotate(90deg) }
-.exp .card-body{ padding: 0 12px 12px 12px; display:grid; gap:10px }
-
-.field{ display:flex; flex-direction:column; gap:6px }
-.field input[type="number"], .field input[type="text"]{
-  padding:.55rem .6rem; border:1px solid #dadde3; border-radius:.5rem; width:130px;
-}
-
-.switch{ position:relative; display:inline-block; width:46px; height:26px }
-.switch input{ position:absolute; opacity:0; width:0; height:0 }
-.switch .slider{
-  position:absolute; inset:0; background:#d7dbe3; border-radius:999px;
-  box-shadow: inset 0 1px 2px rgba(0,0,0,.12);
-  transition: background .18s ease;
-}
-.switch .slider::after{
-  content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%;
-  background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.35); transition: transform .18s ease;
-}
-.switch input:checked + .slider{ background:#0d2d5c }
-.switch input:checked + .slider::after{ transform: translateX(20px) }
+/* Spacer for bottom bar */
+#bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 
 /* ===== Responsive ===== */
 @media (min-width:720px){
-  .card, .exp, .profile-bar{ width: min(700px, 100%) }
+  .card,.exp,.profile-bar{ width:min(700px,100%) }
 }
 @media(max-width:920px){
   .layout{ grid-template-columns:1fr }
@@ -416,7 +340,7 @@ summary::-webkit-details-marker{ display:none }
 /* ===== Orientation blocker ===== */
 .orientation-blocker{
   position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.65); color:#fff; text-align:center; -webkit-tap-highlight-color:transparent;
+  background:rgba(0,0,0,.65); color:#fff; text-align:center;
 }
 .orientation-blocker .ob-card{
   background:#0d2d5c; color:#fff; padding:18px 22px;

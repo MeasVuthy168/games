@@ -37,8 +37,21 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- 🔵 Turn / status banner (TOP) -->
-        <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
+        <div class="turn-wrap">
+  <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
+
+  <!-- Counting Draw UI -->
+  <span id="count-label" class="count-label" style="display:none;">
+    ⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>
+  </span>
+  <div id="count-bar" class="count-bar" style="display:none;">
+    <div id="count-bar-fill" class="count-bar-fill"></div>
+  </div>
+
+  <!-- Sounds -->
+  <audio id="snd-count-start" preload="auto" src="assets/sfx/count-start.mp3"></audio>
+  <audio id="snd-count-end"   preload="auto" src="assets/sfx/count-end.mp3"></audio>
+</div>
 
         <!-- 🔵 Controls (icon buttons) -->
         <div class="controls controls-top">

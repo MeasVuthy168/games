@@ -42,8 +42,7 @@ class AudioBeeper{
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
-
-      // Counting Draw SFX
+      // optional SFX for counting-draw
       countStart: new Audio('assets/sfx/count-start.mp3'),
       countEnd:   new Audio('assets/sfx/count-end.mp3'),
     };
@@ -92,7 +91,6 @@ class Clocks{
   pauseResume(){ this.running?this.stop():this.start(); }
   switchedByMove(prev){
     if(prev===COLORS.WHITE) this.msW+=this.increment; else this.msB+=this.increment;
-    this.turn=(prev===COLORS.WHITE)?COLORS.BLACK:COLORS.White; // NOTE: case fix below
     this.turn=(prev===COLORS.WHITE)?COLORS.BLACK:COLORS.WHITE;
     this._u(this.msW,this.msB); this.start();
   }
@@ -128,7 +126,7 @@ export function initUI(){
     stalemate: 'អាប់'
   };
 
-  // Counting Draw UI refs
+  // Counting Draw UI refs (make sure these exist in HTML)
   const elCountLabel = document.getElementById('count-label');
   const elCountNum   = document.getElementById('count-number');
   const elCountBar   = document.getElementById('count-bar');
@@ -210,18 +208,15 @@ export function initUI(){
   function updateCountUI(){
     if (elCountNum)   elCountNum.textContent   = String(countState.remaining);
     if (elCountBadge) elCountBadge.textContent = String(countState.remaining);
-    // Progress width
     if(elCountFill && countState.initial){
       const pct = Math.max(0, (countState.remaining / countState.initial) * 100);
       elCountFill.style.width = `${pct}%`;
     }
-    // Urgency flair
     const urgent = countState.remaining <= 3;
     elCountBar?.classList.toggle('urgent', urgent);
     elCountFill?.classList.toggle('low', urgent);
   }
 
-  // Count material
   function summarizeMaterial(board){
     const cnt = (c,t) => {
       let n=0;
@@ -249,19 +244,17 @@ export function initUI(){
       kings: w.kings + b.kings
     };
     const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
-    return { w, b, totals, nonKingPieces };
+    return { totals, nonKingPieces };
   }
 
-  // Determine base per rule; handle immediate fish-only draws.
   function checkCountingDrawRule(board){
     const { totals, nonKingPieces } = summarizeMaterial(board);
 
-    // Immediate draw: only fishes (1 or 2), nothing else
+    // Fish-only quick cases
     if (totals.boats===0 && totals.generals===0 && totals.horses===0 && totals.queens===0){
       if (totals.fishes===1 || totals.fishes===2){
         return { active:false, immediateDraw:true };
       }
-      // 3 fish -> base 64 (unless you mark "tied fish" as auto draw)
       if (totals.fishes===3){
         const base = 64;
         const effective = Math.max(base - nonKingPieces, 1);
@@ -269,7 +262,6 @@ export function initUI(){
       }
     }
 
-    // Base mapping from your rule set
     let base = 0;
     if (totals.boats >= 2 && totals.generals===0 && totals.horses===0) base = 8;
     else if (totals.boats === 1 && totals.generals===0 && totals.horses===0) base = 16;
@@ -280,7 +272,6 @@ export function initUI(){
 
     if (!base) return { active:false };
 
-    // Effective = base − (all non-king pieces)
     const effective = Math.max(base - nonKingPieces, 1);
     return { active:true, base, effective };
   }
@@ -299,7 +290,6 @@ export function initUI(){
     showCountUI(false);
   }
 
-  // Re-evaluate rule, (re)start if needed (used on render and on capture reseed)
   function evaluateRuleAndMaybeStart(withSound=true){
     const rule = checkCountingDrawRule(game.board);
 
@@ -307,23 +297,17 @@ export function initUI(){
       stopCountingDraw();
       return;
     }
-
     if (rule.active){
       if (!countState.active){
         startCountingDraw(rule.base, rule.effective, withSound);
       } else if (countState.base !== rule.base){
-        // Pattern changed -> restart using new effective
         startCountingDraw(rule.base, rule.effective, withSound);
-      } else {
-        // base same — normally we keep counting
-        // (Capture reseed calls this explicitly to restart with NEW effective)
       }
     } else {
       if (countState.active) stopCountingDraw();
     }
   }
 
-  // Decrement every move (both sides)
   function onMoveCommittedDecrement(){
     if(!countState.active) return;
     countState.remaining = Math.max(0, countState.remaining - 1);
@@ -332,18 +316,14 @@ export function initUI(){
       if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
       alert('ស្មើតាមច្បាប់រាប់ (រាប់ស្មើ)');
       stopCountingDraw();
-      // Optionally: game.winner = 'draw';
     }
   }
 
   // Reseed counter after any capture (even if base unchanged)
   function reseedCounterAfterCapture(){
     const rule = checkCountingDrawRule(game.board);
-    if (rule.immediateDraw){
-      stopCountingDraw(); return;
-    }
+    if (rule.immediateDraw){ stopCountingDraw(); return; }
     if (rule.active){
-      // restart with NEW effective based on fresh pieces
       startCountingDraw(rule.base, rule.effective, /*withSound=*/false);
     }else{
       stopCountingDraw();
@@ -373,8 +353,6 @@ export function initUI(){
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
-
-    // Evaluate rule (start if newly eligible)
     evaluateRuleAndMaybeStart(/*withSound=*/false);
   }
 
@@ -419,10 +397,10 @@ export function initUI(){
 
       clocks.switchedByMove(prevTurn);
 
-      // 1) Decrement for this move (both sides)
+      // Decrement for the move
       onMoveCommittedDecrement();
 
-      // 2) If it was a capture, RESEED counter with fresh effective value
+      // If capture, reseed counter with new effective value
       if (before){ reseedCounterAfterCapture(); }
 
       selected=null; legal=[]; clearHints(); render();
@@ -439,10 +417,8 @@ export function initUI(){
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // --- Pause UI helper (single source of truth) ---
+  // --- Pause UI helper ---
   function updatePauseUI(running){
-    // running=true  -> show PAUSE
-    // running=false -> show PLAY
     if (pauseIcon) pauseIcon.src = running ? 'assets/ui/pause.png' : 'assets/ui/play.png';
     if (pauseLabel) pauseLabel.textContent = running ? 'ផ្អាក' : 'ចាប់ផ្ដើម';
     if (btnPause) {
@@ -460,7 +436,6 @@ export function initUI(){
     render(); clocks.start();
   } else { render(); clocks.start(); }
 
-  // ensure pause button shows PAUSE on first paint
   updatePauseUI(true);
 
   /* ---------------------------- controls ---------------------------- */
@@ -469,24 +444,22 @@ export function initUI(){
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
     updatePauseUI(true);
-    stopCountingDraw(); // clear counting rule UI/state
+    stopCountingDraw();
   });
 
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      // We do not auto-increment the counter on undo; render() re-evaluates eligibility.
+      // render() re-evaluates counting rule from the current position
     }
   });
 
-  // Reliable toggle: derive the new state and then update UI
   btnPause?.addEventListener('click', ()=>{
     const wasRunning = clocks.running;
     clocks.pauseResume();
     updatePauseUI(!wasRunning);
   });
 
-  // persist on unload
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 
   /* ----------------------- Auto-hide bottom bar ---------------------- */
@@ -507,14 +480,14 @@ export function initUI(){
       const dy = y - lastY;
 
       if (y < 8) {
-        bar classList? bar.classList.remove('is-hidden') : void 0;
+        bar?.classList.remove('is-hidden');
         lastY = y;
         ticking = false;
         return;
       }
       if (Math.abs(dy) > 6) {
-        if (dy > 0) bar.classList.add('is-hidden');      // scrolling down -> hide
-        else        bar.classList.remove('is-hidden');   // scrolling up   -> show
+        if (dy > 0) bar.classList.add('is-hidden');      // down -> hide
+        else        bar.classList.remove('is-hidden');   // up   -> show
         lastY = y;
       }
       ticking = false;
@@ -527,7 +500,6 @@ export function initUI(){
       }
     }, { passive:true });
 
-    // Reveal when user taps near the bottom (useful on short pages)
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if ((vh - e.touches[0].clientY) < 72) {

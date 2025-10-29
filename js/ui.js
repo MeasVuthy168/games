@@ -126,19 +126,70 @@ export function initUI(){
     stalemate: 'អាប់'
   };
 
-  // Counting Draw UI refs (make sure these exist in HTML)
-  const elCountLabel = document.getElementById('count-label');
-  const elCountNum   = document.getElementById('count-number');
-  const elCountBar   = document.getElementById('count-bar');
-  const elCountFill  = document.getElementById('count-bar-fill');
-  const elCountBadge = document.getElementById('count-badge');
+  // Counting Draw UI refs (may be auto-injected below)
+  let elCountLabel = document.getElementById('count-label');
+  let elCountNum   = document.getElementById('count-number');
+  let elCountBar   = document.getElementById('count-bar');
+  let elCountFill  = document.getElementById('count-bar-fill');
+  let elCountBadge = document.getElementById('count-badge');
 
   const auCountStart = document.getElementById('snd-count-start');
   const auCountEnd   = document.getElementById('snd-count-end');
 
-  const game = new Game();
-  let settings = loadSettings();
-  beeper.enabled = !!settings.sound;
+  // ---- Ensure Count UI exists even if cached HTML is old
+  (function ensureCountUI(){
+    const wrap = document.querySelector('.turn-wrap') || document.body;
+
+    let lbl  = document.getElementById('count-label');
+    let num  = document.getElementById('count-number');
+    let bar  = document.getElementById('count-bar');
+    let fill = document.getElementById('count-bar-fill');
+    let badge= document.getElementById('count-badge');
+
+    if (!lbl || !num || !bar || !fill) {
+      console.warn('[CountUI] Missing nodes in DOM. Injecting fallback UI.');
+      const frag = document.createDocumentFragment();
+
+      if (!lbl) {
+        lbl = document.createElement('span');
+        lbl.id = 'count-label';
+        lbl.className = 'count-label';
+        lbl.style.display = 'none';
+        lbl.innerHTML = '⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>';
+        frag.appendChild(lbl);
+        num = lbl.querySelector('#count-number');
+      }
+
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'count-bar';
+        bar.className = 'count-bar';
+        bar.style.display = 'none';
+
+        fill = document.createElement('div');
+        fill.id = 'count-bar-fill';
+        fill.className = 'count-bar-fill';
+
+        badge = document.createElement('span');
+        badge.id = 'count-badge';
+        badge.className = 'count-badge';
+        badge.textContent = '–';
+
+        bar.appendChild(fill);
+        bar.appendChild(badge);
+        frag.appendChild(bar);
+      }
+
+      wrap.appendChild(frag);
+    }
+
+    // Rebind refs
+    elCountLabel = document.getElementById('count-label');
+    elCountNum   = document.getElementById('count-number');
+    elCountBar   = document.getElementById('count-bar');
+    elCountFill  = document.getElementById('count-bar-fill');
+    elCountBadge = document.getElementById('count-badge');
+  })();
 
   // ---- Mobile audio unlock for <audio> fallbacks
   function safePlay(el){
@@ -244,7 +295,10 @@ export function initUI(){
       kings: w.kings + b.kings
     };
     const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
-    return { totals, nonKingPieces };
+    const result = { totals, nonKingPieces };
+    // Debug: comment this out later
+    console.log('[Material]', result);
+    return result;
   }
 
   function checkCountingDrawRule(board){
@@ -276,6 +330,11 @@ export function initUI(){
     return { active:true, base, effective };
   }
 
+  function dbgRule(reason, payload){
+    // comment out after verifying
+    console.log(`[CountRule] ${reason}`, payload || '');
+  }
+
   function startCountingDraw(base, effective, withSound=true){
     countState.active   = true;
     countState.base     = base;
@@ -292,19 +351,30 @@ export function initUI(){
 
   function evaluateRuleAndMaybeStart(withSound=true){
     const rule = checkCountingDrawRule(game.board);
+    dbgRule('eval', rule);
 
     if (rule.immediateDraw){
+      dbgRule('immediate-draw');
       stopCountingDraw();
       return;
     }
     if (rule.active){
       if (!countState.active){
+        dbgRule('start', rule);
         startCountingDraw(rule.base, rule.effective, withSound);
       } else if (countState.base !== rule.base){
+        dbgRule('restart(base-changed)', rule);
         startCountingDraw(rule.base, rule.effective, withSound);
+      } else {
+        dbgRule('keep(base-same)', { base: countState.base, remaining: countState.remaining });
       }
     } else {
-      if (countState.active) stopCountingDraw();
+      if (countState.active){
+        dbgRule('stop(no-longer-eligible)');
+        stopCountingDraw();
+      } else {
+        dbgRule('inactive');
+      }
     }
   }
 
@@ -330,6 +400,10 @@ export function initUI(){
     }
   }
   /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
+
+  const game = new Game();
+  let settings = loadSettings();
+  beeper.enabled = !!settings.sound;
 
   function render(){
     for(const c of cells){
@@ -494,16 +568,13 @@ export function initUI(){
     };
 
     window.addEventListener('scroll', () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(onScroll);
-      }
+      if (!ticking) requestAnimationFrame(() => onScroll());
     }, { passive:true });
 
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if ((vh - e.touches[0].clientY) < 72) {
-        bar.classList.remove('is-hidden');
+        bar?.classList.remove('is-hidden');
       }
     }, { passive:true });
   })();

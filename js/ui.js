@@ -26,7 +26,9 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-  }catch{ return { ...DEFAULTS }; }
+  }catch{
+    return { ...DEFAULTS };
+  }
 }
 
 /* ------------------------------ audio ------------------------------ */
@@ -120,7 +122,7 @@ export function initUI(){
     stalemate: 'អាប់'
   };
 
-  // Counting Draw UI refs (may be auto-injected below)
+  // Counting Draw UI refs (may be auto-injected)
   let elCountLabel = document.getElementById('count-label');
   let elCountNum   = document.getElementById('count-number');
   let elCountBar   = document.getElementById('count-bar');
@@ -133,7 +135,6 @@ export function initUI(){
   // Ensure Count UI exists even if cached HTML is old
   (function ensureCountUI(){
     const wrap = document.querySelector('.turn-wrap') || document.body;
-
     let lbl  = document.getElementById('count-label');
     let num  = document.getElementById('count-number');
     let bar  = document.getElementById('count-bar');
@@ -142,7 +143,6 @@ export function initUI(){
 
     if (!lbl || !num || !bar || !fill) {
       const frag = document.createDocumentFragment();
-
       if (!lbl) {
         lbl = document.createElement('span');
         lbl.id = 'count-label';
@@ -152,7 +152,6 @@ export function initUI(){
         frag.appendChild(lbl);
         num = lbl.querySelector('#count-number');
       }
-
       if (!bar) {
         bar = document.createElement('div');
         bar.id = 'count-bar';
@@ -172,11 +171,8 @@ export function initUI(){
         bar.appendChild(badge);
         frag.appendChild(bar);
       }
-
       wrap.appendChild(frag);
     }
-
-    // Rebind refs
     elCountLabel = document.getElementById('count-label');
     elCountNum   = document.getElementById('count-number');
     elCountBar   = document.getElementById('count-bar');
@@ -195,20 +191,19 @@ export function initUI(){
     });
   }, { once:true });
 
-  // Game + settings BEFORE using them
+  /* Game + settings */
   const game = new Game();
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
-  // Apply .turn-white / .turn-black and hide coords programmatically
+  // Helper: board turn class
   function applyTurnClass(){
     if (!elBoard) return;
-    elBoard.classList.add('no-coords');              // ← force hide coordinates
     elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
     elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
   }
 
-  // Clocks AFTER settings exist
+  // Clocks (after settings exist)
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
@@ -226,7 +221,7 @@ export function initUI(){
 
   const setPieceBG=(span,p)=>{
     const map={K:'king',Q:'queen',B:'bishop',R:'rook',N:'knight',P:'pawn'};
-    const name=`${p.c==='w'?'w':'b'}-${map[p.t]}`;
+    const name=`${p.c==='w'?'w':'b'}-${map[normType(p.t)] || map[p.t] || 'pawn'}`;
     span.style.backgroundImage=`url(./assets/pieces/${name}.png)`;
   };
 
@@ -242,8 +237,46 @@ export function initUI(){
     return `វេនខាង (${side})`;
   }
 
-  /* ----------------- Counting Draw (រាប់ស្មើ) ----------------- */
+  /* ========= Counting Draw (រាប់ស្មើ) ================================= */
+
+  // Normalize piece types: accept both western and Khmer-coded letters
+  const TYPE_MAP = {
+    // western
+    R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K',
+    // Khmer-coded variants seen in projects
+    T:'R',   // Tuk (Boat)
+    H:'N',   // Horse
+    G:'B',   // Khon / General
+    D:'Q',   // Neang (บางโปรเจกต์ใช้ D)
+    F:'P',   // Fish
+    S:'K'    // Sdech (if used)
+  };
+  function normType(t){ return TYPE_MAP[t] || t; }
+
   const countState = { active:false, base:0, initial:0, remaining:0 };
+
+  // (optional) mini debug bubble – tap the turn label to toggle
+  let debugOn = false;
+  function showDebugBubble(txt){
+    let el = document.getElementById('count-debug');
+    if (!el){
+      el = document.createElement('div');
+      el.id = 'count-debug';
+      Object.assign(el.style, {
+        position:'fixed', left:'8px', top:'8px', zIndex:'9999',
+        background:'rgba(0,0,0,.65)', color:'#fff', padding:'6px 8px',
+        borderRadius:'8px', fontSize:'12px', fontFamily:'monospace'
+      });
+      document.body.appendChild(el);
+    }
+    el.textContent = txt;
+    el.style.display = debugOn ? 'block' : 'none';
+  }
+  (elTurn||document).addEventListener('click', ()=>{
+    debugOn = !debugOn;
+    const { totals, nonKingPieces } = summarizeMaterial(game.board);
+    showDebugBubble(`boats:${totals.boats} horses:${totals.horses} generals:${totals.generals} queens:${totals.queens} fishes:${totals.fishes} | nonKing:${nonKingPieces}`);
+  });
 
   function showCountUI(show){
     if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
@@ -267,30 +300,33 @@ export function initUI(){
   }
 
   function summarizeMaterial(board){
-    const cnt = (c,t) => {
-      let n=0;
-      for (let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
-        const p = board[y][x]; if(!p) continue;
-        if (p.c===c && p.t===t) n++;
+    const cnt = (c, tWanted) => {
+      let n = 0;
+      for (let y=0;y<SIZE;y++){
+        for (let x=0;x<SIZE;x++){
+          const p = board[y][x]; if(!p) continue;
+          const t = normType(p.t);
+          if (p.c === c && t === tWanted) n++;
+        }
       }
       return n;
     };
     const S = (c)=>({
-      boats:   cnt(c, 'R'),   // ទូក
-      horses:  cnt(c, 'N'),   // សេះ
-      generals:cnt(c, 'B'),   // ខុន
-      queens:  cnt(c, 'Q'),   // នាង
-      fishes:  cnt(c, 'P'),   // ត្រី
-      kings:   cnt(c, 'K')    // ស្តេច
+      boats:    cnt(c,'R'),
+      horses:   cnt(c,'N'),
+      generals: cnt(c,'B'),
+      queens:   cnt(c,'Q'),
+      fishes:   cnt(c,'P'),
+      kings:    cnt(c,'K')
     });
     const w = S('w'), b = S('b');
     const totals = {
-      boats: w.boats + b.boats,
-      horses: w.horses + b.horses,
+      boats:    w.boats    + b.boats,
+      horses:   w.horses   + b.horses,
       generals: w.generals + b.generals,
-      queens: w.queens + b.queens,
-      fishes: w.fishes + b.fishes,
-      kings: w.kings + b.kings
+      queens:   w.queens   + b.queens,
+      fishes:   w.fishes   + b.fishes,
+      kings:    w.kings    + b.kings
     };
     const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
     return { totals, nonKingPieces };
@@ -342,10 +378,11 @@ export function initUI(){
     const rule = checkCountingDrawRule(game.board);
     if (rule.immediateDraw){ stopCountingDraw(); return; }
     if (rule.active){
-      if (!countState.active) startCountingDraw(rule.base, rule.effective, withSound);
-      else if (countState.base !== rule.base) startCountingDraw(rule.base, rule.effective, withSound);
-    } else {
-      if (countState.active) stopCountingDraw();
+      if (!countState.active || countState.base !== rule.base){
+        startCountingDraw(rule.base, rule.effective, withSound);
+      }
+    } else if (countState.active){
+      stopCountingDraw();
     }
   }
 
@@ -360,14 +397,13 @@ export function initUI(){
     }
   }
 
-  // Reseed counter after any capture (even if base unchanged)
   function reseedCounterAfterCapture(){
     const rule = checkCountingDrawRule(game.board);
     if (rule.immediateDraw){ stopCountingDraw(); return; }
-    if (rule.active){ startCountingDraw(rule.base, rule.effective, /*withSound=*/false); }
+    if (rule.active){ startCountingDraw(rule.base, rule.effective, /*sound*/false); }
     else{ stopCountingDraw(); }
   }
-  /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
+  /* ========= /Counting Draw =========================================== */
 
   function render(){
     for(const c of cells){
@@ -435,10 +471,7 @@ export function initUI(){
 
       clocks.switchedByMove(prevTurn);
 
-      // Decrement for the move
       onMoveCommittedDecrement();
-
-      // If capture, reseed counter with new effective value
       if (before){ reseedCounterAfterCapture(); }
 
       selected=null; legal=[]; clearHints(); render();
@@ -473,6 +506,7 @@ export function initUI(){
     clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
     render(); clocks.start();
   } else { render(); clocks.start(); }
+
   updatePauseUI(true);
 
   /* ---------------------------- controls ---------------------------- */
@@ -514,44 +548,24 @@ export function initUI(){
     const onScroll = () => {
       const y = window.scrollY;
       const dy = y - lastY;
-
       if (y < 8) {
         bar?.classList.remove('is-hidden');
-        lastY = y;
-        ticking = false;
-        return;
+        lastY = y; ticking = false; return;
       }
       if (Math.abs(dy) > 6) {
-        if (dy > 0) bar.classList.add('is-hidden');      // down -> hide
-        else        bar.classList.remove('is-hidden');   // up   -> show
+        if (dy > 0) bar.classList.add('is-hidden'); else bar.classList.remove('is-hidden');
         lastY = y;
       }
       ticking = false;
     };
 
     window.addEventListener('scroll', () => {
-      if (!ticking) {
-        ticking = true;
-        requestAnimationFrame(onScroll);
-      }
+      if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
     }, { passive:true });
 
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
-      if ((vh - e.touches[0].clientY) < 72) {
-        bar?.classList.remove('is-hidden');
-      }
+      if ((vh - e.touches[0].clientY) < 72) bar?.classList.remove('is-hidden');
     }, { passive:true });
   })();
-
-  /* ---------- DEV SHORTCUTS so you can verify UI immediately ---------- */
-  window.__countShow = (n=16)=>{
-    countState.active   = true;
-    countState.base     = n;
-    countState.initial  = n;
-    countState.remaining= n;
-    showCountUI(true);
-    updateCountUI();
-  };
-  window.__countHide = ()=> stopCountingDraw();
 }

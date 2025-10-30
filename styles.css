@@ -24,7 +24,6 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* board textures (fallbacks | can be overridden in <style> of page) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 }
@@ -37,7 +36,7 @@ body{
   margin:0;
   color:var(--ink);
   background:#f5f6f7;
-  overscroll-behavior-y: none; /* prevent rubber band on iOS */
+  overscroll-behavior-y: none;
 }
 
 /* ===== App shell ===== */
@@ -187,8 +186,7 @@ body{
 }
 
 /* =================================================================== */
-/* =================== CHESS BOARD (3D frame outside) ================= */
-/* =================================================================== */
+/* =================== CHESS BOARD ================================== */
 .timers,.board,.chat-panel{ inline-size:100% }
 
 .board{
@@ -208,7 +206,6 @@ body{
   box-sizing:border-box;
 }
 
-/* Outer carved wood frame */
 .board::before{
   content:"";
   position:absolute; inset:0;
@@ -220,7 +217,6 @@ body{
     0 10px 20px rgba(0,0,0,.4);
   z-index:-2;
 }
-/* Engraved gold ring */
 .board::after{
   content:"";
   position:absolute; inset:6px;
@@ -244,24 +240,14 @@ body{
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
 .cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
-/* Coordinates (default visible) */
+/* Hide coordinates if .no-coords present */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
   font-size:.62rem; color:rgba(0,0,0,.6);
   text-shadow:1px 1px 2px rgba(255,255,255,.8);
 }
-/* Force-hide coordinates if .no-coords is present */
-.board.no-coords .cell::after{
-  display:none !important;
-}
-
-/* Hover flair */
-.cell:hover:not(.selected):not(.hint-capture):not(.hint-move){
-  outline:2px solid rgba(255,255,255,.4);
-  box-shadow:inset 0 0 10px rgba(255,255,255,.25);
-}
-.cell:active{ transform:scale(.98); transition:transform .05s }
+.board.no-coords .cell::after{ display:none !important }
 
 /* Pieces */
 .piece{
@@ -272,7 +258,6 @@ body{
   transition:transform .1s ease, box-shadow .15s ease, filter .15s ease;
 }
 .piece:active{ transform:scale(.96) }
-/* Active side 3D effect */
 .turn-white .piece.white,
 .turn-black .piece.black{
   box-shadow:0 6px 14px rgba(0,0,255,0.4);
@@ -286,17 +271,14 @@ body{
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
 .cell.selected{ outline:3px solid var(--hi); z-index:2 }
-.cell.last-from{ outline:3px solid rgba(132,202,255,.95); box-shadow:inset 0 0 0 3px rgba(132,202,255,.45) }
-.cell.last-to{   outline:3px solid rgba(147,231,158,.95); box-shadow:inset 0 0 0 3px rgba(147,231,158,.45) }
+.cell.last-from{ outline:3px solid rgba(132,202,255,.95) }
+.cell.last-to{   outline:3px solid rgba(147,231,158,.95) }
 .cell.last-capture{ animation:capFlash .9s ease-out }
 @keyframes capFlash{
   0%{box-shadow:none}
   30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55),0 0 14px 6px rgba(255,0,0,.25)}
   100%{box-shadow:none}
 }
-
-/* ===== Chat card ===== */
-.chat-panel{ width:100%; max-width:720px; margin-inline:auto }
 
 /* ===== Bottom nav ===== */
 #appTabbar{
@@ -314,10 +296,8 @@ body{
   padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
   font-size:.8rem;
 }
-.ni-img{ width:24px; height:24px; display:block; line-height:1 }
+.ni-img{ width:24px; height:24px; display:block }
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
-
-/* Spacer for bottom bar */
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 
 /* ===== Responsive ===== */
@@ -335,12 +315,6 @@ body{
 :root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a }
 :root[data-theme="dark"] .card-title{ color:var(--ink) }
 :root[data-theme="dark"] .card-sub{ color:rgba(230,240,255,.75) }
-:root[data-theme="dark"] .field input[type="number"],
-:root[data-theme="dark"] .field input[type="text"]{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
-:root[data-theme="dark"] input[type="radio"],
-:root[data-theme="dark"] input[type="checkbox"]{ accent-color:#9ec1ff }
-:root[data-theme="dark"] .primary{ background:#2b4f9e; color:#fff }
-:root[data-theme="dark"] .secondary{ background:#0f172a; color:#e6f0ff; border:1px solid #22304a }
 
 /* ===== Orientation blocker ===== */
 .orientation-blocker{
@@ -354,60 +328,91 @@ body{
 }
 .orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }
 
-/* ===================================================================== */
-/* ===================== Settings page polish (NEW) ===================== */
-/* ===================================================================== */
-.settings-page{
-  padding: 12px 0 90px 0;
+/* ===================== Settings Page + Cards ===================== */
+.settings-page{ padding:12px 0 90px 0 }
+.profile-bar{ display:flex; align-items:center; gap:14px; padding:14px }
+.avatar,
+.avatar-s{
+  width:96px; height:96px; border-radius:50%;
+  object-fit:cover; border:3px solid #fff;
+  box-shadow:0 6px 20px rgba(0,0,0,.12); background:#f1f5f9;
 }
-
-/* Profile header card */
-.profile-bar{
-  display:flex; align-items:center; gap:14px;
-  padding:14px;
-}
-
-/* Circular avatar (cycle) */
-.avatar{
-  width:96px; height:96px;
-  border-radius:50%;
-  object-fit:cover;
-  border:3px solid #fff;
-  box-shadow: 0 6px 20px rgba(0,0,0,.12);
-  background:#f1f5f9;
-}
-
-/* Text beside avatar */
 .profile-meta{ display:flex; flex-direction:column; gap:4px }
 .profile-name{ font-weight:800; font-size:1.15rem }
 .profile-sub{ opacity:.8 }
 
-/* Card list spacing */
+.card{
+  background:#fff; border:1px solid #e9eef5;
+  border-radius:14px; box-shadow:var(--shadow);
+  padding:12px 14px;
+  display:flex; align-items:center; justify-content:space-between;
+  gap:12px;
+}
+.card-full{ width:min(720px, 96vw); margin:0 auto; }
 .card-list{ padding:12px; display:grid; gap:12px }
-.card.card-full{ width: calc(100vw - 16px); margin: 0 auto; }
+.card-left{ display:flex; flex-direction:column; gap:4px; min-width:0 }
+.card-right{ color:#94a3b8; font-weight:800; user-select:none }
+.card-title{ font-weight:800; font-size:1.02rem; color:#0f172a }
+.card-sub{ font-size:.92rem; opacity:.75 }
+.card.clickable{ cursor:pointer }
+.card.disabled{ opacity:.55; pointer-events:none }
 
-/* Small pill button used in Sound row */
-.pill{
-  border:1px solid #d8e1f0;
-  background:#fff;
-  padding:.35rem .6rem;
-  border-radius:999px;
-  font-weight:700;
+/* Expanders */
+.exp{ padding:0 }
+.exp > summary{
+  list-style:none; cursor:pointer; display:flex; align-items:center;
+  justify-content:space-between; gap:12px; padding:12px 14px;
+}
+.exp > summary::-webkit-details-marker{ display:none }
+.exp > .card-body{
+  padding:12px 14px 14px 14px; display:grid; gap:10px; border-top:1px solid #eef2f7;
+}
+.exp .caret{ transform:rotate(90deg); transition:transform .18s ease }
+.exp[open] .caret{ transform:rotate(270deg) }
+
+/* Inputs & Controls */
+.field{ display:grid; gap:6px }
+.field span{ font-weight:700; opacity:.8 }
+.field input[type="number"],.field input[type="text"]{
+  width:100%; padding:.55rem .7rem; border-radius:.6rem;
+  border:1px solid #d8e1f0; background:#fff; font-weight:700;
+}
+.row-inline{ display:flex; gap:10px }
+.primary{
+  background:var(--blue); color:#fff; border:none; border-radius:.6rem;
+  padding:.55rem .9rem; font-weight:800;
+}
+.secondary{
+  background:#fff; color:#0f172a; border:1px solid #d8e1f0;
+  border-radius:.6rem; padding:.55rem .9rem; font-weight:800;
 }
 
-/* Radios/rows in expanders */
-.radio{ display:flex; align-items:center; gap:.5rem }
+/* Switch */
+.switch{ position:relative; display:inline-block; width:44px; height:26px }
+.switch input{ display:none }
+.switch .slider{
+  position:absolute; inset:0; background:#d1d5db; border-radius:999px;
+  transition: background .18s ease;
+}
+.switch .slider::before{
+  content:""; position:absolute; left:3px; top:3px;
+  width:20px; height:20px; background:#fff;
+  border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25);
+  transition: transform .18s ease;
+}
+.switch input:checked + .slider{ background:#22c55e }
+.switch input:checked + .slider::before{ transform:translateX(18px) }
 
-/* ===== Modal (About App) ===== */
+/* Modal */
 .modal{ position:fixed; inset:0; z-index:1000; display:none }
 .modal.show{ display:block }
 .modal-backdrop{
-  position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter: blur(2px);
+  position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px);
 }
 .modal-card{
   position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  width:min(520px, 92vw);
-  background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.28);
+  width:min(520px,92vw); background:#fff;
+  border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.28);
   overflow:hidden;
 }
 .modal-header{
@@ -417,11 +422,4 @@ body{
 .modal-body{ padding:14px; display:grid; gap:10px }
 
 .about-row{
-  display:flex; align-items:center; justify-content:space-between;
-  background:#f7f9fc; border:1px solid #e9eef5; border-radius:10px;
-  padding:10px 12px; font-weight:700;
-}
-.about-row .about-key{ opacity:.75; font-weight:700 }
-.about-row .about-val{ font-weight:800; color:#0f172a }
-:root[data-theme="dark"] .modal-card{ background:#0f172a }
-:root[data-theme="dark"] .about-row{ background:#101827; border-color:#22304a }
+  display:flex;

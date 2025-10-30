@@ -12,6 +12,34 @@
 
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="js/settings.js"></script>
+
+  <!-- Page-specific polish -->
+  <style>
+    /* Profile bar layout and circular avatar */
+    .profile-bar{
+      display:flex; align-items:center; gap:14px;
+      padding:12px 14px;
+    }
+    .profile-bar .profile-meta{ display:flex; flex-direction:column; gap:4px }
+    .profile-bar .profile-name{ font-weight:800; font-size:1.05rem }
+    .profile-bar .profile-sub{ opacity:.75; font-weight:600 }
+
+    .avatar{
+      width:92px; height:92px;
+      border-radius:50%;
+      object-fit:cover; object-position:center;
+      border:3px solid rgba(13,45,92,.12);
+      box-shadow:0 6px 16px rgba(0,0,0,.08);
+      background:#fff;
+    }
+
+    /* Modal small tweaks */
+    .modal-card{ max-width:520px }
+    .about-row{ display:flex; gap:8px; align-items:center; padding:6px 0 }
+    .about-row strong{ min-width:130px }
+    .about-row a{ color:#2b4f9e; text-decoration:none }
+    .about-row a:hover{ text-decoration:underline }
+  </style>
 </head>
 <body>
   <div class="shell">
@@ -20,7 +48,7 @@
     <main class="page settings-page">
       <!-- Profile -->
       <section class="profile-bar card card-full">
-        <img id="profImg" class="avatar-s" src="assets/icons/icon-192.png" alt="user" />
+        <img id="profImg" class="avatar" src="assets/icons/icon-192.png" alt="user" />
         <div class="profile-meta">
           <div id="profName" class="profile-name">Guest</div>
           <div class="profile-sub">admin</div>
@@ -100,9 +128,9 @@
         </header>
         <div class="modal-body">
           <div class="about-row"><strong>Version:</strong> <span id="aboutVersion">—</span></div>
-          <div class="about-row"><strong>Updated:</strong> <span id="aboutUpdated">—</span></div>
+          <div class="about-row"><strong>Released Date:</strong> <span id="aboutReleased">—</span></div>
           <div class="about-row"><strong>Developer:</strong> Meas Vuthy</div>
-          <div class="about-row"><strong>Tel:</strong> 088 988 7726</div>
+          <div class="about-row"><strong>Email:</strong> <a href="mailto:measvuthy21@gmail.com">measvuthy21@gmail.com</a></div>
         </div>
       </div>
     </div>

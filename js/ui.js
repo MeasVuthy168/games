@@ -104,6 +104,9 @@ class Clocks{
 export function initUI(){
   const elBoard  = document.getElementById('board');
 
+  // NEW: always hide coordinates like before
+  elBoard?.classList.add('no-coords'); // relies on CSS rule we add below
+
   // Top status + controls
   const elTurn     = document.getElementById('turnLabel');
   const btnReset   = document.getElementById('btnReset');
@@ -202,7 +205,7 @@ export function initUI(){
     });
   }, { once:true });
 
-  /* ✅ Create game + settings BEFORE using them anywhere */
+  /* Create game + settings BEFORE using them anywhere */
   const game = new Game();
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
@@ -390,6 +393,10 @@ export function initUI(){
   }
   /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
 
+  // NEW: expose tiny debug helpers so you can test UI any time
+  window.__countShow = (n=16) => startCountingDraw(n, n, false);
+  window.__countStop = () => stopCountingDraw();
+
   function render(){
     for(const c of cells){
       c.innerHTML='';
@@ -553,13 +560,16 @@ export function initUI(){
     };
 
     window.addEventListener('scroll', () => {
-      if (!ticking) requestAnimationFrame(() => onScroll());
+      if (!ticking) {
+        ticking = true;
+        requestAnimationFrame(onScroll);
+      }
     }, { passive:true });
 
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if ((vh - e.touches[0].clientY) < 72) {
-        bar?.classList.remove('is-hidden');
+        bar.classList.remove('is-hidden');
       }
     }, { passive:true });
   })();

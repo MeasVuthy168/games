@@ -353,3 +353,75 @@ body{
   font-weight:800; text-align:center;
 }
 .orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }
+
+/* ===================================================================== */
+/* ===================== Settings page polish (NEW) ===================== */
+/* ===================================================================== */
+.settings-page{
+  padding: 12px 0 90px 0;
+}
+
+/* Profile header card */
+.profile-bar{
+  display:flex; align-items:center; gap:14px;
+  padding:14px;
+}
+
+/* Circular avatar (cycle) */
+.avatar{
+  width:96px; height:96px;
+  border-radius:50%;
+  object-fit:cover;
+  border:3px solid #fff;
+  box-shadow: 0 6px 20px rgba(0,0,0,.12);
+  background:#f1f5f9;
+}
+
+/* Text beside avatar */
+.profile-meta{ display:flex; flex-direction:column; gap:4px }
+.profile-name{ font-weight:800; font-size:1.15rem }
+.profile-sub{ opacity:.8 }
+
+/* Card list spacing */
+.card-list{ padding:12px; display:grid; gap:12px }
+.card.card-full{ width: calc(100vw - 16px); margin: 0 auto; }
+
+/* Small pill button used in Sound row */
+.pill{
+  border:1px solid #d8e1f0;
+  background:#fff;
+  padding:.35rem .6rem;
+  border-radius:999px;
+  font-weight:700;
+}
+
+/* Radios/rows in expanders */
+.radio{ display:flex; align-items:center; gap:.5rem }
+
+/* ===== Modal (About App) ===== */
+.modal{ position:fixed; inset:0; z-index:1000; display:none }
+.modal.show{ display:block }
+.modal-backdrop{
+  position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter: blur(2px);
+}
+.modal-card{
+  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:min(520px, 92vw);
+  background:#fff; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.28);
+  overflow:hidden;
+}
+.modal-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:12px 14px; background:var(--blue); color:#fff;
+}
+.modal-body{ padding:14px; display:grid; gap:10px }
+
+.about-row{
+  display:flex; align-items:center; justify-content:space-between;
+  background:#f7f9fc; border:1px solid #e9eef5; border-radius:10px;
+  padding:10px 12px; font-weight:700;
+}
+.about-row .about-key{ opacity:.75; font-weight:700 }
+.about-row .about-val{ font-weight:800; color:#0f172a }
+:root[data-theme="dark"] .modal-card{ background:#0f172a }
+:root[data-theme="dark"] .about-row{ background:#101827; border-color:#22304a }

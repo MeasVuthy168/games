@@ -1,26 +1,9 @@
+<!doctype html>
+<html lang="km">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>អុកចត្រង្គ (Khmer Chess)</title>
-
-  <!-- Khmer font (Krasar) -->
-  <style>
-    @font-face {
-      font-family: "Krasar";
-      src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
-      font-weight: 400;
-      font-style: normal;
-      font-display: swap;
-    }
-    :root {
-      --ui-font: "Krasar", "Noto Sans Khmer",
-                 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      --blue: #0d2d5c;
-    }
-    body {
-      font-family: var(--ui-font);
-    }
-  </style>
 
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
@@ -28,31 +11,194 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
 
+  <!-- Base styles -->
   <link rel="stylesheet" href="styles.css" />
+
+  <!-- Page-specific styles (Krasar + tiles + level modal) -->
   <style>
+    /* --- Ensure Krasar is used on Home --- */
+    @font-face{
+      font-family: "Krasar";
+      src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    :root{
+      --ui-font: "Krasar","Noto Sans Khmer",
+                 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+      --blue:#0d2d5c;
+    }
+    html,body{ font-family:var(--ui-font) }
+
     /* small helpers for the home tiles */
-    .menu-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 1rem;
-      padding: 1rem;
+    .menu-grid{
+      display:grid;
+      grid-template-columns:repeat(2,1fr);
+      gap:1rem;
+      padding:1rem;
     }
-    .menu-card {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #fff;
-      padding: 1rem;
-      border-radius: 1rem;
-      text-decoration: none;
-      color: #0d2d5c;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, .08);
-      font-weight: 700;
-      font-family: var(--ui-font);
+    .menu-card{
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      background:#fff;
+      padding:1rem;
+      border-radius:1rem;
+      text-decoration:none;
+      color:#0d2d5c;
+      box-shadow:0 4px 12px rgba(0,0,0,.08);
+      font-weight:700;
+      font-family:var(--ui-font);
     }
-    .menu-card:active { transform: scale(.98) }
-    .card-emoji { font-size: 2.2rem; margin-bottom: .4rem }
-    .avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover }
+    .menu-card:active{transform:scale(.98)}
+    .card-emoji{font-size:2.2rem;margin-bottom:.4rem}
+    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover}
+
+    /* ---- AI Level Picker (modal sheet) ---- */
+    .modal{ position:fixed; inset:0; z-index:1000; display:none }
+    .modal.show{ display:block }
+    .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45) }
+    .sheet{
+      position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+      width:min(520px,94vw);
+      background:#fff; border-radius:16px 16px 0 0;
+      box-shadow:0 -12px 40px rgba(0,0,0,.25);
+      padding:14px; display:grid; gap:10px;
+    }
+    .sheet h3{ margin:2px 0 6px; text-align:center; font-weight:800 }
+    .lvl-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px }
+    .lvl-btn{
+      padding:.8rem .6rem; border:1px solid #e9eef5; background:#fff;
+      border-radius:12px; font-weight:800; cursor:pointer;
+      box-shadow:0 4px 12px rgba(0,0,0,.06);
+    }
+    .lvl-btn:active{ transform:translateY(1px) }
+    .lvl-btn.easy{  }
+    .lvl-btn.med{   }
+    .lvl-btn.hard{  }
+    .sheet small{ display:block; text-align:center; opacity:.75 }
   </style>
 </head>
+<body>
+  <div class="app home-app">
+    <!-- Top bar -->
+    <header class="topbar">
+      <h1>អុកចត្រង្គ (Khmer Chess)</h1>
+      <div class="spacer"></div>
+      <a href="settings.html" class="avatar-link" title="Setting">
+        <img src="assets/icons/icon-192.png" alt="user" class="avatar" />
+      </a>
+    </header>
+
+    <!-- Main -->
+    <main class="home-main">
+      <!-- Install PWA button -->
+      <button id="installBtn" class="install-btn" style="display:none">
+        📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
+      </button>
+
+      <!-- Game Mode Menu -->
+      <div class="menu-grid">
+        <!-- AI tile opens level picker -->
+        <a class="menu-card" href="#" id="aiCard">
+          <div class="card-emoji">🤖</div>
+          <span>លេងជាមួយ AI</span>
+        </a>
+
+        <!-- Friend tile goes straight to play -->
+        <a class="menu-card" href="play.html?mode=friend">
+          <div class="card-emoji">👥</div>
+          <span>លេងជាមួយមិត្ត</span>
+        </a>
+      </div>
+    </main>
+
+    <!-- ✅ Auto-hide bottom navigation -->
+    <footer id="appTabbar" class="bottom-bar">
+      <a class="nav-item active" href="index.html" aria-current="page">
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
+      </a>
+      <a class="nav-item" href="friends.html">
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span>
+      </a>
+      <a class="nav-item" href="play.html">
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span>
+      </a>
+      <a class="nav-item" href="settings.html">
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span>
+      </a>
+      <a class="nav-item" href="notifications.html">
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
+      </a>
+    </footer>
+
+    <!-- Spacer so content never sits under the bar -->
+    <div id="bottomSpacer" aria-hidden="true"></div>
+  </div>
+
+  <!-- AI level picker sheet -->
+  <div class="modal" id="levelModal" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="lvlTitle">
+      <h3 id="lvlTitle">ជ្រើសកម្រិត AI</h3>
+      <div class="lvl-row">
+        <button class="lvl-btn easy"  data-level="easy">ងាយ (Easy)</button>
+        <button class="lvl-btn med"   data-level="medium">មធ្យម (Medium)</button>
+        <button class="lvl-btn hard"  data-level="hard">ពិបាក (Hard)</button>
+      </div>
+      <small>ចុចលើកម្រិត ដើម្បីចូលកីឡា</small>
+    </div>
+  </div>
+
+  <!-- Auto-hide + highlight active tab + level wiring -->
+  <script>
+    (function(){
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(bar && spacer){
+        function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
+        if(document.readyState === 'complete') setSpacer();
+        else window.addEventListener('load', setSpacer);
+        window.addEventListener('resize', setSpacer);
+
+        // Highlight current tab
+        const page = (location.pathname.split('/').pop() || 'index.html');
+        for(const a of bar.querySelectorAll('a')){
+          if(a.getAttribute('href') === page) a.classList.add('active');
+        }
+
+        // Auto hide on scroll (like Play page)
+        let lastY = window.scrollY;
+        window.addEventListener('scroll', () => {
+          const y = window.scrollY;
+          const down = y > lastY;
+          bar.style.transform = down ? 'translateY(110%)' : 'translateY(0)';
+          lastY = y;
+        }, {passive:true});
+      }
+
+      /* AI tile -> open level picker */
+      const aiCard = document.getElementById('aiCard');
+      const modal  = document.getElementById('levelModal');
+      const openModal = ()=> modal.classList.add('show');
+      const closeModal = ()=> modal.classList.remove('show');
+
+      aiCard?.addEventListener('click', (e)=>{ e.preventDefault(); openModal(); });
+      modal?.addEventListener('click', (e)=>{
+        if (e.target.hasAttribute('data-close')) closeModal();
+      });
+
+      // Level buttons navigate to play with ?mode=ai&level=...
+      modal?.querySelectorAll('.lvl-btn').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          const lvl = btn.getAttribute('data-level') || 'easy';
+          try { localStorage.setItem('kc_ai_level', lvl); } catch {}
+          location.href = `play.html?mode=ai&level=${encodeURIComponent(lvl)}`;
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

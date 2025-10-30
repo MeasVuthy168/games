@@ -107,7 +107,7 @@ body{
 .count-bar{
   position:relative;
   width:160px;
-  height:14px;
+  height:18px;
   border-radius:999px;
   background:rgba(13,45,92,.12);
   overflow:hidden;

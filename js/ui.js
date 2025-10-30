@@ -367,10 +367,11 @@ export function initUI(){
   }
 
   function startCountingDraw(base, effective, withSound=true){
-    countState.active   = true;
-    countState.base     = base;
-    countState.initial  = effective;
-    countState.remaining= effective;
+  countState.active   = true;
+  countState.base     = base;
+  countState.initial  = effective;
+  countState.remaining= effective;
+  countState.side     = game.turn; // remember whose turn it is when counting starts
     showCountUI(true);
     updateCountUI();
     if (withSound){ if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart); }
@@ -392,9 +393,11 @@ export function initUI(){
     }
   }
 
-  function onMoveCommittedDecrement(){
-    if(!countState.active) return;
-    countState.remaining = Math.max(0, countState.remaining - 1);
+  function onMoveCommittedDecrement(prevTurn){
+  if(!countState.active) return;
+  // Decrease only if the side that *owns* the rule just moved
+  if (prevTurn !== countState.side) return;
+  countState.remaining = Math.max(0, countState.remaining - 1);
     updateCountUI();
     if (countState.remaining === 0){
       if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
@@ -477,7 +480,7 @@ export function initUI(){
 
       clocks.switchedByMove(prevTurn);
 
-      onMoveCommittedDecrement();
+      onMoveCommittedDecrement(prevTurn);
       if (before){ reseedCounterAfterCapture(); }
 
       selected=null; legal=[]; clearHints(); render();

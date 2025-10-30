@@ -253,7 +253,13 @@ export function initUI(){
   };
   function normType(t){ return TYPE_MAP[t] || t; }
 
-  const countState = { active:false, base:0, initial:0, remaining:0 };
+  const countState = {
+  active:false,
+  base:0,
+  initial:0,
+  remaining:0,
+  side:null  // 'w' or 'b' — only this side decrements
+};
 
   // (optional) mini debug bubble – tap the turn label to toggle
   let debugOn = false;

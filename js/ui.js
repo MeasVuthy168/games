@@ -3,7 +3,6 @@ import { Game, SIZE, COLORS } from './game.js';
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
-
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
 /* ------------------------------ storage ------------------------------ */
@@ -27,9 +26,7 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-  }catch{
-    return { ...DEFAULTS };
-  }
+  }catch{ return { ...DEFAULTS }; }
 }
 
 /* ------------------------------ audio ------------------------------ */
@@ -42,7 +39,6 @@ class AudioBeeper{
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
-      // optional SFX for counting-draw
       countStart: new Audio('assets/sfx/count-start.mp3'),
       countEnd:   new Audio('assets/sfx/count-end.mp3'),
     };
@@ -62,7 +58,6 @@ class AudioBeeper{
   countEnd(){this.play('countEnd', 1);}
 }
 const beeper = new AudioBeeper();
-
 function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
 /* ------------------------------ clocks ------------------------------ */
@@ -104,16 +99,12 @@ class Clocks{
 export function initUI(){
   const elBoard  = document.getElementById('board');
 
-  // NEW: always hide coordinates like before
-  elBoard?.classList.add('no-coords'); // relies on CSS rule we add below
-
   // Top status + controls
   const elTurn     = document.getElementById('turnLabel');
   const btnReset   = document.getElementById('btnReset');
   const btnUndo    = document.getElementById('btnUndo');
   const btnPause   = document.getElementById('btnPause');
 
-  // select pause icon/label from inside the button (no ids needed)
   const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
   const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
 
@@ -139,7 +130,7 @@ export function initUI(){
   const auCountStart = document.getElementById('snd-count-start');
   const auCountEnd   = document.getElementById('snd-count-end');
 
-  // ---- Ensure Count UI exists even if cached HTML is old
+  // Ensure Count UI exists even if cached HTML is old
   (function ensureCountUI(){
     const wrap = document.querySelector('.turn-wrap') || document.body;
 
@@ -150,7 +141,6 @@ export function initUI(){
     let badge= document.getElementById('count-badge');
 
     if (!lbl || !num || !bar || !fill) {
-      console.warn('[CountUI] Missing nodes in DOM. Injecting fallback UI.');
       const frag = document.createDocumentFragment();
 
       if (!lbl) {
@@ -194,7 +184,7 @@ export function initUI(){
     elCountBadge = document.getElementById('count-badge');
   })();
 
-  // ---- Mobile audio unlock for <audio> fallbacks
+  // Mobile audio unlock for <audio> fallbacks
   function safePlay(el){
     if(!el) return;
     try{ el.currentTime = 0; el.play().catch(()=>{});}catch(e){}
@@ -205,19 +195,20 @@ export function initUI(){
     });
   }, { once:true });
 
-  /* Create game + settings BEFORE using them anywhere */
+  // Game + settings BEFORE using them
   const game = new Game();
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
-  // helper: apply .turn-white / .turn-black on the board element
+  // Apply .turn-white / .turn-black and hide coords programmatically
   function applyTurnClass(){
     if (!elBoard) return;
+    elBoard.classList.add('no-coords');              // ← force hide coordinates
     elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
     elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
   }
 
-  // Create clocks AFTER settings exist
+  // Clocks AFTER settings exist
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
@@ -252,9 +243,7 @@ export function initUI(){
   }
 
   /* ----------------- Counting Draw (រាប់ស្មើ) ----------------- */
-  const countState = {
-    active:false, base:0, initial:0, remaining:0
-  };
+  const countState = { active:false, base:0, initial:0, remaining:0 };
 
   function showCountUI(show){
     if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
@@ -331,7 +320,6 @@ export function initUI(){
     else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 1 && totals.fishes >= 1) base = 64;
 
     if (!base) return { active:false };
-
     const effective = Math.max(base - nonKingPieces, 1);
     return { active:true, base, effective };
   }
@@ -352,19 +340,10 @@ export function initUI(){
 
   function evaluateRuleAndMaybeStart(withSound=true){
     const rule = checkCountingDrawRule(game.board);
-    // debug helper
-    console.log('[CountRule]', rule);
-
-    if (rule.immediateDraw){
-      stopCountingDraw();
-      return;
-    }
+    if (rule.immediateDraw){ stopCountingDraw(); return; }
     if (rule.active){
-      if (!countState.active){
-        startCountingDraw(rule.base, rule.effective, withSound);
-      } else if (countState.base !== rule.base){
-        startCountingDraw(rule.base, rule.effective, withSound);
-      }
+      if (!countState.active) startCountingDraw(rule.base, rule.effective, withSound);
+      else if (countState.base !== rule.base) startCountingDraw(rule.base, rule.effective, withSound);
     } else {
       if (countState.active) stopCountingDraw();
     }
@@ -385,17 +364,10 @@ export function initUI(){
   function reseedCounterAfterCapture(){
     const rule = checkCountingDrawRule(game.board);
     if (rule.immediateDraw){ stopCountingDraw(); return; }
-    if (rule.active){
-      startCountingDraw(rule.base, rule.effective, /*withSound=*/false);
-    }else{
-      stopCountingDraw();
-    }
+    if (rule.active){ startCountingDraw(rule.base, rule.effective, /*withSound=*/false); }
+    else{ stopCountingDraw(); }
   }
   /* ----------------- /Counting Draw (រាប់ស្មើ) ----------------- */
-
-  // NEW: expose tiny debug helpers so you can test UI any time
-  window.__countShow = (n=16) => startCountingDraw(n, n, false);
-  window.__countStop = () => stopCountingDraw();
 
   function render(){
     for(const c of cells){
@@ -419,7 +391,7 @@ export function initUI(){
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
-    evaluateRuleAndMaybeStart(/*withSound=*/false);
+    evaluateRuleAndMaybeStart(false);
   }
 
   let selected=null, legal=[];
@@ -483,7 +455,7 @@ export function initUI(){
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // --- Pause UI helper ---
+  // Pause UI helper
   function updatePauseUI(running){
     if (pauseIcon) pauseIcon.src = running ? 'assets/ui/pause.png' : 'assets/ui/play.png';
     if (pauseLabel) pauseLabel.textContent = running ? 'ផ្អាក' : 'ចាប់ផ្ដើម';
@@ -501,7 +473,6 @@ export function initUI(){
     clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
     render(); clocks.start();
   } else { render(); clocks.start(); }
-
   updatePauseUI(true);
 
   /* ---------------------------- controls ---------------------------- */
@@ -516,7 +487,6 @@ export function initUI(){
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      // render() re-evaluates counting rule from the current position
     }
   });
 
@@ -569,8 +539,19 @@ export function initUI(){
     window.addEventListener('touchstart', (e)=>{
       const vh = window.innerHeight || document.documentElement.clientHeight;
       if ((vh - e.touches[0].clientY) < 72) {
-        bar.classList.remove('is-hidden');
+        bar?.classList.remove('is-hidden');
       }
     }, { passive:true });
   })();
+
+  /* ---------- DEV SHORTCUTS so you can verify UI immediately ---------- */
+  window.__countShow = (n=16)=>{
+    countState.active   = true;
+    countState.base     = n;
+    countState.initial  = n;
+    countState.remaining= n;
+    showCountUI(true);
+    updateCountUI();
+  };
+  window.__countHide = ()=> stopCountingDraw();
 }

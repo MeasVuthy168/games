@@ -3,13 +3,20 @@ const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
-// Show in About modal (keep in sync with sw.js if you want)
-const APP_VERSION = '1.0.3';
-const APP_UPDATED = '2025-10-22';
+// About App Information
+const APP_VERSION  = '1.0.3';
+const APP_RELEASED = '2025-10-22';
+const APP_DEV      = 'Meas Vuthy';
+const APP_EMAIL    = 'measvuthy21@gmail.com';
 
+/* ------------------------------ Helpers ------------------------------ */
 function loadSettings() {
-  try { const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS }; }
-  catch { return { ...DEFAULTS }; }
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+  } catch {
+    return { ...DEFAULTS };
+  }
 }
 function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
 
@@ -31,11 +38,21 @@ function toneTest(){
   o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0+0.12);
 }
 
+/* ------------------------------ DOM Ready ------------------------------ */
 document.addEventListener('DOMContentLoaded', ()=>{
-  // Profile (placeholder)
-  const profName = document.getElementById('profName');
-  profName.textContent = localStorage.getItem('kc_profile_name') || 'Guest';
 
+  // Profile info
+  const profName = document.getElementById('profName');
+  const profImg  = document.getElementById('profImg');
+
+  const storedName = localStorage.getItem('kc_profile_name');
+  const storedImg  = localStorage.getItem('kc_profile_image'); // optional image path
+  
+  profName.textContent = storedName || 'Guest';
+  if (storedImg) profImg.src = storedImg;
+  profImg.classList.add('avatar'); // make it circular
+  
+  // Elements
   const soundToggle = document.getElementById('soundToggle');
   const hintsToggle = document.getElementById('hintsToggle');
   const minutesInput = document.getElementById('minutesInput');
@@ -45,16 +62,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnTestBeep = document.getElementById('btnTestBeep');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
 
+  // Load settings
   let s = loadSettings();
 
-  // init
+  // Init UI states
   soundToggle.checked = !!s.sound;
   hintsToggle.checked = s.hints !== false;
-  minutesInput.value = s.minutes;
-  incInput.value = s.increment;
+  minutesInput.value  = s.minutes;
+  incInput.value      = s.increment;
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
 
-  // events
+  // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
   btnTestBeep.addEventListener('click', ()=>{ if(soundToggle.checked) toneTest(); });
@@ -65,21 +83,36 @@ document.addEventListener('DOMContentLoaded', ()=>{
     s.minutes=m; s.increment=inc; saveSettings(s);
     alert('Saved. New games will use these timer settings.');
   });
+
   btnResetTimer.addEventListener('click', ()=>{
     minutesInput.value = DEFAULTS.minutes;
     incInput.value = DEFAULTS.increment;
   });
 
-  themeRadios.forEach(r=> r.addEventListener('change', ()=>{ if(r.checked) setTheme(r.value); }));
+  themeRadios.forEach(r=> 
+    r.addEventListener('change', ()=>{ if(r.checked) setTheme(r.value); })
+  );
 
-  // About modal wires
+  /* ------------------------------ About Modal ------------------------------ */
   const aboutModal = document.getElementById('aboutModal');
-  const setModal = (show) => { show ? aboutModal.classList.add('show') : aboutModal.classList.remove('show'); };
-  document.getElementById('btnAbout').addEventListener('click', ()=>{
-    document.getElementById('aboutVersion').textContent = `v${APP_VERSION}`;
-    document.getElementById('aboutUpdated').textContent = APP_UPDATED;
-    setModal(true);
+  const setModal = (show) => { 
+    show ? aboutModal.classList.add('show') : aboutModal.classList.remove('show'); 
+  };
+
+  const btnAbout = document.getElementById('btnAbout');
+  if (btnAbout){
+    btnAbout.addEventListener('click', ()=>{
+      document.getElementById('aboutVersion').textContent  = `v${APP_VERSION}`;
+      document.getElementById('aboutReleased').textContent = APP_RELEASED;
+      setModal(true);
+    });
+  }
+
+  // Close modal handlers
+  aboutModal.querySelectorAll('[data-close]').forEach(el =>
+    el.addEventListener('click', ()=> setModal(false))
+  );
+  aboutModal.addEventListener('click', (e)=>{
+    if(e.target.classList.contains('modal-backdrop')) setModal(false);
   });
-  aboutModal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', ()=> setModal(false)));
-  aboutModal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) setModal(false); });
 });

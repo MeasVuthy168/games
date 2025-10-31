@@ -280,6 +280,13 @@ body{
   100%{box-shadow:none}
 }
 
+/* AI thinking visual */
+body.ai-thinking #board{
+  opacity:.9;
+  filter:saturate(.9);
+  transition: opacity .15s ease, filter .15s ease;
+}
+
 /* ===== Bottom nav ===== */
 #appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;

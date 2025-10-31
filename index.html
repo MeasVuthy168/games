@@ -5,17 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>អុកចត្រង្គ (Khmer Chess)</title>
 
-  <!-- PWA -->
-  <link rel="manifest" href="manifest.webmanifest" />
-  <meta name="theme-color" content="#0d2d5c" />
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
-  <script src="js/pwa.js" defer></script>
-
-  <link rel="stylesheet" href="styles.css" />
-
-  <!-- Ensure Krasar is used even for bold text -->
+  <!-- Khmer Font (Krasar) -->
   <style>
-    /* Load Krasar for both 400 and 700 so bold doesn't fall back */
     @font-face{
       font-family:"Krasar";
       src:url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -30,19 +21,22 @@
       font-style:normal;
       font-display:swap;
     }
-
-    /* In case styles.css didn't define --ui-font yet on this page load */
     :root{
       --ui-font: "Krasar","Noto Sans Khmer",
                  system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
     }
+    html,body,.home-app,.home-app *{font-family:var(--ui-font);}
+  </style>
 
-    /* Apply Khmer font stack everywhere on Home */
-    html, body, .home-app, .home-app *{
-      font-family: var(--ui-font);
-    }
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+  <link rel="stylesheet" href="styles.css" />
 
-    /* small helpers for the home tiles */
+  <style>
+    /* Equal text style for both cards */
     .menu-grid{
       display:grid;
       grid-template-columns:repeat(2,1fr);
@@ -60,34 +54,36 @@
       text-decoration:none;
       color:#0d2d5c;
       box-shadow:0 4px 12px rgba(0,0,0,.08);
-      font-weight:700;            /* now works with Krasar */
+      font-weight:700;
       cursor:pointer;
+      font-size:1.05rem; /* ✅ same font size */
     }
     .menu-card:active{transform:scale(.98)}
     .card-emoji{font-size:2.2rem;margin-bottom:.4rem}
     .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover}
 
     /* --- AI chooser modal --- */
-    .modal{ position:fixed; inset:0; z-index:1000; display:none }
-    .modal.show{ display:block }
-    .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px) }
+    .modal{position:fixed;inset:0;z-index:1000;display:none}
+    .modal.show{display:block}
+    .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
     .modal-card{
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:min(520px,92vw); background:#fff; border-radius:16px;
-      box-shadow:0 20px 60px rgba(0,0,0,.28); overflow:hidden;
+      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+      width:min(520px,92vw);background:#fff;border-radius:16px;
+      box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden;
     }
-    .modal-header{ display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:#0d2d5c; color:#fff }
-    .modal-body{ padding:14px; display:grid; gap:12px }
-    .level-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px }
+    .modal-header{display:flex;align-items:center;justify-content:center;
+      padding:12px 14px;background:#0d2d5c;color:#fff;}
+    .modal-body{padding:14px;display:grid;gap:12px}
+    .level-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
     .level-btn{
-      border:1px solid #d8e1f0; background:#fff; border-radius:12px; padding:.7rem .5rem;
-      font-weight:800; text-align:center; cursor:pointer;
+      border:1px solid #d8e1f0;background:#fff;border-radius:12px;
+      padding:.7rem .5rem;font-weight:800;text-align:center;cursor:pointer;
     }
-    .level-btn:active{ transform:translateY(1px) }
-    .radio-row{ display:flex; gap:14px; align-items:center; flex-wrap:wrap }
-    .primary{ background:#2b4f9e; color:#fff; border:none; border-radius:10px; padding:.6rem .9rem; font-weight:800 }
-    .secondary{ background:#fff; color:#0f172a; border:1px solid #d8e1f0; border-radius:10px; padding:.6rem .9rem; font-weight:800 }
-    .row-right{ display:flex; gap:10px; justify-content:flex-end }
+    .level-btn:active{transform:translateY(1px)}
+    .radio-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+    .secondary{background:#fff;color:#0f172a;border:1px solid #d8e1f0;
+      border-radius:10px;padding:.6rem .9rem;font-weight:800;}
+    .row-right{display:flex;gap:10px;justify-content:flex-end}
   </style>
 </head>
 <body>
@@ -103,12 +99,10 @@
 
     <!-- Main -->
     <main class="home-main">
-      <!-- Install PWA button -->
       <button id="installBtn" class="install-btn" style="display:none">
         📲 ធ្វើការតំឡើងកម្មវិធី (Install App)
       </button>
 
-      <!-- Game Mode Menu -->
       <div class="menu-grid">
         <button id="btnVsAI" class="menu-card" type="button">
           <div class="card-emoji">🤖</div>
@@ -122,7 +116,7 @@
       </div>
     </main>
 
-    <!-- ✅ Auto-hide bottom navigation -->
+    <!-- Bottom navigation -->
     <footer id="appTabbar" class="bottom-bar">
       <a class="nav-item active" href="index.html" aria-current="page">
         <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
@@ -140,18 +134,15 @@
         <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
       </a>
     </footer>
-
-    <!-- Spacer so content never sits under the bar -->
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 
-  <!-- ===== AI Level chooser modal ===== -->
+  <!-- AI Level chooser modal -->
   <div class="modal" id="aiModal" aria-hidden="true">
     <div class="modal-backdrop" data-close></div>
     <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="aiTitle">
       <header class="modal-header">
         <h3 id="aiTitle">ជ្រើសកម្រិត AI</h3>
-        <button class="secondary" data-close>✖</button>
       </header>
       <div class="modal-body">
         <div class="level-row">
@@ -172,71 +163,43 @@
     </div>
   </div>
 
-  <!-- Auto-hide + highlight active tab + AI chooser logic -->
   <script>
     (function(){
-      const bar = document.getElementById('appTabbar');
-      const spacer = document.getElementById('bottomSpacer');
-      if(bar && spacer){
-        function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
-        if(document.readyState === 'complete') setSpacer();
-        else window.addEventListener('load', setSpacer);
-        window.addEventListener('resize', setSpacer);
-
-        // Highlight current tab
-        const page = (location.pathname.split('/').pop() || 'index.html');
-        for(const a of bar.querySelectorAll('a')){
-          if(a.getAttribute('href') === page) a.classList.add('active');
-        }
-
-        // Auto hide on scroll (like Play page)
-        let lastY = window.scrollY;
-        window.addEventListener('scroll', () => {
-          const y = window.scrollY;
-          const down = y > lastY;
-          bar.style.transform = down ? 'translateY(110%)' : 'translateY(0)';
-          lastY = y;
-        }, {passive:true});
+      const bar=document.getElementById('appTabbar');
+      const spacer=document.getElementById('bottomSpacer');
+      if(bar&&spacer){
+        function setSpacer(){spacer.style.height=bar.offsetHeight+'px';}
+        if(document.readyState==='complete')setSpacer();else window.addEventListener('load',setSpacer);
+        window.addEventListener('resize',setSpacer);
+        const page=(location.pathname.split('/').pop()||'index.html');
+        for(const a of bar.querySelectorAll('a')){if(a.getAttribute('href')===page)a.classList.add('active');}
+        let lastY=window.scrollY;
+        window.addEventListener('scroll',()=>{const y=window.scrollY;const down=y>lastY;bar.style.transform=down?'translateY(110%)':'translateY(0)';lastY=y;},{passive:true});
       }
     })();
 
-    /* ===== AI chooser ===== */
-    const LS_KEY = 'kc_settings_v1';
-    function loadSettings(){
-      try{ const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null'); return s || {}; }
-      catch{ return {}; }
-    }
-    function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
-
-    const aiModal = document.getElementById('aiModal');
-    const showModal = (on)=> aiModal.classList.toggle('show', !!on);
-
-    // Open modal from AI card
-    document.getElementById('btnVsAI').addEventListener('click', ()=> showModal(true));
-
-    // Close modal
-    aiModal.querySelectorAll('[data-close]').forEach(el=> el.addEventListener('click', ()=> showModal(false)));
-    aiModal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) showModal(false); });
-
-    // Save chosen level + side, then go play
+    const LS_KEY='kc_settings_v1';
+    function loadSettings(){try{const s=JSON.parse(localStorage.getItem(LS_KEY)||'null');return s||{};}catch{return {};}}
+    function saveSettings(s){localStorage.setItem(LS_KEY,JSON.stringify(s));}
+    const aiModal=document.getElementById('aiModal');
+    const showModal=(on)=>aiModal.classList.toggle('show',!!on);
+    document.getElementById('btnVsAI').addEventListener('click',()=>showModal(true));
+    aiModal.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click',()=>showModal(false)));
+    aiModal.addEventListener('click',(e)=>{if(e.target.classList.contains('modal-backdrop'))showModal(false);});
     aiModal.querySelectorAll('.level-btn').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const level = btn.getAttribute('data-level') || 'Medium';
-        const whoWhite = (document.querySelector('input[name="whoWhite"]:checked')||{}).value || 'me';
-
-        const s = loadSettings();
-        s.aiEnabled = true;
-        s.aiLevel   = level;                      // 'Easy'|'Medium'|'Hard'
-        s.aiColor   = (whoWhite === 'ai') ? 'w' : 'b'; // AI plays White? -> 'w' else 'b'
+      btn.addEventListener('click',()=>{
+        const level=btn.getAttribute('data-level')||'Medium';
+        const whoWhite=(document.querySelector('input[name="whoWhite"]:checked')||{}).value||'me';
+        const s=loadSettings();
+        s.aiEnabled=true;
+        s.aiLevel=level;
+        s.aiColor=(whoWhite==='ai')?'w':'b';
         saveSettings(s);
-
-        location.href = 'play.html?mode=ai';
+        location.href='play.html?mode=ai';
       });
     });
-
-    // Friend: disable AI and continue via href
-    document.getElementById('btnFriend').addEventListener('click', ()=>{
-      const s = loadSettings(); s.aiEnabled = false; saveSettings(s);
+    document.getElementById('btnFriend').addEventListener('click',()=>{
+      const s=loadSettings();s.aiEnabled=false;saveSettings(s);
     });
   </script>
 </body>

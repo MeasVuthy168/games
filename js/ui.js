@@ -1,5 +1,6 @@
-// ui.js — Khmer Chess (Play page)
+// ui.js — Khmer Chess (Play page) + AI turn integration
 import { Game, SIZE, COLORS } from './game.js';
+import { pickAIMove } from './ai.js';
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
@@ -25,9 +26,14 @@ function clearGameState(){ try { localStorage.removeItem(SAVE_KEY); } catch {} }
 function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
-    return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+    const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+    // AI defaults (in case Home modal hasn’t written them yet)
+    if (!('aiEnabled' in merged)) merged.aiEnabled = false;
+    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Medium'; // Easy|Medium|Hard
+    if (!('aiColor'   in merged)) merged.aiColor   = 'b';      // AI plays black by default
+    return merged;
   }catch{
-    return { ...DEFAULTS };
+    return { ...DEFAULTS, aiEnabled:false, aiLevel:'Medium', aiColor:'b' };
   }
 }
 
@@ -196,6 +202,18 @@ export function initUI(){
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
+  // ===== AI helpers =====
+  let AILock = false;
+  function setBoardBusy(on){
+    AILock = !!on;
+    if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
+    document.body.classList.toggle('ai-thinking', !!on);
+  }
+  const isAITurn = () => settings.aiEnabled && (
+    (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
+    (settings.aiColor === 'b' && game.turn === COLORS.BLACK)
+  );
+
   // Helper: board turn class
   function applyTurnClass(){
     if (!elBoard) return;
@@ -254,12 +272,12 @@ export function initUI(){
   function normType(t){ return TYPE_MAP[t] || t; }
 
   const countState = {
-  active:false,
-  base:0,
-  initial:0,
-  remaining:0,
-  side:null  // 'w' or 'b' — only this side decrements
-};
+    active:false,
+    base:0,
+    initial:0,
+    remaining:0,
+    side:null  // 'w' or 'b' — only this side decrements
+  };
 
   // (optional) mini debug bubble – tap the turn label to toggle
   let debugOn = false;
@@ -267,7 +285,6 @@ export function initUI(){
     let el = document.getElementById('count-debug');
     if (!el){
       el = document.createElement('div');
-      el.id = 'count-debug';
       Object.assign(el.style, {
         position:'fixed', left:'8px', top:'8px', zIndex:'9999',
         background:'rgba(0,0,0,.65)', color:'#fff', padding:'6px 8px',
@@ -367,11 +384,11 @@ export function initUI(){
   }
 
   function startCountingDraw(base, effective, withSound=true){
-  countState.active   = true;
-  countState.base     = base;
-  countState.initial  = effective;
-  countState.remaining= effective;
-  countState.side     = game.turn; // remember whose turn it is when counting starts
+    countState.active   = true;
+    countState.base     = base;
+    countState.initial  = effective;
+    countState.remaining= effective;
+    countState.side     = game.turn; // remember whose turn it is when counting starts
     showCountUI(true);
     updateCountUI();
     if (withSound){ if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart); }
@@ -394,10 +411,10 @@ export function initUI(){
   }
 
   function onMoveCommittedDecrement(prevTurn){
-  if(!countState.active) return;
-  // Decrease only if the side that *owns* the rule just moved
-  if (prevTurn !== countState.side) return;
-  countState.remaining = Math.max(0, countState.remaining - 1);
+    if(!countState.active) return;
+    // Decrease only if the side that *owns* the rule just moved
+    if (prevTurn !== countState.side) return;
+    countState.remaining = Math.max(0, countState.remaining - 1);
     updateCountUI();
     if (countState.remaining === 0){
       if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
@@ -430,14 +447,52 @@ export function initUI(){
     const last = game.history[game.history.length-1];
     if(last){
       cells[last.from.y*SIZE+last.from.x].classList.add('last-from');
-      const toCell = cells[last.to.y*SIZE+last.to.x];
-      toCell.classList.add('last-to');
-      if(last.captured) toCell.classList.add('last-capture');
+      const toCell = cells[last.to.y*SIZE+last.x? last.to.x : last.to.x]; // keep
+      cells[last.to.y*SIZE+last.to.x].classList.add('last-to');
+      if(last.captured) cells[last.to.y*SIZE+last.to.x].classList.add('last-capture');
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
     evaluateRuleAndMaybeStart(false);
   }
+
+  // === AI thinking + move executor ====================================
+  async function thinkAndPlay(){
+    if (!isAITurn() || AILock) return;
+    setBoardBusy(true);
+    try{
+      // tiny delay to feel more natural
+      const mv = await pickAIMove(game, { level: settings.aiLevel, timeMs: 120 });
+      if (!mv){ setBoardBusy(false); return; }
+
+      const prevTurn = game.turn;
+      const before   = game.at(mv.to.x, mv.to.y);
+      const res      = game.move(mv.from, mv.to);
+      if(res?.ok){
+        if(beeper.enabled){
+          if(before){ beeper.capture(); vibrate([20,40,30]); } else beeper.move();
+          if(res.status?.state==='check') beeper.check();
+        }
+        clocks.switchedByMove(prevTurn);
+        onMoveCommittedDecrement(prevTurn);
+        if (before) reseedCounterAfterCapture();
+
+        render();
+        saveGameState(game,clocks);
+
+        if(res.status?.state==='checkmate'){
+          stopCountingDraw();
+          setTimeout(()=> alert('អុកស្លាប់! AI ឈ្នះ'), 60);
+        }else if(res.status?.state==='stalemate'){
+          stopCountingDraw();
+          setTimeout(()=> alert('អាប់ — ស្មើជាមួយ AI!'), 60);
+        }
+      }
+    } finally {
+      setBoardBusy(false);
+    }
+  }
+  // =====================================================================
 
   let selected=null, legal=[];
   const clearHints=()=>{ for(const c of cells) c.classList.remove('selected','hint-move','hint-capture'); };
@@ -453,6 +508,7 @@ export function initUI(){
   }
 
   function onCellTap(e){
+    if (AILock) return; // ignore taps during AI turn
     const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
     if(p && p.c===game.turn){
       selected={x,y}; showHints(x,y);
@@ -492,6 +548,9 @@ export function initUI(){
       }else if(res.status?.state==='stalemate'){
         stopCountingDraw();
         setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
+      }else{
+        // After human move, let AI respond if it's AI's turn
+        if (isAITurn()) thinkAndPlay();
       }
     }
   }
@@ -518,6 +577,9 @@ export function initUI(){
 
   updatePauseUI(true);
 
+  // If AI should move first (e.g., AI=White), let it think
+  if (isAITurn()) thinkAndPlay();
+
   /* ---------------------------- controls ---------------------------- */
   btnReset?.addEventListener('click', ()=>{
     game.reset(); selected=null; legal=[]; clearHints();
@@ -525,11 +587,14 @@ export function initUI(){
     render(); clocks.start();
     updatePauseUI(true);
     stopCountingDraw();
+    if (isAITurn()) thinkAndPlay();
   });
 
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      // After undo, if it's AI's turn now, let AI move
+      if (isAITurn()) thinkAndPlay();
     }
   });
 

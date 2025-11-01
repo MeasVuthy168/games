@@ -98,22 +98,25 @@
       </section>
     </main>
 
-
     <!-- ======= TEMP DEBUG (can remove later) ======= -->
-<section class="panel card card-full" id="debug-panel">
-  <div class="card-left">
-    <div class="card-title">Debug Console</div>
-    <div class="card-sub">Worker / WASM / UCI logs (temporary)</div>
-  </div>
-  <div class="card-right" style="display:flex;gap:8px;align-items:center">
-    <button id="dbg-run-checks" class="secondary">Run Path Checks</button>
-    <button id="dbg-copy" class="secondary">Copy</button>
-    <button id="dbg-clear" class="secondary">Clear</button>
-  </div>
-  <div class="card-body" style="width:100%;padding-top:10px">
-    <pre id="debug-log" class="debug-log" aria-live="polite"></pre>
-  </div>
-</section>
+    <section class="panel card card-full" id="debug-panel">
+      <div class="card-left">
+        <div class="card-title">Debug Console</div>
+        <div class="card-sub">Worker / WASM / UCI logs (temporary)</div>
+      </div>
+      <div class="card-right" style="display:flex;gap:8px;align-items:center">
+        <button id="dbg-run-checks" class="secondary">Run Path Checks</button>
+        <button id="dbg-engine-test" class="secondary">Force Engine Test</button>
+        <button id="dbg-copy" class="secondary">Copy</button>
+        <button id="dbg-clear" class="secondary">Clear</button>
+      </div>
+      <div class="card-body" style="width:100%;padding-top:10px">
+        <div style="font-family:monospace;font-size:.9rem;opacity:.85;margin-bottom:6px">
+          Worker URL: <span id="dbg-worker-url">—</span>
+        </div>
+        <pre id="debug-log" class="debug-log" aria-live="polite"></pre>
+      </div>
+    </section>
 
     <!-- Bottom nav -->
     <footer id="appTabbar" class="bottom-bar">
@@ -152,8 +155,38 @@
 
   <!-- JS -->
   <script type="module" src="./js/main.js"></script>
+  <script type="module" src="./js/debug.js"></script>
 
-<script type="module" src="./js/debug.js"></script>
-  
+  <!-- Engine wiring for debug panel -->
+  <script type="module">
+    import { setEngineDebugLogger, getEngineBestMove, _debug__peekWorkerURL } from './js/engine-pro.js';
+
+    // Bridge engine logs -> debug panel
+    const dbg = (window.__dbglog)
+      ? window.__dbglog
+      : (msg, kind) => console[(kind==='err'?'error':'log')](msg);
+
+    setEngineDebugLogger((msg, kind) => dbg(msg, kind));
+
+    // Show resolved worker URL
+    const wurl = _debug__peekWorkerURL();
+    const ulel = document.getElementById('dbg-worker-url');
+    if (ulel) ulel.textContent = wurl;
+
+    // Force Engine Test button
+    const btn = document.getElementById('dbg-engine-test');
+    if (btn){
+      btn.addEventListener('click', async ()=>{
+        try{
+          dbg('[ENGINE] Forcing self-test…');
+          const fen = 'rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1';
+          const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
+          dbg(`[ENGINE] Self-test bestmove: ${uci}`, 'ok');
+        }catch(e){
+          dbg(`[ENGINE] Self-test error: ${e?.message || e}`, 'err');
+        }
+      });
+    }
+  </script>
 </body>
 </html>

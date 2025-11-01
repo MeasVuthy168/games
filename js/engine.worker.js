@@ -1,58 +1,46 @@
-/* engine.worker.js — wraps Fairy-Stockfish WASM as a UCI worker (Makruk / Ouk Chatrang)
-   Expected files (relative to this worker file):
-   ../engine/fairy-stockfish.js
-   ../engine/fairy-stockfish.wasm
-*/
+/* engine.worker.js — Fairy-Stockfish (Makruk) classic worker */
 
 let mod = null;
-let ready = false;
-const queue = [];
 
-// Load the WASM module (classic worker)
-importScripts('../engine/fairy-stockfish.js'); // <-- path is from /js/ to /engine
+// paths are relative to THIS FILE (/js)
+importScripts('../engine/fairy-stockfish.js');
+
+postMessage({ note: 'Worker booting…' });
 
 (async () => {
-  // Init module; tell it where to find the .wasm
-  mod = await FairyStockfish({
-    locateFile: (p) => p.endsWith('.wasm') ? '../engine/fairy-stockfish.wasm' : p
-  });
+  try{
+    postMessage({ note: 'Loading WASM…' });
 
-  // Pipe engine stdout -> main thread
-  mod.addMessageListener?.((line) => {
-    postMessage({ type: 'uci', line });
-    if (line === 'readyok') ready = true;
-  });
+    mod = await FairyStockfish({
+      locateFile: (p) => p.endsWith('.wasm') ? '../engine/fairy-stockfish.wasm' : p
+    });
 
-  // Standard UCI init
-  send('uci');
+    mod.addMessageListener?.((line) => {
+      postMessage({ type: 'uci', line });
+    });
 
-  // IMPORTANT: Makruk is the variant Fairy-Stockfish expects (covers Ouk Chatrang rules)
-  // Use lowercase exactly as below.
-  send('setoption name UCI_Variant value makruk');
+    // UCI init
+    postMessage({ note: 'Sending UCI init…' });
+    mod.postMessage('uci');
 
-  // If your build supports counting options you can add them; otherwise omit to avoid errors.
-  // send('setoption name CountingRule value cambodian');
+    // IMPORTANT: makruk is the variant name Fairy-Stockfish expects here
+    mod.postMessage('setoption name UCI_Variant value makruk');
 
-  send('isready');
+    // Only set options that exist in your build; unknown options are ignored but noisy.
+    // mod.postMessage('setoption name CountingRule value cambodian');
+
+    mod.postMessage('isready');
+  }catch(err){
+    postMessage({ note: `Init failed: ${err && err.message ? err.message : String(err)}` });
+  }
 })();
-
-function send(cmd){
-  if (!mod) { queue.push(cmd); return; }
-  mod.postMessage(cmd);
-}
 
 onmessage = (e) => {
   const { cmd } = e.data || {};
-  if (!cmd) return;
-
-  // If engine not created yet, queue
-  if (!mod) { queue.push(cmd); return; }
-
-  // Flush queue once module exists
-  if (queue.length){
-    while (queue.length) mod.postMessage(queue.shift());
+  if (!mod || !cmd) return;
+  try{
+    mod.postMessage(cmd);
+  }catch(err){
+    postMessage({ note:`postMessage error: ${String(err)}` });
   }
-
-  // Forward command
-  mod.postMessage(cmd);
 };

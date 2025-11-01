@@ -1,15 +1,14 @@
-// engine-pro.js — WASM engine bridge (Makruk). With debug taps.
+// engine-pro.js — WASM engine bridge (Makruk) with debug taps.
 
 let _w = null;
 let _awaiters = [];
 let DBG = (msg)=>{}; // no-op until set
 let DBG_KIND = (msg, kind)=>{ DBG(`[ENGINE] ${msg}`, kind); };
 
-// expose to debug.js
 export function setEngineDebugLogger(fn){ if (typeof fn==='function') DBG = fn; }
 export function _debug__peekWorkerURL(){ return new URL('./engine.worker.js', import.meta.url).toString(); }
 
-// Use classic worker so worker can importScripts()
+// Use MODULE worker (important!)
 function workerURL(){ return new URL('./engine.worker.js', import.meta.url); }
 
 export function startEngineWorker(){
@@ -18,7 +17,8 @@ export function startEngineWorker(){
   const url = workerURL();
   DBG_KIND(`Starting worker: ${url}`, 'warn');
 
-  _w = new Worker(url, { /* classic */ });
+  // MODULE so we can "import" fairy-stockfish.js inside the worker
+  _w = new Worker(url, { type: 'module' });
 
   _w.addEventListener('error', (e)=>{
     DBG_KIND(`Worker error: ${e.message || e.filename || e.type}`, 'err');
@@ -33,7 +33,6 @@ export function startEngineWorker(){
     if (note) DBG_KIND(`Worker note: ${note}`, 'warn');
 
     if (type === 'uci' && line){
-      // Show all raw engine lines in debug
       DBG_KIND(`UCI: ${line}`);
       if (line.startsWith('bestmove')){
         const parts = line.split(/\s+/);

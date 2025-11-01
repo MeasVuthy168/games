@@ -280,11 +280,12 @@ body{
   100%{box-shadow:none}
 }
 
-/* AI thinking visual */
+/* === AI thinking visual (NEW) ===================================== */
 body.ai-thinking #board{
   opacity:.9;
   filter:saturate(.9);
   transition: opacity .15s ease, filter .15s ease;
+  pointer-events:none;
 }
 
 /* ===== Bottom nav ===== */
@@ -430,3 +431,15 @@ body.ai-thinking #board{
 
 .about-row{
   display:flex;
+}
+
+/* === Home-specific small avatar + Khmer font on tiles (NEW) ======= */
+.home-app .avatar{
+  width:36px; height:36px; border-width:2px;
+}
+.home-app .menu-card span{
+  font-family:"Krasar","Noto Sans Khmer",system-ui,sans-serif !important;
+  font-weight:800;
+  font-size:1rem; /* ensures same size for both tiles */
+  letter-spacing:0;
+}

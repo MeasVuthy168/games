@@ -1,20 +1,47 @@
 {
-  "": ["e3e4", "d3d4", "b3b4", "g3g4"],
-  "e3e4": ["d6d5", "g6g5", "b6b5"],
+  "": ["e3e4", "d3d4", "f3f4", "c3c4", "b3b4", "g3g4"],
+  "e3e4": ["d6d5", "g6g5", "f6f5", "b6b5"],
   "d3d4": ["e6e5", "g6g5", "b6b5"],
+  "f3f4": ["e6e5", "g6g5"],
+  "c3c4": ["d6d5", "b6b5"],
   "b3b4": ["c6c5", "e6e5"],
   "g3g4": ["f6f5", "d6d5"],
 
-  "e3e4 d6d5": ["f3f4", "c3c4"],
-  "d3d4 e6e5": ["c3c4", "f3f4"],
+  "e3e4 d6d5": ["f3f4", "c3c4", "d3d4"],
+  "d3d4 e6e5": ["c3c4", "f3f4", "b3b4"],
+  "f3f4 e6e5": ["g3g4", "d3d4"],
+  "c3c4 d6d5": ["d3d4", "b3b4"],
   "b3b4 c6c5": ["a3a4", "d3d4"],
   "g3g4 f6f5": ["h3h4", "d3d4"],
 
-  "f3f4 d6d5": ["g3g4", "e3e4"],
-  "c3c4 e6e5": ["d3d4", "b3b4"],
-
-  "d3d4 d6d5": ["c2c3", "e3e4"],
-  "e3e4 e6e5": ["d3d4", "f3f4"],
   "e3e4 d6d5 f3f4": ["g3g4", "c3c4"],
-  "d3d4 e6e5 c3c4": ["f3f4", "b3b4"]
+  "d3d4 e6e5 c3c4": ["f3f4", "b3b4"],
+  "b3b4 c6c5 d3d4": ["e3e4", "f3f4"],
+  "g3g4 f6f5 f3f4": ["e3e4", "h3h4"],
+
+  "e3e4 d6d5 f3f4 g6g5": ["g3g4", "c3c4"],
+  "d3d4 e6e5 c3c4 f6f5": ["b3b4", "f3f4"],
+
+  "e3e4 d6d5 f3f4 g6g5 g3g4": ["d2d3", "c3c4"],
+  "d3d4 e6e5 c3c4 f6f5 b3b4": ["a3a4", "f3f4"],
+
+  "d3d4 e6e5 c3c4 f6f5 g3g4": ["f3f4", "b3b4"],
+  "e3e4 d6d5 c3c4 g6g5 f3f4": ["d2d3", "h3h4"],
+
+  "e3e4 d6d5 f3f4 g6g5 g3g4 f6f5": ["c3c4", "d2d3"],
+  "d3d4 e6e5 c3c4 f6f5 b3b4 c6c5": ["f3f4", "a3a4"],
+
+  "c3c4 d6d5 f3f4": ["e3e4", "g3g4"],
+  "b3b4 e6e5 d3d4": ["c3c4", "f3f4"],
+  "f3f4 e6e5 d3d4": ["c3c4", "g3g4"],
+  "g3g4 d6d5 f3f4": ["e3e4", "h3h4"],
+
+  "e3e4 d6d5 f3f4 g6g5 g3g4 c6c5": ["d2d3", "h3h4"],
+  "d3d4 e6e5 c3c4 f6f5 b3b4 g6g5": ["a3a4", "f3f4"],
+
+  "f3f4 e6e5 d3d4 c6c5": ["g3g4", "b3b4"],
+  "g3g4 f6f5 e3e4": ["h3h4", "d3d4"],
+
+  "d3d4 e6e5 c3c4 f6f5 b3b4 c6c5 f3f4 g6g5": ["a3a4", "h3h4", "d2d3"],
+  "e3e4 d6d5 f3f4 g6g5 g3g4 f6f5 c3c4 d7d6": ["d2d3", "h3h4", "b3b4"]
 }

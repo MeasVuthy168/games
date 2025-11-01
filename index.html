@@ -2,7 +2,7 @@
 <html lang="km">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
   <title>អុកចត្រង្គ (Khmer Chess)</title>
 
   <!-- Khmer Font (Krasar) -->
@@ -10,23 +10,19 @@
     @font-face{
       font-family:"Krasar";
       src:url("assets/fonts/Krasar-Regular.ttf") format("truetype");
-      font-weight:400;
-      font-style:normal;
-      font-display:swap;
+      font-weight:400; font-style:normal; font-display:swap;
     }
     @font-face{
       font-family:"Krasar";
       src:url("assets/fonts/Krasar-Regular.ttf") format("truetype");
-      font-weight:700;
-      font-style:normal;
-      font-display:swap;
+      font-weight:700; font-style:normal; font-display:swap;
     }
     :root{
       --ui-font: "Krasar","Noto Sans Khmer",
                  system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
       --blue:#0d2d5c;
     }
-    html,body,.home-app,.home-app *{font-family:var(--ui-font);}
+    html,body,.home-app,.home-app *{ font-family:var(--ui-font); }
   </style>
 
   <!-- PWA -->
@@ -37,68 +33,52 @@
   <link rel="stylesheet" href="styles.css" />
 
   <style>
-    /* Equal text style for both cards */
+    /* Main cards */
     .menu-grid{
-      display:grid;
-      grid-template-columns:repeat(2,1fr);
-      gap:1rem;
-      padding:1rem;
+      display:grid; grid-template-columns:repeat(2,1fr);
+      gap:1rem; padding:1rem;
     }
     .menu-card{
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      justify-content:center;
-      background:#fff;
-      padding:1rem;
-      border-radius:1rem;
-      text-decoration:none;
-      color:#0d2d5c;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      background:#fff; padding:1rem; border-radius:1rem; text-decoration:none; color:#0d2d5c;
       box-shadow:0 4px 12px rgba(0,0,0,.08);
-      font-weight:700;
-      cursor:pointer;
-      font-size:1.05rem;
+      font-weight:700; cursor:pointer; font-size:1.05rem;
     }
-    .menu-card:active{transform:scale(.98)}
-    .card-emoji{font-size:2.2rem;margin-bottom:.4rem}
-    .avatar{width:36px;height:36px;border-radius:50%;object-fit:cover}
+    .menu-card:active{ transform:scale(.98) }
+    .card-emoji{ font-size:2.2rem; margin-bottom:.4rem }
+    .avatar{ width:36px; height:36px; border-radius:50%; object-fit:cover }
 
-    /* --- AI chooser modal --- */
-    .modal{position:fixed;inset:0;z-index:1000;display:none}
-    .modal.show{display:block}
-    .modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45);backdrop-filter:blur(2px)}
+    /* Modal */
+    .modal{ position:fixed; inset:0; z-index:1000; display:none }
+    .modal.show{ display:block }
+    .modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px) }
     .modal-card{
-      position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
-      width:min(520px,92vw);background:#fff;border-radius:16px;
-      box-shadow:0 20px 60px rgba(0,0,0,.28);overflow:hidden;
+      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+      width:min(520px,92vw); background:#fff; border-radius:16px;
+      box-shadow:0 20px 60px rgba(0,0,0,.28); overflow:hidden;
     }
-    .modal-header{display:flex;align-items:center;justify-content:center;
-      padding:12px 14px;background:#0d2d5c;color:#fff;}
-    .modal-body{padding:14px;display:grid;gap:12px}
-    /* 🔧 MOD: 4 buttons (Easy/Medium/Hard/Master). On small screens it wraps nicely */
-    .level-row{
-      display:grid;
-      grid-template-columns:repeat(2,1fr);
-      gap:10px
+    .modal-header{
+      display:flex; align-items:center; justify-content:center;
+      padding:12px 14px; background:#0d2d5c; color:#fff;
     }
-    @media (min-width:520px){
-      .level-row{ grid-template-columns:repeat(4,1fr); }
-    }
+    .modal-body{ padding:14px; display:grid; gap:12px }
+    .level-row{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px }
+    @media (min-width:540px){ .level-row{ grid-template-columns:repeat(4,1fr) } }
     .level-btn{
-      border:1px solid #d8e1f0;background:#fff;border-radius:12px;
-      padding:.7rem .5rem;font-weight:800;text-align:center;cursor:pointer;
+      border:1px solid #d8e1f0; background:#fff; border-radius:12px;
+      padding:.7rem .5rem; font-weight:800; text-align:center; cursor:pointer;
       transition:transform .06s ease, box-shadow .12s ease, border-color .12s ease;
     }
-    .level-btn:active{transform:translateY(1px)}
-    .level-btn:hover{box-shadow:0 6px 16px rgba(0,0,0,.08)}
-    .level-btn[data-level="Master"]{ /* 🔧 MOD: visual hint for Master */
-      border-color:#b1976b;
+    .level-btn:active{ transform:translateY(1px) }
+    .level-btn:hover{ box-shadow:0 6px 16px rgba(0,0,0,.08) }
+    .level-btn[data-level="Master"]{ border-color:#b1976b }
+    .level-hint{ font-size:.86rem; opacity:.8 }
+    .radio-row{ display:flex; gap:14px; align-items:center; flex-wrap:wrap }
+    .secondary{
+      background:#fff; color:#0f172a; border:1px solid #d8e1f0;
+      border-radius:10px; padding:.6rem .9rem; font-weight:800;
     }
-    .level-hint{font-size:.86rem;opacity:.8}
-    .radio-row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
-    .secondary{background:#fff;color:#0f172a;border:1px solid #d8e1f0;
-      border-radius:10px;padding:.6rem .9rem;font-weight:800;}
-    .row-right{display:flex;gap:10px;justify-content:flex-end}
+    .row-right{ display:flex; gap:10px; justify-content:flex-end }
     .last-choice{ font-size:.86rem; opacity:.85; color:#334155; }
     .pill{
       display:inline-block; padding:.12rem .5rem; border-radius:999px;
@@ -125,10 +105,9 @@
       </button>
 
       <div class="menu-grid">
-        <button id="btnVsAI" class="menu-card" type="button">
+        <button id="btnVsAI" class="menu-card" type="button" aria-haspopup="dialog" aria-controls="aiModal">
           <div class="card-emoji">🤖</div>
           <span>លេងជាមួយ AI</span>
-          <!-- 🔧 MOD: show last choice for quick glance -->
           <small id="aiLast" class="last-choice" style="display:none"></small>
         </button>
 
@@ -168,14 +147,13 @@
         <h3 id="aiTitle">ជ្រើសកម្រិត AI</h3>
       </header>
       <div class="modal-body">
-        <!-- 🔧 MOD: added Master -->
         <div class="level-row">
           <button class="level-btn" data-level="Easy"   title="ឆាប់រហ័ស សម្រាប់អ្នកថ្មី">Easy</button>
           <button class="level-btn" data-level="Medium" title="លេងមានហេតុផល (សម្រាប់ភាគច្រើន)">Medium</button>
           <button class="level-btn" data-level="Hard"   title="ជម្រៅច្រើន តិចកំហុស">Hard</button>
           <button class="level-btn" data-level="Master" title="កម្រិតអ្នកជំនាញ (ខ្លាំងជាង)">Master</button>
         </div>
-        <div class="level-hint">កម្រិត <b>Master</b> ប្រើការស្វែងរកជម្រៅខ្ពស់ជាង និងបញ្ជីបើកដំបូង (Khmer book) ដែលឆ្លាតជាង។</div>
+        <div class="level-hint">កម្រិត <b>Master</b> ប្រើជម្រៅស្វែងរកខ្ពស់ជាង និងសៀវភៅបើក (Khmer book) ឆ្លាតជាង។</div>
 
         <div class="radio-row" style="margin-top:6px">
           <label><input type="radio" name="whoWhite" value="me" checked> ខ្ញុំ (White)</label>
@@ -190,68 +168,94 @@
   </div>
 
   <script>
+    /* ---------- Bottom bar spacer + autohide ---------- */
     (function(){
-      /* bottom bar spacer + autohide */
-      const bar=document.getElementById('appTabbar');
-      const spacer=document.getElementById('bottomSpacer');
-      if(bar&&spacer){
-        function setSpacer(){spacer.style.height=(bar.offsetHeight||56)+'px';}
-        if(document.readyState==='complete')setSpacer();else window.addEventListener('load',setSpacer);
-        window.addEventListener('resize',setSpacer,{passive:true});
-        const page=(location.pathname.split('/').pop()||'index.html');
-        for(const a of bar.querySelectorAll('a')){if(a.getAttribute('href')===page)a.classList.add('active');}
-        let lastY=window.scrollY;
-        window.addEventListener('scroll',()=>{const y=window.scrollY;const down=y>lastY;bar.style.transform=down?'translateY(110%)':'translateY(0)';lastY=y;},{passive:true});
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(bar && spacer){
+        function setSpacer(){
+          const h = bar.offsetHeight || 56;
+          spacer.style.height = `calc(${h}px + env(safe-area-inset-bottom))`;
+        }
+        if(document.readyState === 'complete') setSpacer();
+        else window.addEventListener('load', setSpacer, {once:true});
+        window.addEventListener('resize', setSpacer, {passive:true});
+
+        // active tab
+        const here = location.pathname.split('/').pop() || 'index.html';
+        for(const a of bar.querySelectorAll('a')){
+          if((a.getAttribute('href')||'').endsWith(here)) a.classList.add('active');
+          else a.classList.remove('active');
+        }
+
+        // auto hide on scroll
+        let lastY = window.scrollY;
+        window.addEventListener('scroll', ()=>{
+          const y = window.scrollY;
+          const down = y > lastY;
+          bar.style.transform = down ? 'translateY(110%)' : 'translateY(0)';
+          lastY = y;
+        }, {passive:true});
       }
     })();
 
-    /* settings helpers */
-    const LS_KEY='kc_settings_v1';
-    function loadSettings(){try{const s=JSON.parse(localStorage.getItem(LS_KEY)||'null');return s||{};}catch{return {};}}
-    function saveSettings(s){localStorage.setItem(LS_KEY,JSON.stringify(s));}
+    /* ---------- Settings helpers ---------- */
+    const LS_KEY = 'kc_settings_v1';
+    function loadSettings(){
+      try{ return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {}; }
+      catch{ return {}; }
+    }
+    function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
 
-    /* show last AI choice on the AI card (🔧 MOD) */
+    /* ---------- Show last AI choice on card ---------- */
     (function showLastChoice(){
-      const s=loadSettings();
-      if(!s) return;
-      const wrap=document.getElementById('aiLast');
-      const lastLevel = s.aiEnabled ? (s.aiLevel||'Medium') : null;
-      const who = s.aiEnabled ? (s.aiColor==='w' ? 'AI (White)' : 'ខ្ញុំ (White)') : null;
-      if(lastLevel){
-        wrap.style.display='block';
-        wrap.innerHTML = 'កំណត់ចុងក្រោយ៖ ' + lastLevel +
-          (who ? '<span class="pill">'+who+'</span>' : '');
-      }
+      const s = loadSettings();
+      if(!s || !s.aiEnabled) return;
+      const wrap = document.getElementById('aiLast');
+      const lastLevel = s.aiLevel || 'Medium';
+      const who = (s.aiColor === 'w') ? 'AI (White)' : 'ខ្ញុំ (White)';
+      wrap.style.display = 'block';
+      wrap.innerHTML = 'កំណត់ចុងក្រោយ៖ ' + lastLevel + '<span class="pill">' + who + '</span>';
     })();
 
-    /* AI modal logic */
-    const aiModal=document.getElementById('aiModal');
-    const showModal=(on)=>aiModal.classList.toggle('show',!!on);
-    document.getElementById('btnVsAI').addEventListener('click',()=>showModal(true));
-    aiModal.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click',()=>showModal(false)));
-    aiModal.addEventListener('click',(e)=>{if(e.target.classList.contains('modal-backdrop'))showModal(false);});
+    /* ---------- AI modal ---------- */
+    const aiModal = document.getElementById('aiModal');
+    const openModal = () => { aiModal.classList.add('show'); aiModal.setAttribute('aria-hidden','false'); };
+    const closeModal = () => { aiModal.classList.remove('show'); aiModal.setAttribute('aria-hidden','true'); };
 
-    /* hook level buttons */
+    document.getElementById('btnVsAI').addEventListener('click', openModal);
+    aiModal.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', closeModal));
+    aiModal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); });
+
+    // ESC to close, Enter to choose focused level
+    window.addEventListener('keydown', (e)=>{
+      if(!aiModal.classList.contains('show')) return;
+      if(e.key === 'Escape'){ e.preventDefault(); closeModal(); }
+      if(e.key === 'Enter'){
+        const focus = document.activeElement;
+        if(focus && focus.classList && focus.classList.contains('level-btn')) focus.click();
+      }
+    });
+
+    // Level picks
     aiModal.querySelectorAll('.level-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
-        const level=btn.getAttribute('data-level')||'Medium';
-        const whoWhite=(document.querySelector('input[name="whoWhite"]:checked')||{}).value||'me';
+        const level = btn.getAttribute('data-level') || 'Medium';
+        const whoWhite = (document.querySelector('input[name="whoWhite"]:checked') || {}).value || 'me';
 
-        // write settings for play.html to read
-        const s=loadSettings();
-        s.aiEnabled=true;
-        s.aiLevel=level;
-        s.aiColor=(whoWhite==='ai')?'w':'b';
+        const s = loadSettings();
+        s.aiEnabled = true;
+        s.aiLevel = level;                 // Easy | Medium | Hard | Master
+        s.aiColor = (whoWhite === 'ai') ? 'w' : 'b';  // who plays White
         saveSettings(s);
 
-        // go to play vs AI
-        location.href='play.html?mode=ai';
+        location.href = 'play.html?mode=ai';
       });
     });
 
-    // If user chooses Friend, ensure AI is disabled (unchanged behavior)
+    // Friend mode disables AI
     document.getElementById('btnFriend').addEventListener('click',()=>{
-      const s=loadSettings(); s.aiEnabled=false; saveSettings(s);
+      const s = loadSettings(); s.aiEnabled = false; saveSettings(s);
     });
   </script>
 </body>

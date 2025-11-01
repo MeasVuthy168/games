@@ -1,5 +1,5 @@
 // js/ai.js — Fast Khmer Chess AI (ID + TT + Pruning + Levels + Book)
-// Master level uses WASM pro engine (Ouk Chatrang) via engine-pro.js
+// Master level uses WASM pro engine (Makruk) via engine-pro.js
 
 // --- NEW IMPORTS (served as ES modules) ---
 import { getEngineBestMove } from './engine-pro.js';
@@ -14,30 +14,21 @@ import { toFen } from './game.js';
 
 /* =========================== Tunables ============================ */
 
-// Opening book (optional). Safe if file is missing.
 const USE_BOOK = true;
-const BOOK_URL = 'assets/book-khmer.json'; // or assets/book-mini.json
+const BOOK_URL = 'assets/book-khmer.json';
 
-// Per-level search settings (time-driven, with max depth as guard)
 const LEVEL = {
   Easy:   { timeMs:  60, maxDepth: 3,  nodeCap:  9000,  temp: 0.50 },
   Medium: { timeMs: 120, maxDepth: 4,  nodeCap: 16000, temp: 0.25 },
   Hard:   { timeMs: 220, maxDepth: 5,  nodeCap: 26000, temp: 0.00 },
-  Master: { timeMs: 600, maxDepth: 6,  nodeCap: 38000, temp: 0.00 }, // Master uses WASM; local values unused
+  Master: { timeMs: 600, maxDepth: 6,  nodeCap: 38000, temp: 0.00 }, // (unused locally)
 };
 
-// Quiescence guard
 const Q_NODE_CAP = 15000;
 const Q_DEPTH_MAX = 6;
-
-// Futility (only at depth==1, non-captures, non-check)
 const FUT_MARGIN = 120;
-
-// LMR: reduce quiet late moves
-const LMR_START_INDEX = 4; // after N best moves
+const LMR_START_INDEX = 4;
 const LMR_MIN_DEPTH = 3;
-
-/* ====================== Values / normalization =================== */
 
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
@@ -145,7 +136,7 @@ function countingAdjust(aiColor, countState, captured, matLead){
   return adj;
 }
 
-/* ============================ Move-gen =========================== */
+/* ============================ Move-gen / ordering ================= */
 
 function centerBias(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
 
@@ -173,27 +164,15 @@ function generateMoves(game){
   return out;
 }
 
-/* ========================= Ordering heuristic ==================== */
-
 function moveScoreHeuristic(game, mv){
   let score = 0;
-
-  // Captures first: MVV/LVA strong bias
-  if (mv.isCapture){
-    score += 12000 + mv.mvv*12 - mv.lva;
-  } else {
-    score += mv.center;
-  }
-
-  // Destination safety
+  if (mv.isCapture){ score += 12000 + mv.mvv*12 - mv.lva; }
+  else { score += mv.center; }
   const opp = (game.turn==='w'?'b':'w');
   const defended = game.squareAttacked(mv.to.x, mv.to.y, opp);
-
   if (mv.isCapture){
     score += defended ? -60 : +220;
-    if (mv.attackerType==='K'){ // King capture policy
-      if (mv.mvv>200) score += 400; else score += defended ? -200 : +200;
-    }
+    if (mv.attackerType==='K'){ score += (mv.mvv>200) ? 400 : (defended ? -200 : +200); }
   } else {
     score += defended ? -20 : +10;
   }
@@ -207,10 +186,9 @@ function orderMoves(game, moves){
 
 /* ========================== TT + helpers ========================= */
 
-const TT = new Map(); // key -> { depth, score, flag, move }
+const TT = new Map();
 const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
 
-function sameMove(a,b){ return !!a && !!b && a.from.x===b.from.x && a.from.y===b.from.y && a.to.x===b.to.x && a.to.y===b.to.y; }
 function make(game,m){ return game.move(m.from,m.to); }
 function undo(game){ game.undo(); }
 
@@ -220,7 +198,6 @@ function evalLeaf(game, rep, countState, aiColor){
   const mat = materialEval(game);
   const mob = mobilityEval(game);
   let score = mat + mob + repetitionPenalty(rep, posKey(game));
-  // counting-draw nudge (optional)
   const lead = (aiColor==='w'?mat:-mat);
   if (countState?.active && lead>0 && countState.side===aiColor){
     const near = Math.max(0, 6 - (countState.remaining||0));
@@ -243,13 +220,10 @@ function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0){
   for (const mv of caps){
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
-
     const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1);
-
     undo(game);
     if (score >= beta) return beta;
     if (score > alpha) alpha = score;
-
     if (timers.timeUp()) break;
   }
   return alpha;
@@ -277,7 +251,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
   }
 
   if (depth===0){
-    const qStat = { nodes:0 }; // shared cap in timers
+    const qStat = { nodes:0 };
     const v = quiesce(game, alpha, beta, color, aiColor, timers, qStat, 0);
     return { score: v, move:null };
   }
@@ -295,27 +269,22 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
   let idx=0;
 
   for (const mv of moves){
-    const before = game.at(mv.to.x, mv.to.y);
     const res = make(game, mv);
     if(!res?.ok){ undo(game); idx++; continue; }
 
-    // Futility prune at shallow depth: skip hopeless quiets
     if (depth===1 && !mv.isCapture && res?.status?.state!=='check'){
       const est = color * evalLeaf(game, timers.rep, timers.countState, aiColor) - FUT_MARGIN;
       if (est <= alpha){ undo(game); idx++; if (timers.timeUp()) break; continue; }
     }
 
-    // Late Move Reductions: reduce depth for quiet late moves
     let nextDepth = depth-1;
     if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=LMR_START_INDEX){
-      nextDepth = depth-2; // simple LMR
-      if (nextDepth < 0) nextDepth = 0;
+      nextDepth = Math.max(0, depth-2);
     }
 
     const child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats);
     let childScore = (child.cutoff ? -alpha : -(child.score));
 
-    // Small delta bonus for captures/checks + counting
     if (mv.isCapture || res?.status?.state==='check'){
       const mat = materialEval(game);
       const aiLead = (aiColor==='w'?mat:-mat);
@@ -337,7 +306,6 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
 
   timers.rep.pop();
 
-  // TT store
   let flag = TT_EXACT;
   if      (best <= a0) flag = TT_UPPER;
   else if (best >= beta) flag = TT_LOWER;
@@ -346,7 +314,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
   return { score: best, move: bestMove };
 }
 
-/* ======================= Root / iterative deepening ==================== */
+/* ======================= Root / iterative deepening =============== */
 
 function pickByTemperature(items, T){
   if (!items.length) return null;
@@ -361,15 +329,14 @@ function pickByTemperature(items, T){
   return items[0].move;
 }
 
-/* ==================== Local (Easy/Medium/Hard) engine ================== */
-// Kept as-is and renamed; Master will call Pro engine.
+/* ==================== Local (Easy/Medium/Hard) engine ============ */
+
 async function chooseAIMove_Local(game, opts={}){
   const level      = opts.level || 'Medium';
   const L          = LEVEL[level] || LEVEL.Medium;
   const aiColor    = opts.aiColor || game.turn;
   const countState = opts.countState || null;
 
-  // 1) Opening book
   try{
     const book = await loadOpeningBook();
     if (book && USE_BOOK){
@@ -382,7 +349,6 @@ async function chooseAIMove_Local(game, opts={}){
     }
   }catch{}
 
-  // 2) Iterative deepening within time/node budget
   const start = performance.now ? performance.now() : Date.now();
   const timers = {
     timeUp: ()=> ((performance.now?performance.now():Date.now()) - start) > L.timeMs,
@@ -403,7 +369,6 @@ async function chooseAIMove_Local(game, opts={}){
 
   if (!bestMove) return null;
 
-  // Small top list for temperature pick
   const all = orderMoves(game, generateMoves(game)).slice(0, 6).map(mv=>{
     const res = game.move(mv.from, mv.to);
     if(!res?.ok){ game.undo(); return null; }
@@ -418,39 +383,36 @@ async function chooseAIMove_Local(game, opts={}){
   return picked;
 }
 
-/* ============================== Public API ============================= */
+/* ============================== Public API ======================= */
 
-// Wrapper that routes Master -> Pro engine; others -> local engine
 export async function chooseAIMove(game, opts={}){
   const level   = opts.level || 'Medium';
   const aiColor = opts.aiColor || game.turn;
 
+  // Master → WASM Pro (Makruk)
   if (level === 'Master'){
     try{
       const fen = toFen(game);
-      // Short time keeps mobile UX responsive; raise for stronger play
-      const uci = await getEngineBestMove({ fen, movetimeMs: 600, color: aiColor });
+      const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
       const mv = uciToMove(uci);
-      // Validate against legal moves to be safe
       if (mv && game.legalMoves(mv.from.x, mv.from.y).some(m => m.x===mv.to.x && m.y===mv.to.y)){
         return mv;
       }
-      // If engine returned something weird, fall back to local
+      // Fallback if engine returns an illegal/unknown move
       return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-    }catch(e){
-      // On any failure, fall back gracefully
+    }catch{
       return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
     }
   }
 
-  // Easy/Medium/Hard -> local engine
+  // Easy/Medium/Hard → local
   return await chooseAIMove_Local(game, opts);
 }
 
 function uciToMove(uci){
   if (!uci || uci.length < 4) return null;
-  const fx = uci.charCodeAt(0) - 97;            // a..h -> 0..7
-  const fy = 8 - (uci.charCodeAt(1) - 48);      // '8'..'1' -> 0..7
+  const fx = uci.charCodeAt(0) - 97;
+  const fy = 8 - (uci.charCodeAt(1) - 48);
   const tx = uci.charCodeAt(2) - 97;
   const ty = 8 - (uci.charCodeAt(3) - 48);
   if (fx<0||fx>7||fy<0||fy>7||tx<0||tx>7||ty<0||ty>7) return null;

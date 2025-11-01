@@ -1,82 +1,64 @@
-// js/ai.js — Khmer Chess AI (Easy/Medium/Hard) + Opening Book + Aggression Style
-//
-// Public API
-//   - chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState })
-//   - setAIDifficulty(level)
-//   - pickAIMove (alias)
-//
-// Game API expected:
-//   game.at(x,y) -> { t:'R|N|B|Q|P|K' or Khmer variants T,H,G,D,F,S, c:'w'|'b' } | null
-//   game.turn    -> 'w'|'b'
-//   game.legalMoves(x,y) -> [{x,y}, ...]
-//   game.move({x,y},{x,y}) -> { ok:true, status:{state:'normal|check|checkmate|stalemate'}, captured?:... }
-//   game.undo()
-//   game.history -> [{from:{x,y}, to:{x,y}}]
-//
-// ---------------------------------------------------------------------
-// Opening book (very small; optional)
+// js/ai.js — Khmer Chess AI (faster) + Opening Book
+// API: chooseAIMove, setAIDifficulty, pickAIMove (alias)
+
 let _bookPromise = null;
 async function loadOpeningBook(){
   if (_bookPromise) return _bookPromise;
   _bookPromise = fetch('assets/book-mini.json').then(r=>r.json()).catch(()=> ({}));
   return _bookPromise;
 }
-function toAlg(sq){ return String.fromCharCode(97+sq.x) + String(8-sq.y); }
+
+// ---- helpers for book/history ----
+function toAlg(sq){ return String.fromCharCode(97+sq.x) + String(8 - sq.y); }
 function historyKeyFromGame(game){
   if (!Array.isArray(game.history) || game.history.length===0) return '';
-  return game.history.map(m => toAlg(m.from)+toAlg(m.to)).join(' ');
+  return game.history.map(m => toAlg(m.from) + toAlg(m.to)).join(' ');
 }
 function parseBookMove(uci, game){
   if (!uci || uci.length < 4) return null;
-  const fx = uci.charCodeAt(0) - 97, fy = 8 - (uci.charCodeAt(1)-48);
-  const tx = uci.charCodeAt(2) - 97, ty = 8 - (uci.charCodeAt(3)-48);
-  if (fx|fy|tx|ty & ~7) return null; // quick bounds check
+  const fx = uci.charCodeAt(0)-97, fy = 8 - (uci.charCodeAt(1)-48);
+  const tx = uci.charCodeAt(2)-97, ty = 8 - (uci.charCodeAt(3)-48);
+  if (fx|fy|tx|ty & ~7) return null;
   const legals = game.legalMoves(fx, fy);
   for (const m of legals){ if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} }; }
   return null;
 }
 
-// ---------------------------------------------------------------------
-// Config / Tuning
+/* ====================== Tuning (optimized for mobile) ===================== */
+
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 
-const SEARCH_DEPTH = { Easy: 2, Medium: 3, Hard: 4 };       // ply
-const TEMP_BY_LEVEL = { Easy: 0.60, Medium: 0.30, Hard: 0 }; // temperature (kept; but we no longer re-search root)
-const NODE_LIMIT_BY_LEVEL = { Easy: 6000, Medium: 16000, Hard: 38000 }; // slightly tighter for speed
+// shallower but quick
+const SEARCH_DEPTH = { Easy: 2, Medium: 3, Hard: 3 };
+const TEMP_BY_LEVEL = { Easy: 0.50, Medium: 0.12, Hard: 0.0 }; // Hard≈greedy, Medium almost-greedy
+const NODE_LIMIT_BY_LEVEL = { Easy: 6000, Medium: 12000, Hard: 20000 };
 
-// Repetition discouragers
+// repetition discouragers
 const REP_SHORT_WINDOW = 8;
-const REP_SOFT_PENALTY = 15;   // cp per revisit in short window
-const REP_HARD_PENALTY = 220;  // cp if would cause 3-fold
+const REP_SOFT_PENALTY = 15;
+const REP_HARD_PENALTY = 220;
 
-// Progress incentives (base)
+// progress nudges
 const BONUS_CAPTURE = 30;
 const BONUS_CHECK   = 18;
 const BONUS_PUSH    = 6;
 const PENAL_IDLE    = 8;
 
-// Counting-draw awareness
+// counting draw
 const COUNT_BURN_PENALTY = 12;
 const COUNT_RESEED_BONUS = 80;
 const COUNT_URGENT_NEAR  = 3;
 
-// ---- New: Style dials for "human-like aggression" (safe) ----
-const STYLE = {
-  aggression: 0.6,   // 0..1 (higher = prefers attack/pressure more)
-  riskGuard:  0.55,  // 0..1 (higher = avoids bad trades stronger)
-  brakeWhenBehind: 80 // cp penalty applied to aggression when eval < -100
-};
+/* ============================== Utilities ============================== */
 
-// ---------------------------------------------------------------------
-// Utilities
 function normType(t){ return TYPE_MAP[t] || t; }
 
 function materialSide(game, side){
   let s = 0;
-  for (let y=0;y<8;y++){
-    for (let x=0;x<8;x++){
-      const p = game.at(x,y); if (!p || p.c!==side) continue;
+  for (let y=0; y<8; y++){
+    for (let x=0; x<8; x++){
+      const p = game.at(x,y); if(!p || p.c!==side) continue;
       const tt = normType(p.t);
       if (tt!=='K') s += VAL[tt]||0;
     }
@@ -84,32 +66,49 @@ function materialSide(game, side){
   return s;
 }
 function materialEval(game){
-  return materialSide(game,'w') - materialSide(game,'b'); // + = White better
+  const w = materialSide(game,'w');
+  const b = materialSide(game,'b');
+  return w - b;
 }
-function mobilityEval(game){
-  // very light: count legal moves for side-to-move
-  let moves = 0;
-  for (let y=0;y<8;y++){
-    for (let x=0;x<8;x++){
-      const p = game.at(x,y); if(!p || p.c!==game.turn) continue;
-      moves += game.legalMoves(x,y).length;
+
+// SUPER CHEAP positional bonus (no legalMoves() calls)
+function cheapPositional(game){
+  // encourage central presence and pawn advancement a little
+  let s = 0;
+  for (let y=0; y<8; y++){
+    for (let x=0; x<8; x++){
+      const p = game.at(x,y); if(!p) continue;
+      const tt = normType(p.t);
+      // center weight
+      const cx = Math.abs(3.5 - x), cy = Math.abs(3.5 - y);
+      const center = 8 - (cx+cy); // 0..8
+      let w = 0;
+      if (tt==='P') { // pawns: encourage advance
+        // white rows 6..0 (from 6 down), black rows 1..7 (from 1 up)
+        w = (p.c==='w' ? (6 - y) : (y - 1)) * 1.2 + center*0.2;
+      } else {
+        w = center * 0.6;
+      }
+      s += (p.c==='w' ? +w : -w);
     }
   }
-  return (game.turn==='w' ? +1 : -1) * Math.min(40, moves);
+  return Math.trunc(s);
 }
-// position key (simple)
+
+// light, string key
 function posKey(game){
-  const rows=[];
-  for (let y=0;y<8;y++){
-    const r=[];
-    for (let x=0;x<8;x++){
-      const p=game.at(x,y);
-      r.push(!p ? '.' : (p.c==='w'?'w':'b')+normType(p.t));
+  const rows = [];
+  for (let y=0; y<8; y++){
+    const r = [];
+    for (let x=0; x<8; x++){
+      const p = game.at(x,y);
+      r.push(!p ? '.' : (p.c==='w'?'w':'b') + (normType(p.t)));
     }
     rows.push(r.join(''));
   }
   return rows.join('/') + ' ' + game.turn;
 }
+
 class RepTracker{
   constructor(){ this.list=[]; }
   push(k){ this.list.push(k); if(this.list.length>128) this.list.shift(); }
@@ -117,7 +116,8 @@ class RepTracker{
   softCount(k){
     let n=0; for(let i=Math.max(0,this.list.length-REP_SHORT_WINDOW); i<this.list.length; i++){
       if(this.list[i]===k) n++;
-    } return n;
+    }
+    return n;
   }
   wouldThreefold(k){
     const total = this.list.filter(x=>x===k).length;
@@ -132,91 +132,14 @@ function repetitionPenalty(rep, key){
   return p;
 }
 
-// Center bias
-function centerBias(sq){
-  const cx = Math.abs(3.5 - sq.x);
-  const cy = Math.abs(3.5 - sq.y);
-  return 8 - (cx + cy); // larger is better
-}
-
-// ---------------------------------------------------------------------
-// Move generation (ordered)
-function generateMoves(game){
-  const out=[];
-  for (let y=0;y<8;y++){
-    for (let x=0;x<8;x++){
-      const p = game.at(x,y);
-      if(!p || p.c!==game.turn) continue;
-      const tt = normType(p.t);
-      const legals = game.legalMoves(x,y);
-      for (const m of legals){
-        const target = game.at(m.x,m.y);
-        const isPawnPush = (tt==='P' && m.y !== y);
-        out.push({
-          from:{x,y}, to:{x:m.x,y:m.y},
-          moverType:tt,
-          captureVal: target ? (VAL[normType(target.t)]||0) : 0,
-          isPawnPush
-        });
-      }
-    }
-  }
-  // captures first, then center bias
-  out.sort((a,b)=>{
-    if (b.captureVal !== a.captureVal) return b.captureVal - a.captureVal;
-    return centerBias(b.to) - centerBias(a.to);
-  });
-  return out;
-}
-
-// ---------------------------------------------------------------------
-// Evaluation helpers at leaves and per-move deltas
-function evalLeaf(game, rep, countState, aiColor){
-  const key = posKey(game);
-  const mat = materialEval(game);
-  const mob = mobilityEval(game);
-
-  let score = mat + mob;
-  score += repetitionPenalty(rep, key);
-
-  // Counting-draw nudge when we're ahead and own the counter
-  const lead = (aiColor==='w' ? mat : -mat);
-  if (countState?.active && lead>0 && countState.side===aiColor){
-    const near = Math.max(0, 6 - (countState.remaining||0));
-    score -= (COUNT_BURN_PENALTY * near);
-  }
-  return score;
-}
-
-// Aggression-aware delta (safe)
-function moveDeltaBonus(moverType, move, capturedPiece, gaveCheck, sideEvalCp){
-  const myVal  = VAL[moverType] || 0;
-  const capVal = capturedPiece ? (VAL[normType(capturedPiece.t)] || 0) : 0;
-
-  // base aggression bonus (scaled)
-  let b = 0;
-  b += STYLE.aggression * (
-        (capVal ? BONUS_CAPTURE : 0) +
-        (gaveCheck ? BONUS_CHECK : 0) +
-        (move.isPawnPush ? BONUS_PUSH : 0)
-      );
-
-  // risk guard: avoid obviously bad material trades
-  const trade = capVal - myVal; // negative if we trade down
-  if (capturedPiece && trade < 0) {
-    b += trade * STYLE.riskGuard; // trade is negative -> penalty
-  }
-
-  // brake when we're already behind to avoid over-pushing
-  if (sideEvalCp < -100) {
-    b -= STYLE.brakeWhenBehind * STYLE.aggression;
-  }
-
-  if (b === 0) b -= PENAL_IDLE;
+function moveDeltaBonus(game, move, captured, gaveCheck){
+  let b=0;
+  if (captured) b += BONUS_CAPTURE;
+  if (gaveCheck) b += BONUS_CHECK;
+  if (move.isPawnPush) b += BONUS_PUSH;
+  if (b===0) b -= PENAL_IDLE;
   return b;
 }
-
-// Counting-draw adjust (unchanged)
 function countingAdjust(aiColor, countState, move, captured, matLead){
   if (!countState?.active) return 0;
   let adj = 0;
@@ -231,19 +154,99 @@ function countingAdjust(aiColor, countState, move, captured, matLead){
   return adj;
 }
 
-// ---------------------------------------------------------------------
-// Negamax search (no extra root re-search; faster)
+function pickByTemperature(scoredMoves, T){
+  if (!scoredMoves.length) return null;
+  if (T<=0.0) return scoredMoves[0].move;
+  const exps = scoredMoves.map(m => Math.exp(m.score / T));
+  const sum  = exps.reduce((a,b)=>a+b,0);
+  let r = Math.random()*sum;
+  for (let i=0;i<scoredMoves.length;i++){
+    r -= exps[i];
+    if (r<=0) return scoredMoves[i].move;
+  }
+  return scoredMoves[0].move;
+}
+
+/* =========================== Move generation =========================== */
+
+function generateMoves(game){
+  const out = [];
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p = game.at(x,y);
+      if(!p || p.c!==game.turn) continue;
+      const tt = normType(p.t);
+      const legals = game.legalMoves(x,y);
+      for (const m of legals){
+        const target = game.at(m.x,m.y);
+        const isPawnPush = (tt==='P' && m.y !== y);
+        out.push({
+          from:{x,y},
+          to:{x:m.x, y:m.y},
+          captureVal: target ? (VAL[normType(target.t)]||0) : 0,
+          isPawnPush
+        });
+      }
+    }
+  }
+  out.sort((a,b)=>{
+    if (b.captureVal !== a.captureVal) return b.captureVal - a.captureVal;
+    const ca = centerBias(a.to), cb = centerBias(b.to);
+    return cb - ca;
+  });
+  return out;
+}
+function centerBias(sq){
+  const cx = Math.abs(3.5 - sq.x);
+  const cy = Math.abs(3.5 - sq.y);
+  return 8 - (cx+cy);
+}
+
+/* =============================== Search ================================ */
+
+// tiny leaf cache
+const LEAF_CACHE = new Map();
+function cacheGet(k){ return LEAF_CACHE.get(k); }
+function cachePut(k,v){
+  if (LEAF_CACHE.size > 5000) { // simple cap
+    LEAF_CACHE.clear();
+  }
+  LEAF_CACHE.set(k,v);
+}
+
+function evalLeaf(game, rep, countState, aiColor){
+  const key = posKey(game);
+  const cached = cacheGet(key);
+  if (cached !== undefined) return cached;
+
+  const mat = materialEval(game);
+  // cheap positional (no legalMoves calls)
+  const pos = cheapPositional(game);
+  let score = mat + pos;
+
+  score += repetitionPenalty(rep, key);
+
+  // counting-draw nudge when we're ahead and own the counter
+  const lead = (aiColor==='w' ? mat : -mat);
+  if (countState?.active && lead>0 && countState.side===aiColor){
+    const near = Math.max(0, 6 - (countState.remaining||0));
+    score -= (COUNT_BURN_PENALTY * near);
+  }
+
+  cachePut(key, score);
+  return score;
+}
+
 function make(game, mv){ return game.move(mv.from, mv.to); }
 function undo(game){ game.undo(); }
 
 function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats){
   if (stats.nodes++ > budget.limit) return { score: 0, move: null, cutoff:true };
 
-  // terminal?
   const st = game?.status?.();
   if (st && (st.state==='checkmate' || st.state==='stalemate')){
     if (st.state==='checkmate'){
-      const mateScore = -100000 + depth; // prefer faster mates
+      const mateScore = -100000 + (depth);
       return { score: color * mateScore, move:null };
     } else {
       return { score: 0, move:null };
@@ -269,22 +272,15 @@ function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budg
   }
 
   for (const mv of moves){
-    // Grab mover type BEFORE making the move (fast)
-    const mover = game.at(mv.from.x, mv.from.y);
-    const moverType = normType(mover?.t);
-
-    const targetBefore = game.at(mv.to.x, mv.to.y);
+    const before = game.at(mv.to.x, mv.to.y);
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
 
     const gaveCheck = res?.status?.state === 'check';
-
-    // Eval after move to gauge "sideEval" from AI perspective
     const mat = materialEval(game);
     const aiLead = (aiColor==='w' ? mat : -mat);
-
-    const deltaAdj = moveDeltaBonus(moverType, mv, targetBefore, !!gaveCheck, aiLead)
-                   + countingAdjust(aiColor, countState, mv, !!targetBefore, aiLead);
+    const deltaAdj = moveDeltaBonus(game, mv, !!before, !!gaveCheck)
+                   + countingAdjust(aiColor, countState, mv, !!before, aiLead);
 
     const child = negamax(
       game, depth-1, -beta, -alpha, -color, aiColor, rep, countState, budget, stats
@@ -293,23 +289,26 @@ function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budg
 
     undo(game);
 
-    if (childScore > best){ best = childScore; bestMove = mv; }
+    if (childScore > best){
+      best = childScore;
+      bestMove = mv;
+    }
     if (best > alpha) alpha = best;
-    if (alpha >= beta) break; // cutoff
+    if (alpha >= beta) break;
   }
 
   rep.pop();
   return { score: best, move: bestMove };
 }
 
-// ---------------------------------------------------------------------
-// Public API
+/* ============================== Public API ============================= */
+
 export async function chooseAIMove(game, opts={}){
   const level      = opts.level || 'Medium';
-  const aiColor    = opts.aiColor || game.turn;
+  const aiColor    = opts.aiColor || (game.turn);
   const countState = opts.countState || null;
 
-  // 1) Opening book (instant)
+  // ---- Opening book first ----
   try{
     const book = await loadOpeningBook();
     const key  = historyKeyFromGame(game);
@@ -319,19 +318,45 @@ export async function chooseAIMove(game, opts={}){
       const mv = parseBookMove(pick, game);
       if (mv) return mv;
     }
-  }catch{ /* ignore */ }
+  }catch{}
 
-  // 2) Engine search (single pass -> faster)
+  // ---- Engine search ----
   const depth  = SEARCH_DEPTH[level] ?? 3;
+  const temp   = TEMP_BY_LEVEL[level] ?? 0;
   const budget = { limit: NODE_LIMIT_BY_LEVEL[level] ?? 20000 };
 
   const rep = new RepTracker();
   const stats = { nodes: 0 };
 
-  const { move } = negamax(
+  const { move: principal } = negamax(
     game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats
   );
-  return move || null;
+  if (!principal) return null;
+
+  // Fast path: if temperature is ~greedy, just play principal
+  if (temp <= 0.1) return principal;
+
+  // Otherwise, rescore only TOP-K moves for a little variety
+  const K = 4;
+  const roots = generateMoves(game).slice(0, K).map(mv=>{
+    const before = game.at(mv.to.x, mv.to.y);
+    const res = game.move(mv.from, mv.to);
+    if(!res?.ok){ game.undo(); return null; }
+
+    const rep2 = new RepTracker(); rep2.list = rep.list.slice();
+    const stats2 = { nodes: 0 };
+    const sub = negamax(game, Math.max(1, depth-1), -Infinity, Infinity, -1, aiColor, rep2, countState, budget, stats2);
+    game.undo();
+
+    return {
+      move: mv,
+      score: -(sub.score) + moveDeltaBonus(game, mv, !!before, res?.status?.state==='check')
+    };
+  }).filter(Boolean);
+
+  roots.sort((a,b)=> b.score - a.score);
+
+  return pickByTemperature(roots, temp) || principal;
 }
 
 export function setAIDifficulty(level){
@@ -342,5 +367,4 @@ export function setAIDifficulty(level){
   };
 }
 
-// Backward compatibility alias
 export const pickAIMove = chooseAIMove;

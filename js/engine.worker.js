@@ -1,11 +1,11 @@
-// js/engine.worker.js — Classic single worker that hosts Fairy-Stockfish directly.
-// No nested/module worker. We set Module.locateFile so the WASM loads from our absolute URL,
-// then import the Emscripten build and nudge it with "uci"/"isready".
+// js/engine.worker.js — Classic single worker hosting Fairy-Stockfish directly.
+// We set Module.locateFile so the .wasm absolute URL is used, import the engine JS,
+// then forward UCI strings back and forth.
 
 (function () {
   const say = (m) => { try { postMessage(m); } catch {} };
 
-  // Resolve …/js/ → …/ (repo root), then …/engine/
+  // Resolve …/js/ → …/ (root), then …/engine/
   const here      = new URL(self.location.href);       // …/js/engine.worker.js?...
   const jsDir     = new URL('./', here);               // …/js/
   const rootDir   = new URL('../', jsDir);             // …/
@@ -14,11 +14,11 @@
   const wasmAbs   = new URL('fairy-stockfish.wasm', engineDir).href;
   const engineJS  = new URL('fairy-stockfish.js', engineDir).href;
 
-  say(`[ENGINE] [CLASSIC] Booting single-worker`);
+  say('[ENGINE] [CLASSIC] Worker online');
   say(`[ENGINE] [CLASSIC] WASM: ${wasmAbs}`);
   say(`[ENGINE] [CLASSIC] JS:   ${engineJS}`);
 
-  // Emscripten hooks so the engine prints into our worker -> main thread log
+  // Emscripten config so the engine prints back to this worker -> main thread
   self.Module = {
     locateFile(path) {
       if (typeof path === 'string' && path.endsWith('.wasm')) return wasmAbs;
@@ -28,29 +28,22 @@
     printErr: (line) => { try { postMessage(String(line)); } catch {} },
   };
 
-  // Some ports read self.FS_* environment style hints – harmless to set:
-  try { self.FS_WASM_URL = wasmAbs; } catch {}
-
-  // Load the engine script (classic worker style). It usually installs its own onmessage handler
-  // for UCI and starts responding to "uci"/"isready".
   try {
-    importScripts(engineJS);
+    importScripts(engineJS); // loads the engine build; most ports install their own onmessage handler
     say('[ENGINE] [CLASSIC] Engine script imported');
   } catch (e) {
     say(`[ENGINE][ERR] importScripts failed: ${e?.message || e}`);
   }
 
-  // If the port didn't auto-start, poke it a few times.
-  const kicks = ['uci', 'isready', 'uci', 'isready'];
+  // If the port didn’t auto-start, poke it a couple of times.
+  const kicks = ['uci', 'isready'];
   kicks.forEach((cmd, i) => setTimeout(() => {
     try { postMessage(`[ENGINE] [CLASSIC] kick: ${cmd}`); } catch {}
-    // Many Emscripten UCI builds read raw strings on onmessage
     try { self.postMessage(cmd); } catch {}
-    // Some read structured { cmd } objects
-    try { self.onmessage && self.onmessage({ data: { cmd } }); } catch {}
-  }, 50 + i * 120));
+    try { self.onmessage && self.onmessage({ data: cmd }); } catch {}
+  }, 60 + i * 140));
 
-  // Bridge main->engine: forward any line-like commands to the engine as generously as possible
+  // Main thread -> engine: forward broad shapes the port might accept
   self.onmessage = (e) => {
     const d = e?.data;
     let line = null;
@@ -61,15 +54,11 @@
     else if (d && typeof d.stdin === 'string') line = d.stdin;
     if (!line) return;
 
-    // Try multiple shapes; different builds accept different forms
     try { self.postMessage(line); } catch {}
     try { self.postMessage(line.endsWith('\n') ? line : line + '\n'); } catch {}
     try { self.postMessage({ cmd: line }); } catch {}
     try { self.postMessage({ uci: line }); } catch {}
-    try { self.postMessage({ event: 'stdin', data: (line.endsWith('\n') ? line : line + '\n') }); } catch {}
-    try { self.postMessage({ stdin: (line.endsWith('\n') ? line : line + '\n') }); } catch {}
+    try { self.postMessage({ event:'stdin', data:(line.endsWith('\n')?line:line+'\n') }); } catch {}
+    try { self.postMessage({ stdin:(line.endsWith('\n')?line:line+'\n') }); } catch {}
   };
-
-  // Heartbeat so your debug panel shows we’re alive
-  try { postMessage('[ENGINE] [CLASSIC] Worker online'); } catch {}
 })();

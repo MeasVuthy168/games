@@ -1,7 +1,4 @@
 // engine/uci-loader.module.js
-// Module worker that sets Emscripten's Module hooks, then imports the ESM engine.
-// It relies on the parent (outer) worker to send UCI commands like 'uci', 'isready', etc.
-
 const params  = new URL(self.location.href).searchParams;
 const wasmAbs = params.get('wasm') || '';
 
@@ -14,8 +11,7 @@ self.Module = {
   printErr: (line) => { try { self.postMessage(String(line)); } catch {} },
 };
 
-// Import the ESM engine. It should register its own self.onmessage handler (UCI).
+// Import the ESM engine (should bind a UCI onmessage).
 import './fairy-stockfish.js';
 
-// Let parent know we’re alive.
 try { self.postMessage('[ENGINE][MODULE] online'); } catch {}

@@ -167,6 +167,11 @@
     </div>
   </div>
 
+  <!-- NEW: preload WASM pro engine so Master is instant -->
+  <script type="module">
+    import './js/engine-pro.js';
+  </script>
+
   <script>
     /* ---------- Bottom bar spacer + autohide ---------- */
     (function(){
@@ -181,14 +186,12 @@
         else window.addEventListener('load', setSpacer, {once:true});
         window.addEventListener('resize', setSpacer, {passive:true});
 
-        // active tab
         const here = location.pathname.split('/').pop() || 'index.html';
         for(const a of bar.querySelectorAll('a')){
           if((a.getAttribute('href')||'').endsWith(here)) a.classList.add('active');
           else a.classList.remove('active');
         }
 
-        // auto hide on scroll
         let lastY = window.scrollY;
         window.addEventListener('scroll', ()=>{
           const y = window.scrollY;
@@ -227,7 +230,6 @@
     aiModal.querySelectorAll('[data-close]').forEach(el=>el.addEventListener('click', closeModal));
     aiModal.addEventListener('click', (e)=>{ if(e.target.classList.contains('modal-backdrop')) closeModal(); });
 
-    // ESC to close, Enter to choose focused level
     window.addEventListener('keydown', (e)=>{
       if(!aiModal.classList.contains('show')) return;
       if(e.key === 'Escape'){ e.preventDefault(); closeModal(); }
@@ -237,7 +239,6 @@
       }
     });
 
-    // Level picks
     aiModal.querySelectorAll('.level-btn').forEach(btn=>{
       btn.addEventListener('click',()=>{
         const level = btn.getAttribute('data-level') || 'Medium';
@@ -253,7 +254,6 @@
       });
     });
 
-    // Friend mode disables AI
     document.getElementById('btnFriend').addEventListener('click',()=>{
       const s = loadSettings(); s.aiEnabled = false; saveSettings(s);
     });

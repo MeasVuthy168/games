@@ -1,112 +1,72 @@
-// js/engine.worker.js  — UCI wrapper for Fairy-Stockfish (Ouk Chatrang)
-// Works with either a factory-style ESM build or a worker-compatible script.
-// It will auto-fallback to a nested Worker proxy if no factory export exists.
+/* engine.worker.js — module worker that wraps Fairy-Stockfish legacy worker
+   Files expected (same origin):
+   - engine/fairy-stockfish.js      (vendor, classic worker capable)
+   - engine/fairy-stockfish.wasm    (next to the JS)
+   - engine/fairy-stockfish.factory.js (this repo: ESM shim below)
+*/
 
-let mode = 'boot';
-let engine = null;        // factory object OR nested worker
+let eng = null;           // engine bridge { postMessage, addMessageListener, terminate }
 let ready = false;
+const queue = [];
+const log = (t) => postMessage({ type: 'uci', line: t });
+const note = (t) => postMessage({ type: 'note', line: t });
 
-const WRAP_URL = new URL('../engine/fairy-stockfish.js', import.meta.url).href;
-const WASM_URL = new URL('../engine/fairy-stockfish.wasm', import.meta.url).href;
-
-function note(s){ try{ postMessage({ type:'uci', line:`[WORKER] ${s}` }); }catch{} }
-function emit(line){ try{ postMessage({ type:'uci', line }); }catch{} }
-
-// Forward a UCI command to the active engine (factory or nested)
-function forward(cmd){
-  if(!engine){ return; }
-  if(mode==='factory'){
-    // FairyStockfish factory object uses postMessage(string)
-    engine.postMessage(cmd);
-  }else{
-    // nested Worker: just relay
-    engine.postMessage(cmd);
-  }
+function send(cmd){
+  if(!eng){ queue.push(cmd); return; }
+  eng.postMessage(cmd);
 }
 
-// Try to init as ESM factory first; fallback to nested worker if not found
+// Handle commands from main thread
+onmessage = (e) => {
+  const { cmd, _selftest } = e.data || {};
+  if (_selftest){
+    // Simple self test: ask bestmove on a fixed FEN
+    note('[WORKER] Self-test: requesting bestmove…');
+    send('ucinewgame');
+    send('position fen rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1');
+    send('go movetime 600');
+    return;
+  }
+  if (cmd) send(cmd);
+};
+
+// Boot
 (async function boot(){
-  note('Booting…');
-  note('Loading WASM wrapper: ' + WRAP_URL);
-  note('WASM URL: ' + WASM_URL);
-
   try{
-    // Load as ESM
-    const mod = await import(/* @vite-ignore */ WRAP_URL);
-    // Typical emscripten builds export a function named Stockfish/FairyStockfish/Module
-    const factory =
-      (typeof mod?.default === 'function' && mod.default) ||
-      (typeof mod?.FairyStockfish === 'function' && mod.FairyStockfish) ||
-      (typeof mod?.Stockfish === 'function' && mod.Stockfish) ||
-      null;
+    note('[WORKER] Booting…');
 
-    if (!factory){
-      note('Wrapper loaded as ES module, but no factory export found — switching to nested worker mode…');
-      return startNestedWorker();
-    }
+    // Dynamically import the ESM shim that returns a classic-worker bridge
+    const { FairyStockfish } = await import('../engine/fairy-stockfish.factory.js');
 
-    mode = 'factory';
-    note('Factory export detected. Initializing engine…');
-
-    engine = await factory({
-      locateFile: (p) => (p.endsWith('.wasm') ? WASM_URL : p)
+    // Create the engine (it internally spawns classic worker: fairy-stockfish.js)
+    note('[WORKER] Loading legacy engine via factory shim…');
+    eng = await FairyStockfish({
+      wasmPath: new URL('../engine/fairy-stockfish.wasm', self.location.href).href
     });
 
-    // Some builds add an event pipe:
-    if (engine.addMessageListener) {
-      engine.addMessageListener((line)=> emit(line));
-    } else if (engine.onmessage === undefined && engine.postMessage) {
-      // emulate addMessageListener if only postMessage exists (rare)
-      // No way to subscribe -> nothing to do here; most builds have addMessageListener
-    }
+    // Pipe engine -> out
+    eng.addMessageListener((line) => {
+      // Make sure everything shows in your debug console
+      postMessage({ type: 'uci', line });
+    });
 
-    // Kick standard UCI init for variant
-    forward('uci');
-    forward('setoption name UCI_Variant value Ouk Chatrang');
-    // Optional counting rule if supported by your build:
-    forward('setoption name CountingRule value cambodian');
-    forward('isready');
+    // Initialize UCI + variant (Ouk Chatrang)
+    send('uci');
+    // Some builds only accept setoption after "uci", but we can send early safely
+    send('setoption name UCI_Variant value Ouk Chatrang');
+    // If your build recognizes a Cambodian counting rule name, keep it; otherwise harmless
+    send('setoption name CountingRule value cambodian');
+    send('isready');
 
     ready = true;
-    note('Engine ready (factory mode).');
-  }catch(e){
-    note('ESM/factory init failed: ' + (e?.message||e));
-    startNestedWorker();
+    while (queue.length) eng.postMessage(queue.shift());
+
+    note('[WORKER] Engine ready (legacy classic worker bridged).');
+  } catch (err){
+    note('[WORKER] FATAL: Unable to initialize engine factory shim.');
+    log(`[WORKER] ERROR: ${err?.message || err}`);
   }
 })();
 
-function startNestedWorker(){
-  try{
-    mode = 'nested';
-    // Start wrapper as a dedicated worker (most stockfish/FSF builds support this)
-    engine = new Worker(WRAP_URL);
-    engine.onmessage = (e) => {
-      // Fairy-Stockfish worker posts plain strings (UCI lines) or {data:'...'}
-      const d = e?.data;
-      const line = (typeof d === 'string') ? d
-                 : (typeof d?.data === 'string') ? d.data
-                 : null;
-      if (line) emit(line);
-    };
-    // Standard UCI init sequence
-    engine.postMessage('uci');
-    engine.postMessage('setoption name UCI_Variant value Ouk Chatrang');
-    engine.postMessage('setoption name CountingRule value cambodian');
-    engine.postMessage('isready');
-
-    ready = true;
-    note('Nested worker mode engaged (JS acts as UCI engine).');
-    note('Engine ready (nested worker mode).');
-  }catch(e){
-    note('Nested worker init failed: ' + (e?.message||e));
-  }
-}
-
-// Messages from the page
-onmessage = (e) => {
-  const { cmd } = e.data || {};
-  if (typeof cmd === 'string'){
-    if(!ready) note('Command queued before ready: ' + cmd);
-    forward(cmd);
-  }
-};
+// Cleanup (optional, if your app ever terminates the worker)
+self.addEventListener('close', ()=> { try{ eng?.terminate?.(); }catch{} });

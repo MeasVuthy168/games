@@ -1,9 +1,12 @@
 // js/ai.js — Fast Khmer Chess AI (ID + TT + Pruning + Levels + Book)
-// Master level uses WASM pro engine (Makruk) via engine-pro.js
+// Master level uses WASM pro engine (Makruk/Ouk Chatrang) via engine-pro.js
 
-// --- NEW IMPORTS (served as ES modules) ---
+// --- IMPORTS ---
 import { getEngineBestMove } from './engine-pro.js';
 import { toFen } from './game.js';
+
+// Small logger to your debug panel if available
+const log = (s) => { try{ window.dbgLog?.(`[AI] ${s}`); }catch{} };
 
 // ---------------------------------------------------------------------
 // Public API (unchanged to callers):
@@ -385,38 +388,56 @@ async function chooseAIMove_Local(game, opts={}){
 
 /* ============================== Public API ======================= */
 
-export async function chooseAIMove(game, opts={}){
-  const level   = opts.level || 'Medium';
-  const aiColor = opts.aiColor || game.turn;
-
-  // Master → WASM Pro (Makruk)
-  if (level === 'Master'){
-    try{
-      const fen = toFen(game);
-      const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
-      const mv = uciToMove(uci);
-      if (mv && game.legalMoves(mv.from.x, mv.from.y).some(m => m.x===mv.to.x && m.y===mv.to.y)){
-        return mv;
-      }
-      // Fallback if engine returns an illegal/unknown move
-      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-    }catch{
-      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-    }
-  }
-
-  // Easy/Medium/Hard → local
-  return await chooseAIMove_Local(game, opts);
-}
-
 function uciToMove(uci){
   if (!uci || uci.length < 4) return null;
+  if (uci === '0000') return null; // explicit guard
   const fx = uci.charCodeAt(0) - 97;
   const fy = 8 - (uci.charCodeAt(1) - 48);
   const tx = uci.charCodeAt(2) - 97;
   const ty = 8 - (uci.charCodeAt(3) - 48);
   if (fx<0||fx>7||fy<0||fy>7||tx<0||tx>7||ty<0||ty>7) return null;
   return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+}
+
+export async function chooseAIMove(game, opts={}){
+  const level   = opts.level || 'Medium';
+
+  // Master → WASM Pro
+  if (level === 'Master'){
+    try{
+      const fen = toFen(game);
+      log(`Master request → movetime=600ms, FEN=${fen}`);
+      const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
+
+      if (!uci || typeof uci !== 'string' || uci === '0000' || uci.length < 4){
+        log(`Pro engine returned invalid UCI (${uci}); fallback → Hard`);
+        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+      }
+
+      const mv = uciToMove(uci);
+      if (!mv){
+        log(`Parsed move invalid (${uci}); fallback → Hard`);
+        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+      }
+
+      // Validate against current legal moves
+      const legals = game.legalMoves(mv.from.x, mv.from.y);
+      const ok = legals.some(m => m.x===mv.to.x && m.y===mv.to.y);
+      if (!ok){
+        log(`Pro move not legal (${uci}); fallback → Hard`);
+        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+      }
+
+      log(`Pro bestmove accepted: ${uci}`);
+      return mv;
+    }catch(e){
+      log(`Pro engine error: ${e?.message||e}. Fallback → Hard`);
+      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+    }
+  }
+
+  // Easy/Medium/Hard → local
+  return await chooseAIMove_Local(game, opts);
 }
 
 export function setAIDifficulty(level){

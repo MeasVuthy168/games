@@ -1,78 +1,109 @@
-// engine.worker.js — MODULE worker (not classic)
-// Loads Fairy-Stockfish as an ES module and supports multiple export styles.
+/* engine.worker.js — UCI worker wrapper for Fairy-Stockfish (Ouk Chatrang)
+   Loads both ESM and classic builds, detects multiple factory names,
+   and wires stdout to postMessage.
 
-postMessage({ note: 'Worker booting…' });
+   Expected files (relative to /games/):
+   - engine/fairy-stockfish.js
+   - engine/fairy-stockfish.wasm
+*/
 
-// Resolve and import the engine module relative to this worker file
-const engineURL = new URL('../engine/fairy-stockfish.js', import.meta.url);
+let engine = null;
+let loadPromise = null;
+const pending = [];
 
-let EngineFactory = null;
-let mod = null;
+// small logger into the main page debug console
+function note(msg){ postMessage({ type:'uci', line: `[WORKER] ${msg}` }); }
 
-async function loadEngineFactory(){
-  postMessage({ note: `Loading WASM wrapper: ${engineURL}` });
-  const m = await import(engineURL);
+function wasmURL(){ return new URL('../engine/fairy-stockfish.wasm', self.location).href; }
+function jsURL(){   return new URL('../engine/fairy-stockfish.js',  self.location).href; }
 
-  // Try common shapes: default, FairyStockfish, Stockfish, createEngine
-  const cand =
-    m?.default ||
-    m?.FairyStockfish ||
-    m?.Stockfish ||
-    m?.createEngine ||
-    null;
+async function loadEngine(){
+  note('Booting…');
+  const wrapURL = jsURL();
+  const wURL    = wasmURL();
+  note(`Loading WASM wrapper: ${wrapURL}`);
+  note(`WASM URL: ${wURL}`);
 
-  if (!cand) {
-    // Some UMD builds set global on self; check just in case
-    // (In module workers, the global is 'self' too.)
-    // eslint-disable-next-line no-undef
-    if (typeof self !== 'undefined' && typeof self.FairyStockfish === 'function') {
-      return self.FairyStockfish;
+  let mod;
+  // Try as ES module first
+  try{
+    mod = await import(/* @vite-ignore */ wrapURL);
+    note('Wrapper loaded as ES module.');
+  }catch(e){
+    note(`ESM import failed (${e?.message || e}). Trying classic importScripts…`);
+    try{
+      // Classic script defines globals on self
+      importScripts(wrapURL);
+      mod = self;
+      note('Wrapper loaded via classic importScripts.');
+    }catch(e2){
+      throw new Error(`Failed to load fairy-stockfish.js: ${e2?.message || e2}`);
     }
+  }
+
+  // Detect the factory function under common names
+  const factory = (
+    mod?.default ||
+    mod?.FairyStockfish ||
+    mod?.Stockfish ||
+    self.FairyStockfish ||
+    self.Stockfish
+  );
+
+  if (typeof factory !== 'function'){
     throw new Error('Could not find engine factory export on fairy-stockfish.js');
   }
-  return cand;
+
+  // Instantiate the engine object
+  const inst = await factory({
+    locateFile: (p) => (p.endsWith('.wasm') ? wURL : p)
+  });
+
+  // Wire output -> main thread
+  if (typeof inst.addMessageListener === 'function'){
+    inst.addMessageListener((line)=> postMessage({ type:'uci', line }));
+  } else if (typeof inst.onmessage === 'function'){
+    // Some builds expose onmessage setter
+    const old = inst.onmessage;
+    inst.onmessage = (line)=> {
+      try{ postMessage({ type:'uci', line }); }catch{}
+      if (old) old(line);
+    };
+  } else if (typeof inst.addEventListener === 'function'){
+    inst.addEventListener('message', (e)=> postMessage({ type:'uci', line: e.data }));
+  }
+
+  engine = inst;
+
+  // Variant + options
+  send('uci');
+  send('setoption name UCI_Variant value Ouk Chatrang');
+  // If the build supports this, good; if not, harmless:
+  send('setoption name CountingRule value cambodian');
+  send('isready');
+
+  // Flush any queued commands sent before ready
+  while (pending.length) inst.postMessage(pending.shift());
+
+  note('Engine ready.');
 }
 
-(async () => {
-  try{
-    EngineFactory = await loadEngineFactory();
+function send(cmd){
+  if (engine) engine.postMessage(cmd);
+  else pending.push(cmd);
+}
 
-    // Instantiate; pass locateFile so the .wasm path resolves correctly
-    mod = await EngineFactory({
-      locateFile: (p) => p.endsWith('.wasm') ? '../engine/fairy-stockfish.wasm' : p
-    });
-
-    // Pipe engine stdout -> main thread
-    if (typeof mod.addMessageListener === 'function'){
-      mod.addMessageListener((line) => postMessage({ type:'uci', line }));
-    } else {
-      // Some builds echo via onmessage-like handler; try a fallback tap
-      const orig = mod.onmessage;
-      mod.onmessage = (e)=>{ try{ postMessage({ type:'uci', line:String(e.data||e) }); }catch{}; orig?.(e); };
-    }
-
-    // Init UCI
-    postMessage({ note: 'Sending UCI init…' });
-    mod.postMessage?.('uci');
-
-    // Variant: Makruk (Thai/Khmer family). If your build supports "ouk chatrang", use that string instead.
-    mod.postMessage?.('setoption name UCI_Variant value makruk');
-
-    // If your build has it you can enable: counting rule etc. (else skip to avoid noise)
-    // mod.postMessage?.('setoption name CountingRule value cambodian');
-
-    mod.postMessage?.('isready');
-  }catch(err){
-    postMessage({ note:`Init failed: ${err?.message || String(err)}` });
-  }
-})();
-
-onmessage = (e) => {
+self.onmessage = (e) => {
   const { cmd } = e.data || {};
-  if (!mod || !cmd) return;
-  try{
-    mod.postMessage(cmd);
-  }catch(err){
-    postMessage({ note:`postMessage error: ${String(err)}` });
+  if (!loadPromise){
+    loadPromise = loadEngine().catch(err=>{
+      note(`ERROR: ${err?.message || err}`);
+    });
   }
+  if (cmd) send(cmd);
 };
+
+// Kick load immediately so first command doesn’t race
+loadPromise = loadEngine().catch(err=>{
+  note(`ERROR: ${err?.message || err}`);
+});

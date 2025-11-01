@@ -1,65 +1,52 @@
-// js/ai.js — Khmer/Makruk-friendly AI (Fast + Smarter)
-// - Opening book (optional, Khmer-leaning)
-// - Transposition table (TT)
-// - Quiescence search (captures only) to sharpen tactics
-// - Killer / History heuristics
-// - MVV-LVA capture ordering + king-safe capture bias
+// js/ai.js — Khmer Chess AI (capture-smart + levels + opening book)
 //
-// Public API:
-//   chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState })
-//   setAIDifficulty(level)
-//   pickAIMove (alias)
+// Public API (unchanged):
+//   - chooseAIMove(game, { level:'Easy'|'Medium'|'Hard'|'Master', aiColor:'w'|'b', countState })
+//   - setAIDifficulty(level)
+//   - pickAIMove (alias)
 //
-// Expects your Game API:
-//   game.at(x,y) -> {t:'R|N|B|Q|P|K' or Khmer aliases T,H,G,D,F,S, c:'w'|'b'} | null
+// Works with your Game API (from game.js):
+//   game.at(x,y) -> { t:'K,Q,B,R,N,P' (or T,H,G,D,F,S), c:'w'|'b' } | null
 //   game.turn    -> 'w'|'b'
 //   game.legalMoves(x,y) -> [{x,y}, ...]
-//   game.move({x,y},{x,y}) -> { ok:true, status:{state:'ongoing|check|checkmate|stalemate'} }
+//   game.move({x,y},{x,y}) -> { ok:true, status:{state:'ongoing'|'check'|'checkmate'|'stalemate'} }
 //   game.undo()
-//   game.squareAttacked(x,y,byColor)
-//   game.history -> [{from:{x,y}, to:{x,y}}...]
+//   game.squareAttacked(x,y,byColor) -> boolean
+//   game.history -> [{from:{x,y}, to:{x,y}}, ...]
+//
+// ---------------------------------------------------------------------
 
-/* ------------------- Config & toggles ------------------- */
+/* =========================== Config / Levels =========================== */
+
+// Opening book (optional). If you don't have a book, it's safe.
 const USE_BOOK = true;
-const BOOK_URL = 'assets/book-khmer.json';
+const BOOK_URL = 'assets/book-khmer.json';  // or your book-mini.json
 
-// Depth & node caps per difficulty
-const SEARCH_DEPTH = { Easy: 2,  Medium: 3,  Hard: 4 };
-const NODE_LIMIT   = { Easy: 6000, Medium: 16000, Hard: 36000 };
+// Difficulty presets
+const SEARCH_DEPTH = { Easy: 2, Medium: 3, Hard: 4, Master: 5 };
+const NODE_LIMIT   = { Easy: 6000, Medium: 16000, Hard: 30000, Master: 45000 };
 
-// Quiescence caps
-const Q_DEPTH_MAX   = 6;
-const Q_NODE_LIMIT  = 20000;
+// Soft randomness: makes Easy/Medium a bit human-like
+const TEMP_BY_LEVEL = { Easy: 0.50, Medium: 0.25, Hard: 0.0, Master: 0.0 };
 
-/* ---------------- Piece values / mapping ---------------- */
-const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };           // used for MVV
-const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K',
-                   T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };     // Khmer aliases
+/* ======================= Values / Type Normalization =================== */
 
-// Repetition discouragers
-const REP_SHORT_WINDOW = 8, REP_SOFT_PENALTY = 15, REP_HARD_PENALTY = 220;
+const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };
+const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
+const ATTACKER_VAL = { P:100, N:320, B:330, R:500, Q:900, K:1000 };
 
-// Progress incentives
-const BONUS_CAPTURE=30, BONUS_CHECK=18, BONUS_PUSH=6, PENAL_IDLE=8;
-
-// Counting-draw awareness
-const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
-
-// MVV-LVA attacker weights (Least Valuable Attacker prioritized)
-const ATTACKER_VAL = { K: 900, Q: 500, R: 400, B: 300, N: 300, P: 100 };
-
-// Helpers
 function normType(t){ return TYPE_MAP[t] || t; }
-function opp(c){ return c==='w' ? 'b' : 'w'; }
 
-/* ---------------- Opening book (optional) ---------------- */
-let _bookPromise=null;
+/* =========================== Opening book ============================== */
+
+let _bookPromise = null;
 async function loadOpeningBook(){
   if (!USE_BOOK) return {};
   if (_bookPromise) return _bookPromise;
   _bookPromise = fetch(BOOK_URL).then(r=>r.json()).catch(()=> ({}));
   return _bookPromise;
 }
+
 function toAlg(sq){ return String.fromCharCode(97+sq.x) + String(8 - sq.y); }
 function historyKeyFromGame(game){
   if (!Array.isArray(game.history) || !game.history.length) return '';
@@ -71,27 +58,35 @@ function parseBookMove(uci, game){
   const tx=uci.charCodeAt(2)-97, ty=8-(uci.charCodeAt(3)-48);
   if (fx|fy|tx|ty & ~7) return null;
   const legals = game.legalMoves(fx, fy);
-  for (const m of legals) if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+  for (const m of legals){
+    if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+  }
   return null;
 }
 
-/* --------------------- Eval utilities -------------------- */
+/* =============================== Eval ================================== */
+
+// light material + side-to-move mobility cap
 function materialSide(game, side){
   let s=0;
-  for (let y=0;y<8;y++) for (let x=0;x<8;x++){
-    const p = game.at(x,y); if (!p || p.c!==side) continue;
-    const tt = normType(p.t); if (tt!=='K') s += VAL[tt]||0;
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p=game.at(x,y);
+      if (!p || p.c!==side) continue;
+      const tt=normType(p.t);
+      if (tt!=='K') s += VAL[tt]||0;
+    }
   }
   return s;
 }
 function materialEval(game){ return materialSide(game,'w') - materialSide(game,'b'); }
 
-// Light mobility with cap (speed)
 function mobilityEval(game){
   let moves=0, cap=28;
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
-      const p = game.at(x,y); if(!p || p.c!==game.turn) continue;
+      const p=game.at(x,y);
+      if(!p || p.c!==game.turn) continue;
       moves += game.legalMoves(x,y).length;
       if (moves>=cap) return (game.turn==='w'?+1:-1)*cap;
     }
@@ -111,9 +106,15 @@ function posKey(game){
   return out + ' ' + game.turn;
 }
 
+/* ====================== Repetition discourager ========================= */
+
+const REP_SHORT_WINDOW = 8;
+const REP_SOFT_PENALTY = 15;
+const REP_HARD_PENALTY = 220;
+
 class RepTracker{
   constructor(){ this.list=[]; }
-  push(k){ this.list.push(k); if(this.list.length>128) this.list.shift(); }
+  push(k){ this.list.push(k); if (this.list.length>128) this.list.shift(); }
   pop(){ this.list.pop(); }
   softCount(k){
     let n=0, s=Math.max(0,this.list.length-REP_SHORT_WINDOW);
@@ -124,15 +125,15 @@ class RepTracker{
 }
 function repetitionPenalty(rep, key){
   let p=0, soft=rep.softCount(key);
-  if (soft>0) p -= REP_SOFT_PENALTY*soft;
+  if (soft>0) p -= REP_SOFT_PENALTY * soft;
   if (rep.wouldThreefold(key)) p -= REP_HARD_PENALTY;
   return p;
 }
 
-function moveDeltaBonus(game, mv, captured, gaveCheck){
-  let b=0; if(captured) b+=BONUS_CAPTURE; if(gaveCheck) b+=BONUS_CHECK;
-  if (mv.isPawnPush) b+=BONUS_PUSH; if(!b) b-=PENAL_IDLE; return b;
-}
+/* ========================= Counting-draw hooks ========================= */
+// (kept for compatibility with your countState UI)
+const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
+
 function countingAdjust(aiColor, countState, captured, matLead){
   if (!countState?.active) return 0;
   let adj=0, aiOwns=(countState.side===aiColor);
@@ -146,129 +147,84 @@ function countingAdjust(aiColor, countState, captured, matLead){
   return adj;
 }
 
-/* --------------- Attack check (ordering aid) --------------- */
-function isSquareCurrentlyAttacked(game, x, y, byColor){
-  try { return !!game.squareAttacked(x, y, byColor); } catch { return false; }
+/* ============================ Move gen ================================= */
+
+function centerBias(sq){
+  const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y);
+  return 8 - (cx+cy);
 }
 
-/* --------------------- Move generation -------------------- */
-function centerBiasVal(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
-
-/** Strongly orders captures (MVV-LVA), rewards safe king captures, and biases center/pawn push. */
+// Build full moves with capture annotations (for ordering)
 function generateMoves(game){
-  const out = [];
-  const side = game.turn;
-  const oppSide = opp(side);
-
-  for (let y=0; y<8; y++){
-    for (let x=0; x<8; x++){
-      const p = game.at(x,y);
-      if (!p || p.c !== side) continue;
-
-      const pt = normType(p.t);
-      const legals = game.legalMoves(x,y);
-
+  const out=[];
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p=game.at(x,y);
+      if(!p || p.c!==game.turn) continue;
+      const tt=normType(p.t);
+      const legals=game.legalMoves(x,y);
       for (const m of legals){
-        const tgt = game.at(m.x, m.y);
-        const isCapture = !!tgt;
-        const tgtType   = isCapture ? normType(tgt.t) : null;
-
-        let score = 0;
-
-        if (isCapture){
-          const mvv = VAL[tgtType] || 0;
-          const lva = ATTACKER_VAL[pt] || 0;
-          score += 10000 + (mvv * 10) - lva;
-
-          const defended = isSquareCurrentlyAttacked(game, m.x, m.y, oppSide);
-          score += defended ? -120 : +140;
-
-          if (pt === 'K'){ // king capture policy
-            score += defended ? -600 : +500;
-          }
-        } else {
-          score += centerBiasVal({x:m.x, y:m.y});
-          if (pt === 'P' && m.y !== y) score += 8; // pawn push
-        }
-
+        const target=game.at(m.x,m.y);
         out.push({
-          from:{x,y}, to:{x:m.x, y:m.y},
-          captureVal: isCapture ? (VAL[tgtType] || 0) : 0,
-          isPawnPush: (pt === 'P' && m.y !== y),
-          orderScore: score
+          from:{x,y}, to:{x:m.x,y:m.y},
+          attackerType: tt,
+          isCapture: !!target,
+          targetType: target ? normType(target.t) : null,
+          mvv: target ? (VAL[normType(target.t)]||0) : 0,
+          lva: ATTACKER_VAL[tt] || 0,
+          center: centerBias(m)
         });
       }
     }
   }
-
-  out.sort((a,b)=> b.orderScore - a.orderScore);
   return out;
 }
 
-function generateCaptures(game){
-  const out = [];
-  const side = game.turn;
-  const oppSide = opp(side);
+/* ====================== Heuristic move ordering ======================== */
 
-  for (let y=0; y<8; y++){
-    for (let x=0; x<8; x++){
-      const p = game.at(x,y);
-      if (!p || p.c !== side) continue;
+// Stronger capture desire + lower fear penalty for defended squares
+function moveScoreHeuristic(game, mv){
+  let score = 0;
 
-      const pt = normType(p.t);
-      const legals = game.legalMoves(x,y);
+  // Base: prefer captures (MVV - LVA), then center
+  if (mv.isCapture){
+    score += 12000 + mv.mvv*12 - mv.lva; // big bias to consider captures
+  }else{
+    score += mv.center; // small center tiebreak
+  }
 
-      for (const m of legals){
-        const tgt = game.at(m.x, m.y);
-        if (!tgt) continue;
+  // Square safety: if destination is defended by opponent, reduce—BUT not too much
+  const opp = (game.turn==='w'?'b':'w');
+  const defended = game.squareAttacked(mv.to.x, mv.to.y, opp);
 
-        const vt  = normType(tgt.t);
-        let score = 0;
+  if (mv.isCapture){
+    // Captures: reduce fear a bit for Khmer tempo
+    score += defended ? -60 : +220;
 
-        const mvv = VAL[vt] || 0;
-        const lva = ATTACKER_VAL[pt] || 0;
-        score += 10000 + (mvv * 10) - lva;
-
-        const defended = isSquareCurrentlyAttacked(game, m.x, m.y, oppSide);
-        score += defended ? -120 : +140;
-        if (pt === 'K') score += defended ? -600 : +500;
-
-        out.push({
-          from:{x,y}, to:{x:m.x, y:m.y},
-          captureVal: VAL[vt] || 0,
-          isPawnPush: (pt === 'P' && m.y !== y),
-          orderScore: score
-        });
-      }
+    // King capture policy
+    if (mv.attackerType === 'K'){
+      if (mv.mvv > 200) score += 400;          // big reward if king can take big piece
+      else score += defended ? -200 : +200;    // discourage only if clearly unsafe
     }
+  }else{
+    // Non-captures: mild penalty if walking into fire
+    score += defended ? -20 : +10;
   }
 
-  out.sort((a,b)=> b.orderScore - a.orderScore);
-  return out;
+  return score;
 }
 
-/* ----------------- TT / killers / history ----------------- */
-const TT = new Map();  // key -> {depth, score, flag, move}
-const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
-const killers = Array.from({length:64}, ()=>[null,null]);
-const historyScore = Object.create(null);
-
-function recordKiller(ply, mv){
-  const arr = killers[ply%64];
-  if (!arr[0] || !sameMove(arr[0], mv)){
-    arr[1]=arr[0]; arr[0]=mv;
+function orderMoves(game, moves){
+  // Compute heuristic score **in current node perspective**
+  for (const mv of moves){
+    mv._hs = moveScoreHeuristic(game, mv);
   }
-}
-function addHistory(mv, depth){
-  const k = `${mv.from.x}${mv.from.y}${mv.to.x}${mv.to.y}`;
-  historyScore[k] = (historyScore[k]||0) + depth*depth;
-}
-function historyValue(mv){
-  const k = `${mv.from.x}${mv.from.y}${mv.to.x}${mv.to.y}`;
-  return historyScore[k]||0;
+  moves.sort((a,b)=> b._hs - a._hs);
+  return moves;
 }
 
-/* ----------------- Make / undo helpers ----------------- */
+/* ================================ Search =============================== */
+
 function make(game,m){ return game.move(m.from,m.to); }
 function undo(game){ game.undo(); }
 
@@ -276,6 +232,8 @@ function evalLeaf(game, rep, countState, aiColor){
   const mat = materialEval(game);
   const mob = mobilityEval(game);
   let score = mat + mob + repetitionPenalty(rep, posKey(game));
+
+  // nudge counting-draw if AI owns it and is ahead (same as before)
   const lead = (aiColor==='w' ? mat : -mat);
   if (countState?.active && lead>0 && countState.side===aiColor){
     const near = Math.max(0, 6 - (countState.remaining||0));
@@ -284,30 +242,7 @@ function evalLeaf(game, rep, countState, aiColor){
   return score;
 }
 
-/* -------------------- Quiescence search -------------------- */
-function quiesce(game, alpha, beta, color, aiColor, rep, qNodes, qDepth=0){
-  if (qNodes.count++ > Q_NODE_LIMIT || qDepth>Q_DEPTH_MAX) return color * evalLeaf(game, rep, null, aiColor);
-
-  let stand = color * evalLeaf(game, rep, null, aiColor);
-  if (stand >= beta) return beta;
-  if (stand > alpha) alpha = stand;
-
-  const caps = generateCaptures(game);
-  for (const mv of caps){
-    const res = make(game, mv);
-    if(!res?.ok){ undo(game); continue; }
-
-    const score = -quiesce(game, -beta, -alpha, -color, aiColor, rep, qNodes, qDepth+1);
-
-    undo(game);
-    if (score >= beta) return beta;
-    if (score > alpha) alpha = score;
-  }
-  return alpha;
-}
-
-/* ------------------------- Negamax ------------------------- */
-function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats, ply=0){
+function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats){
   if (stats.nodes++ > budget.limit) return { score: 0, move:null, cutoff:true };
 
   const st = game?.status?.();
@@ -316,131 +251,129 @@ function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budg
     return { score: 0, move:null };
   }
 
-  const key = posKey(game);
-  const ttHit = TT.get(key);
-  if (ttHit && ttHit.depth >= depth){
-    const v = ttHit.score;
-    if (ttHit.flag===TT_EXACT)   return { score:v, move:ttHit.move||null };
-    if (ttHit.flag===TT_LOWER && v > alpha) alpha = v;
-    else if (ttHit.flag===TT_UPPER && v < beta) beta = v;
-    if (alpha >= beta) return { score:v, move:ttHit.move||null };
-  }
-
   if (depth===0){
-    const qNodes={count:0};
-    const v = quiesce(game, alpha, beta, color, aiColor, rep, qNodes, 0);
-    return { score: v, move:null };
+    return { score: color * evalLeaf(game, rep, countState, aiColor), move:null };
   }
 
+  const key = posKey(game);
   rep.push(key);
 
-  let moves = generateMoves(game);
-
-  // If TT move exists, prefer it
-  if (ttHit?.move){
-    moves.sort((a,b)=>{
-      const isA = sameMove(a, ttHit.move), isB = sameMove(b, ttHit.move);
-      if (isA && !isB) return -1; if (isB && !isA) return 1; return 0;
-    });
+  let moves = orderMoves(game, generateMoves(game));
+  if (!moves.length){
+    rep.pop();
+    return { score: color * evalLeaf(game, rep, countState, aiColor), move:null };
   }
 
-  // Apply killers + history, then keep our orderScore as final tiebreak
-  const kArr = killers[ply%64];
-  moves.sort((a,b)=>{
-    const ka = (kArr[0] && sameMove(a,kArr[0])) || (kArr[1] && sameMove(a,kArr[1])) ? 1 : 0;
-    const kb = (kArr[0] && sameMove(b,kArr[0])) || (kArr[1] && sameMove(b,kArr[1])) ? 1 : 0;
-    if (ka !== kb) return kb - ka;
-
-    const ha = historyValue(a), hb = historyValue(b);
-    if (ha !== hb) return hb - ha;
-
-    const oa = (a.orderScore ?? 0), ob = (b.orderScore ?? 0);
-    return ob - oa;
-  });
-
   let best=-Infinity, bestMove=null;
-  let localAlpha = alpha;
 
   for (const mv of moves){
     const before = game.at(mv.to.x, mv.to.y);
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
 
+    // small delta: reward captures/checks + counting awareness
     const mat = materialEval(game);
     const aiLead = (aiColor==='w'?mat:-mat);
-    const delta = moveDeltaBonus(game, mv, !!before, res?.status?.state==='check')
-                + countingAdjust(aiColor, countState, !!before, aiLead);
+    let delta = 0;
+    if (mv.isCapture){
+      delta += 30; // small extra nudge (ordering already did the heavy work)
+      delta += countingAdjust(aiColor, countState, /*captured*/true, aiLead);
+    }
+    if (res?.status?.state==='check') delta += 18;
 
-    const child = negamax(game, depth-1, -beta, -localAlpha, -color, aiColor, rep, countState, budget, stats, ply+1);
-    const childScore = (child.cutoff ? -localAlpha : -(child.score)) + (color * delta);
+    const child = negamax(game, depth-1, -beta, -alpha, -color, aiColor, rep, countState, budget, stats);
+    const childScore = (child.cutoff ? -alpha : -(child.score)) + (color * delta);
 
     undo(game);
 
     if (childScore > best){
       best = childScore; bestMove = mv;
-      if (best > localAlpha) localAlpha = best;
-      if (localAlpha >= beta){
-        if (!before) recordKiller(ply, mv);
-        break;
-      }
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break; // cutoff
     }
   }
 
   rep.pop();
-
-  let flag = TT_EXACT;
-  if      (best <= alpha) flag = TT_UPPER;
-  else if (best >= beta)  flag = TT_LOWER;
-  TT.set(key, { depth, score:best, flag, move:bestMove });
-
-  if (bestMove && !sameMove(bestMove, killers[ply%64][0])) addHistory(bestMove, depth);
-
-  return { score:best, move:bestMove };
+  return { score: best, move: bestMove };
 }
 
-function sameMove(a,b){
-  if(!a||!b) return false;
-  return a.from.x===b.from.x && a.from.y===b.from.y && a.to.x===b.to.x && a.to.y===b.to.y;
+/* ======================= Root selection (temperature) ================== */
+
+function pickByTemperature(items, T){
+  if (!items.length) return null;
+  if (T<=0) return items[0].move;
+  const exps = items.map(m => Math.exp(m.score / Math.max(1,T)));
+  const sum  = exps.reduce((a,b)=>a+b,0);
+  let r = Math.random()*sum;
+  for (let i=0;i<items.length;i++){
+    r -= exps[i];
+    if (r<=0) return items[i].move;
+  }
+  return items[0].move;
 }
 
-/* --------------------------- Public API --------------------------- */
+/* ============================== Public API ============================= */
+
 export async function chooseAIMove(game, opts={}){
   const level      = opts.level || 'Medium';
   const aiColor    = opts.aiColor || game.turn;
   const countState = opts.countState || null;
 
-  // Opening book first (fast, natural starts)
+  // 1) Opening book first (if available)
   try{
     const book = await loadOpeningBook();
     if (book && USE_BOOK){
       const key = historyKeyFromGame(game);
       const cand = book[key];
       if (Array.isArray(cand) && cand.length){
-        // Weighted support: [{m:'e3e4',w:3}, 'd3d4', ...]
-        const list = cand.map(c => (typeof c==='string' ? {m:c,w:1} : c)).filter(c=>c && c.m);
-        const total = list.reduce((a,c)=> a + (c.w||1), 0);
-        let r = Math.random()*total;
-        for (const c of list){
-          r -= (c.w||1);
-          if (r<=0){
-            const mv = parseBookMove(c.m, game);
-            if (mv) return mv;
-            break;
-          }
-        }
+        const pick = cand[Math.floor(Math.random()*cand.length)];
+        const mv = parseBookMove(pick, game);
+        if (mv) return mv;
       }
     }
   }catch{}
 
+  // 2) Engine search
   const depth  = SEARCH_DEPTH[level] ?? 3;
   const budget = { limit: NODE_LIMIT[level] ?? 16000 };
+  const temp   = TEMP_BY_LEVEL[level] ?? 0;
+
   const rep = new RepTracker();
   const stats = { nodes:0 };
-  const { move } = negamax(game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats, 0);
-  return move || null;
+
+  // principal search
+  const { move: principal, score: rootScore } = negamax(
+    game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats
+  );
+  if (!principal) return null;
+
+  // build a small top list for temperature sampling
+  const rootMoves = orderMoves(game, generateMoves(game)).slice(0, 8).map(mv=>{
+    const before = game.at(mv.to.x, mv.to.y);
+    const res = game.move(mv.from, mv.to);
+    if(!res?.ok){ game.undo(); return null; }
+
+    const rep2 = new RepTracker(); rep2.list = rep.list.slice();
+    const stats2 = { nodes:0 };
+    const sub = negamax(game, depth-1, -Infinity, Infinity, -1, aiColor, rep2, countState, budget, stats2);
+    game.undo();
+
+    // include same move heuristic nudge to keep capture aggressiveness
+    const h = moveScoreHeuristic(game, mv);
+    return { move: mv, score: -(sub.score) + (h/20) };
+  }).filter(Boolean).sort((a,b)=> b.score - a.score);
+
+  const picked = pickByTemperature(rootMoves.length?rootMoves:[{move:principal,score:rootScore}], temp) || principal;
+  return picked;
 }
 
 export function setAIDifficulty(level){
-  return { depth: SEARCH_DEPTH[level] ?? 3, nodeLimit: NODE_LIMIT[level] ?? 16000 };
+  return {
+    depth: SEARCH_DEPTH[level] ?? 3,
+    nodeLimit: NODE_LIMIT[level] ?? 16000,
+    temperature: TEMP_BY_LEVEL[level] ?? 0
+  };
 }
+
+// Backward compatibility
 export const pickAIMove = chooseAIMove;

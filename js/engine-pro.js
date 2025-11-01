@@ -1,55 +1,87 @@
-// js/engine-pro.js
-let _w = null;
-let _awaiters = [];
+// js/engine-pro.js — single classic worker controller
+// Provides: getEngineBestMove, setEngineDebugLogger, _debug__peekWorkerURL
 
-function log(s){ window.dbgLog?.(`[ENGINE] ${s}`); }
+let _log = (m)=>console.log(m);
+export function setEngineDebugLogger(fn){ _log = typeof fn==='function' ? fn : _log; }
 
-export function startEngineWorker(){
-  if (_w) return;
-  const url = new URL('./engine.worker.js', import.meta.url).href;
-  log('Starting worker: ' + url + '?v=' + Date.now());
-  _w = new Worker(url, { type: 'module' });
+let _worker = null;
+let _workerURL = null;
+let _readyPinged = false;
 
-  _w.onmessage = (e) => {
-    const { type, line } = e.data || {};
-    if (type !== 'uci' || typeof line !== 'string') return;
+// Resolve worker URL relative to this file (robust on GitHub Pages)
+try {
+  _workerURL = new URL('./engine.worker.js', import.meta.url).href;
+} catch {
+  // Fallback from page location if import.meta.url is unavailable
+  const here = new URL(location.href);
+  _workerURL = new URL('js/engine.worker.js', here).href;
+}
 
-    // Mirror all UCI lines into debug console
-    window.dbgLog?.(`[ENGINE] ${line}`);
+export function _debug__peekWorkerURL(){ return _workerURL; }
 
-    if (line.startsWith('bestmove')) {
-      const parts = line.trim().split(/\s+/);
-      const uci = parts[1] || '';
-      // Guard against bad/placeholder moves
-      if (uci === '0000' || uci.length < 4){
-        log('Received invalid bestmove (' + uci + '), ignoring.');
-        // resolve with null so caller can fallback
-        for (const fn of _awaiters) fn(null);
-      } else {
-        for (const fn of _awaiters) fn(uci);
-      }
-      _awaiters = [];
-    }
+function startWorker(){
+  if (_worker) return;
+  _log(`[ENGINE] Starting worker: ${_workerURL}`);
+  _worker = new Worker(_workerURL); // classic
+  _worker.onmessage = (e)=>{
+    const line = e?.data;
+    if (typeof line === 'string') _log(line);
   };
+  _worker.onerror = (err)=>{
+    _log(`[ENGINE][ERR] Worker error: ${err?.message||String(err)}`, 'err');
+  };
+
+  // quick kick
+  if (!_readyPinged){
+    _readyPinged = true;
+    setTimeout(()=> { try { _worker.postMessage('uci'); } catch{} }, 30);
+    setTimeout(()=> { try { _worker.postMessage('isready'); } catch{} }, 120);
+  }
 }
 
-export function stopEngineWorker(){
-  if (_w){ _w.terminate(); _w = null; }
-  _awaiters = [];
+function send(line){
+  try { _worker && _worker.postMessage(line); } catch {}
 }
 
-export function positionFromFEN(fen){ return `position fen ${fen}`; }
-export function goMoveTime(ms){ return `go movetime ${Math.max(80, ms|0)}`; } // min 80ms
+export async function getEngineBestMove({ fen, movetimeMs=600 }){
+  startWorker();
 
-export function setNewGame(){ _w?.postMessage({ cmd: 'ucinewgame' }); }
-export function setPositionFEN(fen){ _w?.postMessage({ cmd: positionFromFEN(fen) }); }
+  // Drain any old listeners then listen for bestmove
+  return new Promise((resolve, reject)=>{
+    if (!_worker) return reject(new Error('worker not started'));
+    let done = false;
+    const timeout = setTimeout(()=>{
+      if (done) return;
+      done = true;
+      reject(new Error('engine timeout'));
+    }, Math.max(1200, movetimeMs + 800));
 
-export function getEngineBestMove({ fen, movetimeMs = 600 }){
-  return new Promise((resolve) => {
-    startEngineWorker();
-    _awaiters.push((uci)=>resolve(uci));
-    _w.postMessage({ cmd: 'ucinewgame' });
-    _w.postMessage({ cmd: positionFromFEN(fen) });
-    _w.postMessage({ cmd: goMoveTime(movetimeMs) });
+    const onMsg = (e)=>{
+      const line = e?.data;
+      if (typeof line !== 'string') return;
+      // Pass-through to debug console
+      _log(line);
+
+      if (/^bestmove\s+([a-h][1-8][a-h][1-8][qrbn]?)/i.test(line)){
+        const uci = RegExp.$1;
+        if (!done){ done = true; cleanup(); resolve(uci); }
+      }
+      if (/^readyok|uciok|id\s+name/i.test(line)){
+        // Nice to see in logs but not required
+      }
+    };
+
+    const cleanup = ()=>{
+      clearTimeout(timeout);
+      try { _worker?.removeEventListener('message', onMsg); } catch {}
+    };
+
+    _worker.addEventListener('message', onMsg);
+
+    // Send the UCI sequence
+    try { send('ucinewgame'); } catch {}
+    try { send('isready'); } catch {}
+    try { send(`position fen ${fen}`); } catch {}
+    try { send(`go movetime ${Math.max(1, +movetimeMs|0)}`); } catch {}
   });
 }

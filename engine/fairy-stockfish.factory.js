@@ -1,68 +1,92 @@
 /* fairy-stockfish.factory.js — ESM shim that exposes a factory returning a
    bridge to the legacy classic Worker (engine/fairy-stockfish.js).
+   It normalizes command formats for various FSF builds.
 
-   Why: Your vendor file is classic-worker-ready but has **no ESM exports**.
-   This shim lets engine.worker.js (an ESM worker) load it safely and still
-   talk UCI with it.
-
-   Returns:
-     FairyStockfish(options) -> Promise<{
-       postMessage: (cmd:string)=>void,
-       addMessageListener: (fn:(line:string)=>void)=>void,
-       terminate: ()=>void
-     }>
+   Returns a Promise of:
+     {
+       postMessage(cmd:string): void,      // send UCI command
+       addMessageListener(fn): void,       // subscribe to stdout lines
+       terminate(): void
+     }
 */
 
 export async function FairyStockfish(options = {}){
   const wasmURL = options.wasmPath || null;
 
-  // Spawn the legacy classic Worker directly
+  // Spawn vendor worker (classic)
   const workerURL = new URL('./fairy-stockfish.js', import.meta.url);
   const w = new Worker(workerURL, { type: 'classic', name: 'fairy-stockfish-legacy' });
 
-  // If your build supports configuring wasm path via message, do it.
-  // Many stockfish/fairy builds auto-resolve .wasm next to .js, so this is optional.
+  // Hint wasm path (ignored by some builds; harmless if so)
   if (wasmURL){
-    try {
-      // Several ports accept this convention:
-      //   w.postMessage({ type:'wasmPath', path: wasmURL })
-      // If your build ignores it, it's harmless.
-      w.postMessage({ type: 'wasmPath', path: wasmURL });
-    } catch {}
+    try { w.postMessage({ type: 'wasmPath', path: wasmURL }); } catch {}
+    try { w.postMessage({ wasmPath: wasmURL }); } catch {}
   }
 
-  // Bridge: convert Worker 'message' events into plain lines for UCI
+  // Listeners
   const listeners = new Set();
   const addMessageListener = (fn) => { if (typeof fn === 'function') listeners.add(fn); };
 
+  // Normalize outputs to "line" strings
   w.addEventListener('message', (e)=>{
     let line = e?.data;
-    // Some builds send objects; normalize to string if needed
-    if (typeof line === 'object' && line !== null){
-      if (typeof line.line === 'string') line = line.line;
-      else line = JSON.stringify(line);
+
+    // Many ports send raw strings already; keep them
+    if (typeof line === 'string') {
+      for (const fn of listeners) { try{ fn(line); }catch{} }
+      return;
     }
-    if (typeof line !== 'string') return;
-    for (const fn of listeners) { try{ fn(line); }catch{} }
+
+    // Some send objects like { type:'stdout', data:'...' }
+    if (line && typeof line === 'object'){
+      if (typeof line.data === 'string') {
+        for (const fn of listeners) { try{ fn(line.data); }catch{} }
+        return;
+      }
+      // Or { line:'...' }
+      if (typeof line.line === 'string'){
+        for (const fn of listeners) { try{ fn(line.line); }catch{} }
+        return;
+      }
+      // Last resort: show JSON for visibility
+      try {
+        const s = JSON.stringify(line);
+        for (const fn of listeners) { try{ fn(s); }catch{} }
+      } catch {}
+    }
   });
 
-  // Post UCI commands (string form)
-  const postMessage = (cmd) => {
-    if (typeof cmd !== 'string') return;
-    w.postMessage(cmd);
-  };
+  // Robust command sender: try multiple formats many FSF builds accept
+  function postMessage(cmd){
+    if (typeof cmd !== 'string' || !cmd) return;
 
-  // Small hello so your debug console can confirm boot
-  // (This will appear as a normal UCI line on the outer worker)
-  // We mimic a friendly preface:
-  setTimeout(()=> {
+    // 1) Plain string
+    try { w.postMessage(cmd); } catch {}
+
+    // 2) String + newline (some parsers prefer \n)
+    try { w.postMessage(cmd.endsWith('\n') ? cmd : (cmd + '\n')); } catch {}
+
+    // 3) Emscripten-style objects seen in some forks
+    try { w.postMessage({ cmd }); } catch {}
+    try { w.postMessage({ type: 'cmd', cmd }); } catch {}
+    try { w.postMessage({ uci: cmd }); } catch {}
+  }
+
+  // Small hello so you can confirm the shim is alive
+  setTimeout(()=>{
     for (const fn of listeners) { try{ fn('[LEGACY] Classic worker online'); }catch{} }
   }, 0);
+
+  // Optional: kick the engine (harmless if duplicates come later)
+  setTimeout(()=>{
+    // Some builds are passive until first input; this wakes them.
+    try { postMessage('uci'); } catch {}
+  }, 30);
 
   return {
     postMessage,
     addMessageListener,
-    terminate: ()=> { try{ w.terminate(); }catch{} }
+    terminate: ()=>{ try{ w.terminate(); }catch{} }
   };
 }
 

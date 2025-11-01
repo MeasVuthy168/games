@@ -5,8 +5,15 @@
 import { getEngineBestMove } from './engine-pro.js';
 import { toFen } from './game.js';
 
-// Small logger to your debug panel if available
-const log = (s) => { try{ window.dbgLog?.(`[AI] ${s}`); }catch{} };
+// Unified logger → debug panel (prefers __dbglog, then dbgLog, then console)
+const _logFn = (msg, kind) => {
+  if (typeof window !== 'undefined') {
+    if (typeof window.__dbglog === 'function') return window.__dbglog(msg, kind);
+    if (typeof window.dbgLog   === 'function') return window.dbgLog(msg, kind);
+  }
+  return (kind === 'err' ? console.error : console.log)(msg);
+};
+const log = (s, kind) => { try { _logFn(`[AI] ${s}`, kind); } catch { /* noop */ } };
 
 // ---------------------------------------------------------------------
 // Public API (unchanged to callers):
@@ -386,7 +393,7 @@ async function chooseAIMove_Local(game, opts={}){
   return picked;
 }
 
-/* ============================== Public API ======================= */
+/* ====================== Pro engine safe wrapper =================== */
 
 function uciToMove(uci){
   if (!uci || uci.length < 4) return null;
@@ -399,41 +406,54 @@ function uciToMove(uci){
   return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
 }
 
+async function safeGetBestMove(fen, movetimeMs, timeoutMs=1300){
+  // Promise.race for timeout
+  const withTimeout = new Promise((_, rej)=>{
+    setTimeout(()=> rej(new Error('engine timeout')), timeoutMs);
+  });
+  return await Promise.race([ getEngineBestMove({ fen, movetimeMs }), withTimeout ]);
+}
+
+/* ============================== Public API ======================= */
+
 export async function chooseAIMove(game, opts={}){
   const level   = opts.level || 'Medium';
 
-  // Master → WASM Pro
+  // Master → WASM Pro (with timeout + 1 retry)
   if (level === 'Master'){
-    try{
-      const fen = toFen(game);
-      log(`Master request → movetime=600ms, FEN=${fen}`);
-      const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
+    const fen = toFen(game);
+    log(`Master request → movetime=600ms, FEN=${fen}`);
 
-      if (!uci || typeof uci !== 'string' || uci === '0000' || uci.length < 4){
-        log(`Pro engine returned invalid UCI (${uci}); fallback → Hard`);
-        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+    const attempt = async (tag) => {
+      try{
+        const uci = await safeGetBestMove(fen, 600);
+        if (!uci || typeof uci !== 'string' || uci === '0000' || uci.length < 4){
+          throw new Error(`invalid UCI: ${uci}`);
+        }
+        const mv = uciToMove(uci);
+        if (!mv) throw new Error(`parse failed for UCI: ${uci}`);
+        const legals = game.legalMoves(mv.from.x, mv.from.y);
+        if (!legals.some(m => m.x===mv.to.x && m.y===mv.to.y)){
+          throw new Error(`illegal in position: ${uci}`);
+        }
+        log(`${tag} bestmove accepted: ${uci}`);
+        return mv;
+      }catch(e){
+        log(`${tag} error: ${e?.message||e}`, 'err');
+        return null;
       }
+    };
 
-      const mv = uciToMove(uci);
-      if (!mv){
-        log(`Parsed move invalid (${uci}); fallback → Hard`);
-        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-      }
-
-      // Validate against current legal moves
-      const legals = game.legalMoves(mv.from.x, mv.from.y);
-      const ok = legals.some(m => m.x===mv.to.x && m.y===mv.to.y);
-      if (!ok){
-        log(`Pro move not legal (${uci}); fallback → Hard`);
-        return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-      }
-
-      log(`Pro bestmove accepted: ${uci}`);
-      return mv;
-    }catch(e){
-      log(`Pro engine error: ${e?.message||e}. Fallback → Hard`);
-      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+    // First try
+    let mv = await attempt('Pro#1');
+    if (!mv){
+      // One quick retry (helps when worker is cold)
+      mv = await attempt('Pro#2');
     }
+    if (mv) return mv;
+
+    log('Pro engine failed → fallback Hard');
+    return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
   }
 
   // Easy/Medium/Hard → local

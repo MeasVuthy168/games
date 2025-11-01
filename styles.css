@@ -443,3 +443,25 @@ body.ai-thinking #board{
   font-size:1rem; /* ensures same size for both tiles */
   letter-spacing:0;
 }
+
+
+
+
+/* ==== TEMP DEBUG STYLES ==== */
+.debug-log{
+  width:100%;
+  max-height:220px;
+  background:#0b1220;
+  color:#e6f0ff;
+  border-radius:10px;
+  padding:10px 12px;
+  overflow:auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size:.82rem;
+  line-height:1.25rem;
+  box-shadow: var(--shadow);
+}
+.debug-log .ok{ color:#7fffd4 }
+.debug-log .warn{ color:#ffd479 }
+.debug-log .err{ color:#ff7b7b }
+

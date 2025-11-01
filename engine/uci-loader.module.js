@@ -1,25 +1,14 @@
 // engine/uci-loader.module.js
-// ES module loader for Emscripten build: sets locateFile + stdout and imports the engine.
+// ESM loader: sets locateFile and stdout; no auto-kicks.
 
 const params = new URL(self.location.href).searchParams;
 const wasmAbs = params.get('wasm') || '';
 
 self.Module = {
-  locateFile(p) {
-    if (wasmAbs && typeof p === 'string' && p.endsWith('.wasm')) return wasmAbs;
-    return p;
-  },
-  print(line)    { try { self.postMessage(String(line)); } catch {} },
-  printErr(line) { try { self.postMessage(String(line)); } catch {} },
+  locateFile(p){ return (wasmAbs && typeof p==='string' && p.endsWith('.wasm')) ? wasmAbs : p; },
+  print(l){ try{ self.postMessage(String(l)); }catch{} },
+  printErr(l){ try{ self.postMessage(String(l)); }catch{} },
 };
 
-// NOTE: The ESM build should itself wire UCI (stdin via onmessage, stdout via print)
-// If it instead exports a factory, the outer bridge will fallback to the classic shim.
+// Import ESM engine. It may install its own onmessage handler.
 import './fairy-stockfish.js';
-
-// Nudge slow initializers a bit (harmless if already active)
-setTimeout(() => {
-  try { self.postMessage('[ENGINE][MODULE] online'); } catch {}
-  try { self.postMessage('uci'); } catch {}
-  try { self.postMessage('isready'); } catch {}
-}, 0);

@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="js/pwa.js" defer></script>
 
-  <!-- Board textures for CSS variables -->
+  <!-- Board textures -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
@@ -36,7 +36,6 @@
         <div class="turn-wrap">
           <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
-          <!-- Counting Draw UI (initially hidden; JS will ensure/attach) -->
           <span id="count-label" class="count-label" style="display:none;">
             ⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>
           </span>
@@ -98,18 +97,20 @@
       </section>
     </main>
 
-    <!-- ======= TEMP DEBUG (can remove later) ======= -->
+    <!-- ======= TEMP DEBUG ======= -->
     <section class="panel card card-full" id="debug-panel">
       <div class="card-left">
         <div class="card-title">Debug Console</div>
         <div class="card-sub">Worker / WASM / UCI logs (temporary)</div>
       </div>
+
       <div class="card-right" style="display:flex;gap:8px;align-items:center">
         <button id="dbg-run-checks" class="secondary">Run Path Checks</button>
-        <button id="dbg-engine-test" class="secondary">Force Engine Test</button>
+        <button id="dbg-force" class="secondary">Force Engine Test</button>
         <button id="dbg-copy" class="secondary">Copy</button>
         <button id="dbg-clear" class="secondary">Clear</button>
       </div>
+
       <div class="card-body" style="width:100%;padding-top:10px">
         <div style="font-family:monospace;font-size:.9rem;opacity:.85;margin-bottom:6px">
           Worker URL: <span id="dbg-worker-url">—</span>
@@ -161,7 +162,7 @@
   <script type="module">
     import { setEngineDebugLogger, getEngineBestMove, _debug__peekWorkerURL } from './js/engine-pro.js';
 
-    // Bridge engine logs -> debug panel
+    // Bridge engine logs -> debug panel or console
     const dbg = (window.__dbglog)
       ? window.__dbglog
       : (msg, kind) => console[(kind==='err'?'error':'log')](msg);
@@ -171,12 +172,12 @@
     // Show resolved worker URL
     const wurl = _debug__peekWorkerURL();
     const ulel = document.getElementById('dbg-worker-url');
-    if (ulel) ulel.textContent = wurl;
+    if (ulel) ulel.textContent = wurl || '—';
 
-    // Force Engine Test button
-    const btn = document.getElementById('dbg-engine-test');
-    if (btn){
-      btn.addEventListener('click', async ()=>{
+    // Force Engine Test button (new id: dbg-force)
+    const forceBtn = document.getElementById('dbg-force');
+    if (forceBtn){
+      forceBtn.addEventListener('click', async ()=>{
         try{
           dbg('[ENGINE] Forcing self-test…');
           const fen = 'rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1';
@@ -186,6 +187,13 @@
           dbg(`[ENGINE] Self-test error: ${e?.message || e}`, 'err');
         }
       });
+    }
+
+    // Backward support: if old id remains from cache
+    const oldBtn = document.getElementById('dbg-engine-test');
+    if (oldBtn && !forceBtn) {
+      oldBtn.id = 'dbg-force';
+      oldBtn.textContent = 'Force Engine Test';
     }
   </script>
 </body>

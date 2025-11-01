@@ -1,42 +1,34 @@
-// engine-pro.js — WASM/Worker bridge for Master level
-// API: await getEngineBestMove({ fen, movetimeMs })
-
+// js/engine-pro.js
 let _w = null;
 let _awaiters = [];
-let _readyWaiters = [];
-let _readySeen = false;
 
-function log(line){
-  // Forward to your in-page debug console if present:
-  try{
-    const ev = new CustomEvent('uci-log', { detail: line });
-    self?.dispatchEvent?.(ev);
-  }catch{}
-}
+function log(s){ window.dbgLog?.(`[ENGINE] ${s}`); }
 
 export function startEngineWorker(){
   if (_w) return;
   const url = new URL('./engine.worker.js', import.meta.url).href;
+  log('Starting worker: ' + url + '?v=' + Date.now());
   _w = new Worker(url, { type: 'module' });
 
   _w.onmessage = (e) => {
     const { type, line } = e.data || {};
-    if (type !== 'uci') return;
-    if (line) log(`[ENGINE] ${line}`);
+    if (type !== 'uci' || typeof line !== 'string') return;
 
-    const l = String(line || '');
+    // Mirror all UCI lines into debug console
+    window.dbgLog?.(`[ENGINE] ${line}`);
 
-    // Ready detection
-    if (/\breadyok\b/i.test(l)) {
-      _readySeen = true;
-      _readyWaiters.splice(0).forEach(fn => { try{ fn(); }catch{} });
-    }
-
-    // Resolve bestmove lines
-    if (/^bestmove\s+\S+/i.test(l)) {
-      const parts = l.trim().split(/\s+/);
-      const uci = parts[1] || '0000';
-      _awaiters.splice(0).forEach(fn => { try{ fn(uci); }catch{} });
+    if (line.startsWith('bestmove')) {
+      const parts = line.trim().split(/\s+/);
+      const uci = parts[1] || '';
+      // Guard against bad/placeholder moves
+      if (uci === '0000' || uci.length < 4){
+        log('Received invalid bestmove (' + uci + '), ignoring.');
+        // resolve with null so caller can fallback
+        for (const fn of _awaiters) fn(null);
+      } else {
+        for (const fn of _awaiters) fn(uci);
+      }
+      _awaiters = [];
     }
   };
 }
@@ -44,57 +36,20 @@ export function startEngineWorker(){
 export function stopEngineWorker(){
   if (_w){ _w.terminate(); _w = null; }
   _awaiters = [];
-  _readyWaiters = [];
-  _readySeen = false;
 }
 
-export function positionFromFEN(fen){
-  return `position fen ${fen}`;
-}
-export function goMoveTime(ms){
-  return `go movetime ${Math.max(50, ms|0)}`;
-}
-export function setNewGame(){
-  _w?.postMessage({ cmd: 'ucinewgame' });
-}
+export function positionFromFEN(fen){ return `position fen ${fen}`; }
+export function goMoveTime(ms){ return `go movetime ${Math.max(80, ms|0)}`; } // min 80ms
 
-function waitReady(ms=800){
-  if (_readySeen) return Promise.resolve();
-  return new Promise((resolve)=>{
-    const tid = setTimeout(()=> resolve(), ms);
-    _readyWaiters.push(()=>{
-      clearTimeout(tid);
-      resolve();
-    });
+export function setNewGame(){ _w?.postMessage({ cmd: 'ucinewgame' }); }
+export function setPositionFEN(fen){ _w?.postMessage({ cmd: positionFromFEN(fen) }); }
+
+export function getEngineBestMove({ fen, movetimeMs = 600 }){
+  return new Promise((resolve) => {
+    startEngineWorker();
+    _awaiters.push((uci)=>resolve(uci));
+    _w.postMessage({ cmd: 'ucinewgame' });
+    _w.postMessage({ cmd: positionFromFEN(fen) });
+    _w.postMessage({ cmd: goMoveTime(movetimeMs) });
   });
-}
-
-export async function getEngineBestMove({ fen, movetimeMs = 600 }){
-  startEngineWorker();
-
-  // Light wait for readyok; don't block UX too long
-  await waitReady(800);
-
-  // Send commands in both styles just in case the nested-worker wants {cmd:...}
-  _w.postMessage({ cmd: 'ucinewgame' });
-  _w.postMessage('ucinewgame');
-
-  _w.postMessage({ cmd: positionFromFEN(fen) });
-  _w.postMessage(positionFromFEN(fen));
-
-  // Promise for the bestmove
-  const moveP = new Promise((resolve) => {
-    _awaiters.push(resolve);
-  });
-
-  // Kick search
-  const go = goMoveTime(movetimeMs);
-  _w.postMessage({ cmd: go });
-  _w.postMessage(go);
-
-  // Safety timeout: if no bestmove in time, resolve with "0000"
-  const timeoutP = new Promise((resolve)=> setTimeout(()=> resolve('0000'), Math.max(1200, movetimeMs + 500)));
-
-  const uci = await Promise.race([moveP, timeoutP]);
-  return uci;
 }

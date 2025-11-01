@@ -1,63 +1,46 @@
-// js/debug.js
-const $log   = document.getElementById('debug-log');
-const $run   = document.getElementById('dbg-run-checks');
-const $force = document.getElementById('dbg-force');
-const $copy  = document.getElementById('dbg-copy');
-const $clear = document.getElementById('dbg-clear');
-
-function now(){
-  const d=new Date();
-  return `[${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}.${String(d.getMilliseconds()).padStart(3,'0')}]`;
-}
-export function dbgLog(msg){
-  if(!$log) return;
-  const line = `${now()} ${msg}`;
-  $log.textContent += ($log.textContent?'\n':'') + line;
-  $log.scrollTop = $log.scrollHeight;
-  console.log(line);
-}
-window.dbgLog = dbgLog;
-dbgLog('Debug console ready.');
-
-function resolved(href){ return new URL(href, location.href).href; }
-async function head(url){
-  try{ const r=await fetch(url,{method:'GET',cache:'no-store'}); return `${r.status} ${r.ok?'OK':r.statusText}`; }
-  catch(e){ return 'ERROR '+(e?.message||e); }
-}
-
-async function runPathChecks(){
-  dbgLog('Running path checks...');
-  dbgLog(`JS fetch engine/fairy-stockfish.js -> ${await head(resolved('engine/fairy-stockfish.js'))}`);
-  dbgLog(`WASM fetch engine/fairy-stockfish.wasm -> ${await head(resolved('engine/fairy-stockfish.wasm'))}`);
-  dbgLog(`Worker URL resolved to: ${resolved('js/engine.worker.js?v='+Date.now())}`);
-}
-
-async function selfTest(){
-  try{
-    dbgLog('[ENGINE] Forcing self-test…');
-    const { getEngineBestMove, startEngineWorker } = await import('./engine-pro.js');
-    startEngineWorker?.();
-    const fen = 'rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1';
-    dbgLog('[ENGINE] Request bestmove: movetime=600ms, FEN=' + fen.slice(0,80) + '...');
-    const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
-    dbgLog('[ENGINE] bestmove -> ' + (uci || '(null)'));
-  }catch(e){
-    dbgLog('[ENGINE] Self-test error: ' + (e?.message||e));
+// js/debug.js — in-page debug console & buttons
+(function(){
+  const el = document.getElementById('debug-log');
+  const stamp = ()=> new Date().toTimeString().slice(0,8);
+  function write(line, kind){
+    const prefix = `[${stamp()}]`;
+    const out = `${prefix} ${line}\n`;
+    if (el){ el.textContent += out; el.scrollTop = el.scrollHeight; }
+    (kind==='err' ? console.error : console.log)(out);
   }
-}
+  window.__dbglog = write;
+  write('Debug console ready.');
 
-$run?.addEventListener('click', async ()=>{ await runPathChecks(); });
-$force?.addEventListener('click', async ()=>{ await selfTest(); });
-$copy?.addEventListener('click', async ()=>{
-  try{ await navigator.clipboard.writeText($log?.textContent||''); dbgLog('Copied to clipboard.'); }
-  catch(e){ dbgLog('Copy failed: ' + (e?.message||e)); }
-});
-$clear?.addEventListener('click', ()=>{ if($log) $log.textContent=''; });
+  const btnClear = document.getElementById('dbg-clear');
+  const btnCopy  = document.getElementById('dbg-copy');
+  const btnRun   = document.getElementById('dbg-run-checks');
 
-// Listen for UCI echoes from worker (engine-pro also mirrors them)
-window.addEventListener('message', (e)=>{
-  const d=e?.data;
-  if(d && typeof d==='object' && d.type==='uci' && typeof d.line==='string'){
-    dbgLog(`UCI: ${d.line}`);
-  }
-});
+  if (btnClear) btnClear.addEventListener('click', ()=>{ if (el) el.textContent=''; });
+  if (btnCopy)  btnCopy.addEventListener('click', async ()=>{
+    try{ await navigator.clipboard.writeText(el?.textContent||''); write('Copied to clipboard.', 'ok'); }catch(e){ write('Copy failed: '+(e?.message||e),'err'); }
+  });
+
+  if (btnRun) btnRun.addEventListener('click', async ()=>{
+    write('Running path checks...');
+    try{
+      const js = await fetch('engine/fairy-stockfish.js', { cache:'no-store' });
+      write(`JS fetch engine/fairy-stockfish.js -> ${js.status} ${js.ok?'OK':'ERR'}`);
+    }catch(e){ write(`JS fetch failed: ${e?.message||e}`,'err'); }
+
+    try{
+      const wasm = await fetch('engine/fairy-stockfish.wasm', { cache:'no-store' });
+      write(`WASM fetch engine/fairy-stockfish.wasm -> ${wasm.status} ${wasm.ok?'OK':'ERR'}`);
+    }catch(e){ write(`WASM fetch failed: ${e?.message||e}`,'err'); }
+
+    try{
+      // Show resolved absolute worker URL in UI (engine-pro computes it)
+      import('./engine-pro.js').then(mod=>{
+        const url = mod._debug__peekWorkerURL?.() || '(unknown)';
+        write(`Worker URL resolved to: ${url}`);
+        const span = document.getElementById('dbg-worker-url'); if (span) span.textContent = url;
+      });
+    }catch(e){
+      write(`worker URL resolve failed: ${e?.message||e}`, 'err');
+    }
+  });
+})();

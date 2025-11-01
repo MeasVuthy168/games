@@ -1,197 +1,336 @@
-/* js/ai.js — Khmer Chess AI (Easy/Medium/Hard)
-   Requires game.js that exposes:
-     - SIZE, COLORS
-     - game.turn  ('w'|'b')
-     - game.at(x,y) -> { t:'KQRNBP'..., c:'w'|'b' } | null
-     - game.legalMoves(x,y) -> [{x,y}, ...]
-     - game.move(from,to) -> { ok:true, captured?:object, status?:{state:'check'|'checkmate'|'stalemate'} }
-     - game.undo()
-*/
+// js/ai.js — Khmer Chess AI (Easy/Medium/Hard)
+//
+// Plugs into your Game API used in ui.js:
+// - game.at(x,y) -> {t:'R|N|B|Q|P|K' or Khmer variants, c:'w'|'b'} | null
+// - game.turn -> 'w'|'b'
+// - game.legalMoves(x,y) -> [{x,y}, ...]
+// - game.move({x,y},{x,y}) -> { ok:true, status:{state:'normal|check|checkmate|stalemate'}, captured?:... }
+// - game.undo()
+//
+// Call from UI:  chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState:{active,remaining,side} })
+//
+// Notes:
+// - Uses light eval tuned like chess: R≈500, N≈320, B≈330, Q≈900, P≈100
+// - Khmer aliases mapped to R,N,B,Q,P,K where seen (T,H,G,D,F,S)
+// - Temperature sampling: Easy T=0.60, Medium T=0.30, Hard T=0.0
 
-import { SIZE, COLORS } from './game.js';
+/* =========================== Config / Tuning =========================== */
 
-/* ---------- Public API ---------- */
-export const LEVELS = {
-  Easy:   { depth: 0, randomize: 0.80 },          // mostly random
-  Medium: { depth: 2, randomize: 0.15 },          // shallow search + light noise
-  Hard:   { depth: 3, randomize: 0.00 }           // deeper search, no noise
-};
-
-/** Choose the AI move. Returns Promise<{from:{x,y}, to:{x,y}}> or null */
-export function pickAIMove(game, { level = 'Medium', timeMs = 0 } = {}) {
-  const cfg = LEVELS[level] || LEVELS.Medium;
-  const think = () => _choose(game, cfg);
-  // allow UI to breathe
-  return new Promise(res => {
-    if (timeMs > 0) setTimeout(() => res(think()), timeMs);
-    else queueMicrotask(() => res(think()));
-  });
-}
-
-/* ---------- Internals ---------- */
-
-// Map various encodings to Western letters used by the engine
+const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 }; // K excluded from sum
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 
-// Piece values tuned lightly for Khmer chess feel
-const VAL = { K: 20000, Q: 900, R: 500, B: 330, N: 320, P: 100 };
+const SEARCH_DEPTH = { Easy: 2, Medium: 3, Hard: 4 };       // ply
+const TEMP_BY_LEVEL = { Easy: 0.60, Medium: 0.30, Hard: 0 }; // softmax temperature
+const NODE_LIMIT_BY_LEVEL = { Easy: 6_000, Medium: 18_000, Hard: 50_000 }; // safety cap
 
-// Simple piece-square tables (encourage center & advancement)
-// 0..7 from White's view; mirrored for Black when evaluating
-const PST_P = [0, 5, 5, 7, 7, 5, 5, 0];
-const PST_N = [ -5, 0, 5, 7, 7, 5, 0, -5 ];
-const PST_B = [ -2, 1, 2, 3, 3, 2, 1, -2 ];
-const PST_R = [ 2, 3, 3, 4, 4, 3, 3, 2 ];
-const PST_Q = [ 1, 2, 3, 3, 3, 3, 2, 1 ];
-const PST   = { P:PST_P, N:PST_N, B:PST_B, R:PST_R, Q:PST_Q, K:Array(8).fill(0) };
+// Repetition discouragers
+const REP_SHORT_WINDOW = 8;         // last N plies
+const REP_SOFT_PENALTY = 15;        // cp per short-repeat revisit
+const REP_HARD_PENALTY = 220;       // cp if would cause 3-fold
 
-// Limited killer move memory (per-ply)
-const KILLERS = Array(8).fill(null);
+// Progress incentives
+const BONUS_CAPTURE = 30;
+const BONUS_CHECK   = 18;
+const BONUS_PUSH    = 6;    // fish (pawn) push
+const PENAL_IDLE    = 8;
 
-/** Get all legal moves for the side-to-move */
-function enumerateMoves(game) {
-  const mv = [];
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const p = game.at(x, y);
-      if (!p || p.c !== game.turn) continue;
-      const legal = game.legalMoves(x, y);
-      for (const to of legal) mv.push({ from:{x, y}, to });
+// Counting-draw awareness
+const COUNT_BURN_PENALTY = 12;  // idle burn when AI owns counter and is ahead
+const COUNT_RESEED_BONUS  = 80; // capture re-seeding the counter
+const COUNT_URGENT_NEAR   = 3;  // near-zero threshold
+
+/* ============================== Utilities ============================== */
+
+function normType(t){ return TYPE_MAP[t] || t; }
+
+function materialSide(game, side){
+  let s = 0;
+  for (let y=0; y<8; y++){
+    for (let x=0; x<8; x++){
+      const p = game.at(x,y); if(!p || p.c!==side) continue;
+      const tt = normType(p.t);
+      if (tt!=='K') s += VAL[tt]||0;
     }
   }
-  // Move ordering: captures first (simple MVV/LVA proxy via presence of target)
-  mv.sort((a, b) => {
-    const A = game.at(a.to.x, a.to.y);
-    const B = game.at(b.to.x, b.to.y);
-    const ca = A ? 1 : 0, cb = B ? 1 : 0;
-    if (cb !== ca) return cb - ca; // captures first
-    // killer move bonus (if matches previous killer at this ply)
-    return 0;
-  });
-  return mv;
+  return s;
+}
+function materialEval(game){
+  const w = materialSide(game,'w');
+  const b = materialSide(game,'b');
+  return w - b; // positive means White is ahead
 }
 
-/** Static evaluation from White's perspective (positive = good for White) */
-function evaluate(game) {
-  let score = 0;
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
-      const p = game.at(x, y);
-      if (!p) continue;
-      const t = TYPE_MAP[p.t] || p.t;
-      const s = baseValue(t) + pstBonus(t, x, y, p.c);
-      score += (p.c === 'w') ? s : -s;
+function mobilityEval(game){
+  // very light: count legal moves of side-to-move
+  let moves = 0;
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p = game.at(x,y); if(!p || p.c!==game.turn) continue;
+      moves += game.legalMoves(x,y).length;
     }
+  }
+  // scale small to avoid overpowering material
+  return (game.turn==='w' ? +1 : -1) * Math.min(40, moves);
+}
+
+// Quick position key; can be upgraded to Zobrist later
+function posKey(game){
+  const rows = [];
+  for (let y=0; y<8; y++){
+    const r = [];
+    for (let x=0; x<8; x++){
+      const p = game.at(x,y);
+      if(!p) r.push('.');
+      else r.push((p.c==='w'?'w':'b') + (normType(p.t)));
+    }
+    rows.push(r.join(''));
+  }
+  return rows.join('/') + ' ' + game.turn;
+}
+
+class RepTracker{
+  constructor(){ this.list=[]; }
+  push(k){ this.list.push(k); if(this.list.length>128) this.list.shift(); }
+  pop(){ this.list.pop(); }
+  softCount(k){
+    let n=0; for(let i=Math.max(0,this.list.length-REP_SHORT_WINDOW); i<this.list.length; i++){
+      if(this.list[i]===k) n++;
+    }
+    return n;
+  }
+  wouldThreefold(k){
+    const total = this.list.filter(x=>x===k).length;
+    return (total+1) >= 3;
+  }
+}
+
+function repetitionPenalty(rep, key){
+  let p = 0;
+  const soft = rep.softCount(key);
+  if (soft>0) p -= REP_SOFT_PENALTY * soft;
+  if (rep.wouldThreefold(key)) p -= REP_HARD_PENALTY;
+  return p;
+}
+
+function moveDeltaBonus(game, move, captured, gaveCheck){
+  let b=0;
+  if (captured) b += BONUS_CAPTURE;
+  if (gaveCheck) b += BONUS_CHECK;
+  if (move.isPawnPush) b += BONUS_PUSH;
+  if (b===0) b -= PENAL_IDLE;
+  return b;
+}
+
+function countingAdjust(aiColor, countState, move, captured, matLead){
+  if (!countState?.active) return 0;
+  let adj = 0;
+  const aiOwns = (countState.side === aiColor);
+  if (aiOwns){
+    if (captured) adj += COUNT_RESEED_BONUS;
+    else if (matLead > 0) adj -= COUNT_BURN_PENALTY;
+    if (countState.remaining <= COUNT_URGENT_NEAR) adj -= 50;
+  } else {
+    if (captured) adj += Math.floor(COUNT_RESEED_BONUS/2);
+  }
+  return adj;
+}
+
+function pickByTemperature(scoredMoves, T){
+  if (!scoredMoves.length) return null;
+  if (T<=0) return scoredMoves[0].move;
+  const exps = scoredMoves.map(m => Math.exp(m.score / T));
+  const sum  = exps.reduce((a,b)=>a+b,0);
+  let r = Math.random()*sum;
+  for (let i=0;i<scoredMoves.length;i++){
+    r -= exps[i];
+    if (r<=0) return scoredMoves[i].move;
+  }
+  return scoredMoves[0].move;
+}
+
+/* =========================== Move generation =========================== */
+
+// Build a move list with light annotations for ordering/scoring
+function generateMoves(game){
+  const out = [];
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p = game.at(x,y);
+      if(!p || p.c!==game.turn) continue;
+      const tt = normType(p.t);
+      const legals = game.legalMoves(x,y);
+      for (const m of legals){
+        const target = game.at(m.x,m.y);
+        const isPawnPush = (tt==='P' && m.y !== y && !target) || (tt==='P' && m.y !== y);
+        out.push({
+          from:{x,y},
+          to:{x:m.x, y:m.y},
+          captureVal: target ? (VAL[normType(target.t)]||0) : 0,
+          isPawnPush
+        });
+      }
+    }
+  }
+  // MVV-LVA-ish order: captures first (higher value), then others
+  out.sort((a,b)=>{
+    if (b.captureVal !== a.captureVal) return b.captureVal - a.captureVal;
+    // small tie-breaker: center bias
+    const ca = centerBias(a.to), cb = centerBias(b.to);
+    return cb - ca;
+  });
+  return out;
+}
+
+function centerBias(sq){
+  // prefer central squares a bit
+  const cx = Math.abs(3.5 - sq.x);
+  const cy = Math.abs(3.5 - sq.y);
+  return 8 - (cx+cy); // larger is better
+}
+
+/* =============================== Search ================================ */
+
+function evalLeaf(game, rep, countState, aiColor){
+  const key = posKey(game);
+  const mat = materialEval(game);
+  const mob = mobilityEval(game);
+  let score = mat + mob;
+
+  // White-centric -> convert to side-to-move perspective in negamax wrapper
+  score += repetitionPenalty(rep, key);
+
+  // Counting-draw nudge when we're ahead and own the counter
+  const lead = (aiColor==='w' ? mat : -mat); // AI material lead in centipawns
+  if (countState?.active && lead>0 && countState.side===aiColor){
+    const near = Math.max(0, 6 - (countState.remaining||0));
+    score -= (COUNT_BURN_PENALTY * near);
   }
   return score;
 }
-const baseValue = t => VAL[t] ?? 0;
-function pstBonus(t, x, y, c){
-  const rowFromWhite = (c === 'w') ? y : (SIZE - 1 - y);
-  const tbl = PST[t] || PST.Q;
-  // weight center files more (x: 0..7)
-  const fileWeight = [0,1,2,3,3,2,1,0][x];
-  return (tbl[rowFromWhite] || 0) * 2 + fileWeight;
-}
 
-/** Minimax + alpha-beta (depth ply). Returns { score, move } in White POV. */
-function search(game, depth, alpha, beta, rootColor, ply = 0) {
-  // Terminal checks
-  const moves = enumerateMoves(game);
-  if (depth === 0 || moves.length === 0) {
-    // Check for mate/stalemate via status after a null probe (approx)
-    const val = evaluate(game);
-    return { score: (game.turn === rootColor) ? val : -val, move: null };
+function make(game, mv){ return game.move(mv.from, mv.to); }
+function undo(game){ game.undo(); }
+
+function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats){
+  if (stats.nodes++ > budget.limit) return { score: 0, move: null, cutoff:true };
+
+  // terminal?
+  const st = game?.status?.();
+  if (st && (st.state==='checkmate' || st.state==='stalemate')){
+    if (st.state==='checkmate'){
+      // side-to-move is checkmated -> huge negative for them (color perspective)
+      const mateScore = -100000 + (depth); // prefer faster mates
+      return { score: color * mateScore, move:null };
+    } else {
+      return { score: 0, move:null }; // draw
+    }
   }
 
+  if (depth===0){
+    const leaf = evalLeaf(game, rep, countState, aiColor);
+    return { score: color * leaf, move:null };
+  }
+
+  const key = posKey(game);
+  rep.push(key);
+
+  let best = -Infinity;
   let bestMove = null;
-  // Maximize for rootColor, minimize for opponent (flip sign trick)
-  const maximizing = (game.turn === rootColor);
 
-  // Killer move suggestion
-  const killer = KILLERS[ply];
-  if (killer) {
-    const i = moves.findIndex(m => sameMove(m, killer));
-    if (i >= 0) { const [km] = moves.splice(i,1); moves.unshift(km); }
+  const moves = generateMoves(game);
+  if (moves.length===0){
+    // no legal moves -> stalemate or checkmate already handled, but safe return:
+    const leaf = evalLeaf(game, rep, countState, aiColor);
+    rep.pop();
+    return { score: color * leaf, move:null };
   }
 
-  if (maximizing) {
-    let best = -Infinity;
-    for (const m of moves) {
-      const r = game.move(m.from, m.to);
-      if (!r?.ok) { game.undo(); continue; }
+  for (const mv of moves){
+    // make
+    const before = game.at(mv.to.x, mv.to.y);
+    const res = make(game, mv);
+    if(!res?.ok){ undo(game); continue; }
 
-      const child = search(game, depth - 1, alpha, beta, rootColor, ply + 1);
-      game.undo();
+    const gaveCheck = res?.status?.state === 'check';
 
-      if (child.score > best) { best = child.score; bestMove = m; }
-      alpha = Math.max(alpha, best);
-      if (beta <= alpha) { KILLERS[ply] = m; break; }
+    // Per-move delta adjustments (progress + counting awareness)
+    const mat = materialEval(game);
+    const aiLead = (aiColor==='w' ? mat : -mat);
+    const deltaAdj = moveDeltaBonus(game, mv, !!before, !!gaveCheck)
+                   + countingAdjust(aiColor, countState, mv, !!before, aiLead);
+
+    const child = negamax(
+      game, depth-1, -beta, -alpha, -color, aiColor, rep, countState, budget, stats
+    );
+    const childScore = (child.cutoff ? -alpha : -(child.score)) + (color * deltaAdj);
+
+    undo(game);
+
+    if (childScore > best){
+      best = childScore;
+      bestMove = mv;
     }
-    return { score: best, move: bestMove };
-  } else {
-    let best = Infinity;
-    for (const m of moves) {
-      const r = game.move(m.from, m.to);
-      if (!r?.ok) { game.undo(); continue; }
-
-      const child = search(game, depth - 1, alpha, beta, rootColor, ply + 1);
-      game.undo();
-
-      if (child.score < best) { best = child.score; bestMove = m; }
-      beta = Math.min(beta, best);
-      if (beta <= alpha) { KILLERS[ply] = m; break; }
-    }
-    return { score: best, move: bestMove };
-  }
-}
-
-/** Top-level choice wrapper with difficulty config */
-function _choose(game, cfg) {
-  const all = enumerateMoves(game);
-  if (!all.length) return null;
-
-  // EASY: mostly random with small capture bias
-  if (cfg.depth === 0) {
-    const caps = all.filter(m => !!game.at(m.to.x, m.to.y));
-    const pool = (Math.random() < (cfg.randomize ?? 0.8)) ? all : (caps.length ? caps : all);
-    return pool[Math.floor(Math.random()*pool.length)];
+    if (best > alpha) alpha = best;
+    if (alpha >= beta) break; // cutoff
   }
 
-  // MED/HARD: search
-  const rootColor = game.turn;
-  let best = search(game, cfg.depth, -Infinity, Infinity, rootColor, 0).move;
-
-  // Add tiny randomness if requested (break ties a bit)
-  if (cfg.randomize && best) {
-    const sameScoreMoves = tieSet(game, best, cfg.depth, rootColor);
-    if (sameScoreMoves.length > 1 && Math.random() < cfg.randomize) {
-      best = sameScoreMoves[Math.floor(Math.random() * sameScoreMoves.length)];
-    }
-  }
-  return best || all[0];
+  rep.pop();
+  return { score: best, move: bestMove };
 }
 
-/** Build a small tie set around best move (same eval within epsilon). */
-function tieSet(game, bestMove, depth, rootColor) {
-  const EPS = 6;
-  const base = scoreFor(game, bestMove, depth, rootColor);
-  const moves = enumerateMoves(game);
-  const out = [];
-  for (const m of moves) {
-    const s = scoreFor(game, m, depth, rootColor);
-    if (Math.abs(s - base) <= EPS) out.push(m);
-  }
-  return out;
-}
-function scoreFor(game, m, depth, rootColor){
-  const r = game.move(m.from, m.to);
-  if (!r?.ok){ game.undo(); return -Infinity; }
-  const sc = search(game, Math.max(0, depth - 1), -Infinity, Infinity, rootColor, 1).score;
-  game.undo();
-  return sc;
+/* ============================== Public API ============================= */
+
+export async function chooseAIMove(game, opts={}){
+  const level    = opts.level || 'Medium';
+  const aiColor  = opts.aiColor || (game.turn); // default: whoever is to move
+  const countState = opts.countState || null;
+
+  const depth  = SEARCH_DEPTH[level] ?? 3;
+  const temp   = TEMP_BY_LEVEL[level] ?? 0;
+  const budget = { limit: NODE_LIMIT_BY_LEVEL[level] ?? 20000 };
+
+  const rep = new RepTracker();
+  const stats = { nodes: 0 };
+
+  // Root search: color = +1 for side-to-move
+  const { move: principal, score } = negamax(
+    game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats
+  );
+
+  if (!principal) return null;
+
+  // Build a small top list for temperature sampling
+  const rootMoves = generateMoves(game).map(mv=>{
+    const before = game.at(mv.to.x, mv.to.y);
+    const res = game.move(mv.from, mv.to);
+    if(!res?.ok){ game.undo(); return null; }
+
+    const rep2 = new RepTracker(); rep2.list = rep.list.slice();
+    const stats2 = { nodes: 0 };
+    const sub = negamax(game, depth-1, -Infinity, Infinity, -1, aiColor, rep2, countState, budget, stats2);
+    game.undo();
+
+    return {
+      move: mv,
+      score: -(sub.score) + moveDeltaBonus(game, mv, !!before, res?.status?.state==='check')
+    };
+  }).filter(Boolean);
+
+  rootMoves.sort((a,b)=> b.score - a.score);
+
+  const picked = pickByTemperature(rootMoves, temp) || principal;
+
+  // (Optional) console debug
+  // console.log(`[AI ${level}] nodes=${stats.nodes} score=${score|0} picked=`, picked);
+
+  return picked;
 }
 
-function sameMove(a, b){
-  return a && b && a.from.x===b.from.x && a.from.y===b.from.y && a.to.x===b.to.x && a.to.y===b.to.y;
+export function setAIDifficulty(level){
+  // kept for API symmetry; you already store in localStorage from Home
+  return {
+    depth: SEARCH_DEPTH[level] ?? 3,
+    temperature: TEMP_BY_LEVEL[level] ?? 0,
+    nodeLimit: NODE_LIMIT_BY_LEVEL[level] ?? 20000
+  };
 }

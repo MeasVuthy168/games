@@ -1,45 +1,58 @@
-/* engine.worker.js — wraps Fairy-Stockfish WASM as a UCI worker (Ouk Chatrang)
-   Expected files (relative to HTML):
-   - engine/fairy-stockfish.js
-   - engine/fairy-stockfish.wasm
+/* engine.worker.js — wraps Fairy-Stockfish WASM as a UCI worker (Makruk / Ouk Chatrang)
+   Expected files (relative to this worker file):
+   ../engine/fairy-stockfish.js
+   ../engine/fairy-stockfish.wasm
 */
 
 let mod = null;
 let ready = false;
-let pending = [];
+const queue = [];
 
-// Load the WASM module
-importScripts('../engine/fairy-stockfish.js'); // adapt path if needed
+// Load the WASM module (classic worker)
+importScripts('../engine/fairy-stockfish.js'); // <-- path is from /js/ to /engine
 
 (async () => {
-  // fairy-stockfish exposes a global function "FairyStockfish" that returns a UCI-like object
+  // Init module; tell it where to find the .wasm
   mod = await FairyStockfish({
     locateFile: (p) => p.endsWith('.wasm') ? '../engine/fairy-stockfish.wasm' : p
   });
 
-  // Pipe engine stdout -> worker postMessage
+  // Pipe engine stdout -> main thread
   mod.addMessageListener?.((line) => {
     postMessage({ type: 'uci', line });
+    if (line === 'readyok') ready = true;
   });
 
-  // Initialize UCI + variant
+  // Standard UCI init
   send('uci');
-  send('setoption name UCI_Variant value Ouk Chatrang'); // Khmer/Cambodian chess
-  // Optional (if your build lists it): Counting rule set to Cambodian
-  send('setoption name CountingRule value cambodian');
-  send('isready');
 
-  ready = true;
-  for (const msg of pending) mod.postMessage(msg);
-  pending = [];
+  // IMPORTANT: Makruk is the variant Fairy-Stockfish expects (covers Ouk Chatrang rules)
+  // Use lowercase exactly as below.
+  send('setoption name UCI_Variant value makruk');
+
+  // If your build supports counting options you can add them; otherwise omit to avoid errors.
+  // send('setoption name CountingRule value cambodian');
+
+  send('isready');
 })();
 
 function send(cmd){
-  if (!mod) { pending.push(cmd); return; }
+  if (!mod) { queue.push(cmd); return; }
   mod.postMessage(cmd);
 }
 
 onmessage = (e) => {
-  const { cmd } = e.data;
-  send(cmd);
+  const { cmd } = e.data || {};
+  if (!cmd) return;
+
+  // If engine not created yet, queue
+  if (!mod) { queue.push(cmd); return; }
+
+  // Flush queue once module exists
+  if (queue.length){
+    while (queue.length) mod.postMessage(queue.shift());
+  }
+
+  // Forward command
+  mod.postMessage(cmd);
 };

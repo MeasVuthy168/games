@@ -5,11 +5,11 @@
    - engine/fairy-stockfish.factory.js (ESM shim)
 */
 
-let eng = null;                 // bridge { postMessage, addMessageListener, terminate }
+let eng = null;                 // { postMessage, addMessageListener, terminate }
 let ready = false;
 const queue = [];
-const log  = (t) => postMessage({ type: 'uci',  line: t });
-const note = (t) => postMessage({ type: 'note', line: t });
+const postUCI = (t) => postMessage({ type: 'uci',  line: String(t) });
+const postNote= (t) => postMessage({ type: 'note', line: String(t) });
 
 function send(cmd){
   if (!eng) { queue.push(cmd); return; }
@@ -17,47 +17,63 @@ function send(cmd){
 }
 
 onmessage = (e) => {
-  const { cmd, _selftest } = e.data || {};
-  if (_selftest){
-    note('[WORKER] Self-test: requesting bestmove…');
+  const d = e.data || {};
+  if (d._selftest){
+    postNote('[WORKER] Self-test: requesting bestmove…');
     send('ucinewgame');
     send('position fen rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1');
     send('go movetime 600');
     return;
   }
-  if (cmd) send(cmd);
+  if (d.cmd) send(d.cmd);
 };
 
 (async function boot(){
   try{
-    note('[WORKER] Booting…');
+    postNote('[WORKER] Booting…');
 
     const { FairyStockfish } = await import('../engine/fairy-stockfish.factory.js');
 
-    note('[WORKER] Loading legacy engine via factory shim…');
+    postNote('[WORKER] Loading legacy engine via factory shim…');
     eng = await FairyStockfish({
       wasmPath: new URL('../engine/fairy-stockfish.wasm', self.location.href).href
     });
 
-    // Pipe engine -> main thread
+    // Pipe engine -> main thread (all lines)
     eng.addMessageListener((line) => {
-      // Ensure visibility in page debug panel
-      postMessage({ type: 'uci', line: String(line) });
+      postUCI(line);
+      // Heuristics to mark "ready"
+      if (!ready && /uciok|readyok|^id\s+name|^option\s+name/i.test(line)) {
+        ready = true;
+      }
     });
 
-    // Safety boot sequence (some builds want an early 'uci' before any setoption)
+    // Initial prod; some builds ignore first message; the factory also pokes
     send('uci');
-    send('setoption name UCI_Variant value Ouk Chatrang');
-    send('setoption name CountingRule value cambodian');
     send('isready');
 
-    ready = true;
+    // Retry until we see some UCI sign of life
+    let tries = 0;
+    const tick = setInterval(()=>{
+      if (ready) { clearInterval(tick); return; }
+      tries++;
+      if (tries <= 8){
+        postNote(`[WORKER] Nudge #${tries}: sending 'uci' in multiple formats`);
+        send('uci');
+        send('isready');
+      } else {
+        clearInterval(tick);
+        postNote('[WORKER] No UCI response after multiple nudges — engine may still only accept object-stdin; continuing anyway.');
+      }
+    }, 220);
+
+    // Flush any queued commands
     while (queue.length) eng.postMessage(queue.shift());
 
-    note('[WORKER] Engine ready (legacy classic worker bridged).');
+    postNote('[WORKER] Engine bridge active (waiting for UCI response).');
   } catch (err){
-    note('[WORKER] FATAL: Unable to initialize engine factory shim.');
-    log(`[WORKER] ERROR: ${err?.message || err}`);
+    postNote('[WORKER] FATAL: Unable to initialize engine factory shim.');
+    postUCI(`[WORKER] ERROR: ${err?.message || err}`);
   }
 })();
 

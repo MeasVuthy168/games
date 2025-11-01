@@ -602,7 +602,7 @@ export function initUI(){
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
       // After undo, if it's AI's turn now, let AI move
-      if (isAITurn()) thinkAndPlay();
+      if (isAITurn()) setTimeout(thinkAndPlay, 0); // let UI paint first
     }
   });
 

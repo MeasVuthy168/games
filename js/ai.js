@@ -1,60 +1,62 @@
-// js/ai.js — Khmer Chess AI (FAST) + Opening Book
+// js/ai.js — Khmer/Makruk-friendly AI (Fast + Smarter)
+// Features:
+//  - Optional Khmer opening book (one-step central pawn, quick knights)
+//  - Transposition table (TT) to avoid re-searching same positions
+//  - Quiescence search (captures/checks only) to sharpen tactics
+//  - Simple killer/history ordering; capped nodes for speed
 //
-// Public API
-//   - chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState })
-//   - setAIDifficulty(level)
-//   - pickAIMove (alias)
+// Public API:
+//   chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState })
+//   setAIDifficulty(level)
+//   pickAIMove (alias)
 //
-// Game API expected:
-//   game.at(x,y) -> {t:'R|N|B|Q|P|K' or T,H,G,D,F,S, c:'w'|'b'} | null
-//   game.turn    -> 'w'|'b'
-//   game.legalMoves(x,y) -> [{x,y}, ...]
-//   game.move({x,y},{x,y}) -> { ok:true, status:{state:'normal|check|checkmate|stalemate'} }
-//   game.undo()
-//   game.history -> [{from:{x,y}, to:{x,y}}]
-//
-// Focus: speed. We avoid re-searching root moves; we keep a small eval
-// and rely on the principal variation from a single negamax call.
+// NOTE: Your Game API stays the same (at, turn, legalMoves, move, undo, status, history).
 
-let _bookPromise = null;
-async function loadOpeningBook(){
-  if (_bookPromise) return _bookPromise;
-  _bookPromise = fetch('assets/book-mini.json').then(r=>r.json()).catch(()=> ({}));
-  return _bookPromise;
-}
+/* ------------------- Config & toggles ------------------- */
+const USE_BOOK = true;                      // set false to ignore opening book
+const BOOK_URL = 'assets/book-khmer.json';  // Khmer/Makruk-style book
 
-function toAlg(sq){ return String.fromCharCode(97+sq.x) + String(8 - sq.y); }
-function historyKeyFromGame(game){
-  if (!Array.isArray(game.history) || !game.history.length) return '';
-  return game.history.map(m => toAlg(m.from) + toAlg(m.to)).join(' ');
-}
-function parseBookMove(uci, game){
-  if (!uci || uci.length < 4) return null;
-  const fx = uci.charCodeAt(0)-97, fy = 8-(uci.charCodeAt(1)-48);
-  const tx = uci.charCodeAt(2)-97, ty = 8-(uci.charCodeAt(3)-48);
-  if (fx|fy|tx|ty & ~7) return null;
-  const legals = game.legalMoves(fx, fy);
-  for (const m of legals) if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
-  return null;
-}
+// difficulty -> depth & node caps
+const SEARCH_DEPTH = { Easy: 2, Medium: 3, Hard: 4 };     // base depth
+const NODE_LIMIT   = { Easy: 6000, Medium: 16000, Hard: 36000 };
 
-/* ---------------------- Tuning (faster defaults) ---------------------- */
+// quiescence caps (to keep speed)
+const Q_DEPTH_MAX = 6;                       // max extra plies in captures
+const Q_NODE_LIMIT = 20000;                  // hard ceiling for quiescence nodes (shared)
 
+/* ---------------- Piece values / mapping ---------------- */
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
-
-// Slightly shallower but snappy:
-const SEARCH_DEPTH = { Easy: 2, Medium: 2, Hard: 3 };
-const NODE_LIMIT   = { Easy: 4000, Medium: 10000, Hard: 20000 };
-
 const REP_SHORT_WINDOW = 8, REP_SOFT_PENALTY = 15, REP_HARD_PENALTY = 220;
 const BONUS_CAPTURE=30, BONUS_CHECK=18, BONUS_PUSH=6, PENAL_IDLE=8;
 const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
 
 function normType(t){ return TYPE_MAP[t] || t; }
 
-/* ------------------------------ Eval ---------------------------------- */
+/* ---------------- Opening book (optional) ---------------- */
+let _bookPromise=null;
+async function loadOpeningBook(){
+  if (!USE_BOOK) return {};
+  if (_bookPromise) return _bookPromise;
+  _bookPromise = fetch(BOOK_URL).then(r=>r.json()).catch(()=> ({}));
+  return _bookPromise;
+}
+function toAlg(sq){ return String.fromCharCode(97+sq.x) + String(8 - sq.y); }
+function historyKeyFromGame(game){
+  if (!Array.isArray(game.history) || !game.history.length) return '';
+  return game.history.map(m => toAlg(m.from)+toAlg(m.to)).join(' ');
+}
+function parseBookMove(uci, game){
+  if (!uci || uci.length<4) return null;
+  const fx=uci.charCodeAt(0)-97, fy=8-(uci.charCodeAt(1)-48);
+  const tx=uci.charCodeAt(2)-97, ty=8-(uci.charCodeAt(3)-48);
+  if (fx|fy|tx|ty & ~7) return null;
+  const legals = game.legalMoves(fx, fy);
+  for (const m of legals) if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+  return null;
+}
 
+/* --------------------- Eval utilities -------------------- */
 function materialSide(game, side){
   let s=0;
   for (let y=0;y<8;y++) for (let x=0;x<8;x++){
@@ -65,25 +67,24 @@ function materialSide(game, side){
 }
 function materialEval(game){ return materialSide(game,'w') - materialSide(game,'b'); }
 
-// Light (faster) mobility: count until a small cap, then stop
+// light mobility with cap for speed
 function mobilityEval(game){
-  let moves = 0, cap = 24; // cap keeps this cheap
+  let moves=0, cap=28;
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
-      const p = game.at(x,y); if (!p || p.c!==game.turn) continue;
-      const ls = game.legalMoves(x,y);
-      moves += ls.length;
+      const p = game.at(x,y); if(!p || p.c!==game.turn) continue;
+      moves += game.legalMoves(x,y).length;
       if (moves>=cap) return (game.turn==='w'?+1:-1)*cap;
     }
   }
-  return (game.turn==='w'?+1:-1) * moves;
+  return (game.turn==='w'?+1:-1)*moves;
 }
 
 function posKey(game){
-  let out = '';
+  let out='';
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
-      const p = game.at(x,y);
+      const p=game.at(x,y);
       out += p ? (p.c + (normType(p.t))) : '.';
     }
     out += '/';
@@ -93,7 +94,7 @@ function posKey(game){
 
 class RepTracker{
   constructor(){ this.list=[]; }
-  push(k){ this.list.push(k); if (this.list.length>128) this.list.shift(); }
+  push(k){ this.list.push(k); if(this.list.length>128) this.list.shift(); }
   pop(){ this.list.pop(); }
   softCount(k){
     let n=0, s=Math.max(0,this.list.length-REP_SHORT_WINDOW);
@@ -104,7 +105,7 @@ class RepTracker{
 }
 function repetitionPenalty(rep, key){
   let p=0, soft=rep.softCount(key);
-  if (soft>0) p -= REP_SOFT_PENALTY * soft;
+  if (soft>0) p -= REP_SOFT_PENALTY*soft;
   if (rep.wouldThreefold(key)) p -= REP_HARD_PENALTY;
   return p;
 }
@@ -115,19 +116,18 @@ function moveDeltaBonus(game, mv, captured, gaveCheck){
 }
 function countingAdjust(aiColor, countState, captured, matLead){
   if (!countState?.active) return 0;
-  let adj=0, aiOwns = (countState.side===aiColor);
+  let adj=0, aiOwns=(countState.side===aiColor);
   if (aiOwns){
-    if (captured) adj += COUNT_RESEED_BONUS;
-    else if (matLead>0) adj -= COUNT_BURN_PENALTY;
-    if ((countState.remaining||0) <= COUNT_URGENT_NEAR) adj -= 50;
-  } else {
-    if (captured) adj += (COUNT_RESEED_BONUS>>1);
+    if (captured) adj+=COUNT_RESEED_BONUS;
+    else if (matLead>0) adj-=COUNT_BURN_PENALTY;
+    if ((countState.remaining||0)<=COUNT_URGENT_NEAR) adj-=50;
+  } else if (captured){
+    adj += (COUNT_RESEED_BONUS>>1);
   }
   return adj;
 }
 
-/* -------------------------- Move generation --------------------------- */
-
+/* --------------------- Move generation -------------------- */
 function centerBias(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
 
 function generateMoves(game){
@@ -135,18 +135,19 @@ function generateMoves(game){
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
       const p=game.at(x,y); if(!p || p.c!==game.turn) continue;
-      const tt=normType(p.t), legals=game.legalMoves(x,y);
+      const tt=normType(p.t);
+      const legals=game.legalMoves(x,y);
       for (const m of legals){
         const target=game.at(m.x,m.y);
-        const isPawnPush = (tt==='P' && m.y!==y);
         out.push({
           from:{x,y}, to:{x:m.x,y:m.y},
           captureVal: target ? (VAL[normType(target.t)]||0) : 0,
-          isPawnPush
+          isPawnPush: (tt==='P' && m.y!==y)
         });
       }
     }
   }
+  // Captures first (MVV-ish), then center bias
   out.sort((a,b)=>{
     if (b.captureVal!==a.captureVal) return b.captureVal-a.captureVal;
     return centerBias(b.to)-centerBias(a.to);
@@ -154,8 +155,54 @@ function generateMoves(game){
   return out;
 }
 
-/* ------------------------------ Search -------------------------------- */
+function generateCaptures(game){
+  const out=[];
+  for (let y=0;y<8;y++){
+    for (let x=0;x<8;x++){
+      const p=game.at(x,y); if(!p || p.c!==game.turn) continue;
+      const tt=normType(p.t);
+      const legals=game.legalMoves(x,y);
+      for (const m of legals){
+        const target=game.at(m.x,m.y);
+        if (!target) continue;
+        out.push({
+          from:{x,y}, to:{x:m.x,y:m.y},
+          captureVal: (VAL[normType(target.t)]||0),
+          isPawnPush: (tt==='P' && m.y!==y)
+        });
+      }
+    }
+  }
+  out.sort((a,b)=> b.captureVal-a.captureVal);
+  return out;
+}
 
+/* ----------------- TT / killers / history ----------------- */
+const TT = new Map();  // key -> {depth, score, flag, move}
+const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
+const killers = Array.from({length:64}, ()=>[null,null]); // very small killer store
+const historyScore = Object.create(null);
+
+function recordKiller(ply, mv){
+  const arr = killers[ply%64];
+  if (!arr[0] || (arr[0].to.x!==mv.to.x || arr[0].to.y!==mv.to.y || arr[0].from.x!==mv.from.x || arr[0].from.y!==mv.from.y)){
+    arr[1]=arr[0]; arr[0]=mv;
+  }
+}
+function addHistory(mv, depth){
+  const k = `${mv.from.x}${mv.from.y}${mv.to.x}${mv.to.y}`;
+  historyScore[k] = (historyScore[k]||0) + depth*depth;
+}
+function historyValue(mv){
+  const k = `${mv.from.x}${mv.from.y}${mv.to.x}${mv.to.y}`;
+  return historyScore[k]||0;
+}
+
+/* ----------------- Make / undo helpers ----------------- */
+function make(game,m){ return game.move(m.from,m.to); }
+function undo(game){ game.undo(); }
+
+/* ------------------------ Evaluation ------------------------ */
 function evalLeaf(game, rep, countState, aiColor){
   const mat = materialEval(game);
   const mob = mobilityEval(game);
@@ -167,25 +214,80 @@ function evalLeaf(game, rep, countState, aiColor){
   }
   return score;
 }
-function make(game,m){ return game.move(m.from,m.to); }
-function undo(game){ game.undo(); }
 
-function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats){
+/* -------------------- Quiescence search -------------------- */
+function quiesce(game, alpha, beta, color, aiColor, rep, qNodes, qDepth=0){
+  if (qNodes.count++ > Q_NODE_LIMIT || qDepth>Q_DEPTH_MAX) return color * evalLeaf(game, rep, null, aiColor);
+
+  // stand-pat
+  let stand = color * evalLeaf(game, rep, null, aiColor);
+  if (stand >= beta) return beta;
+  if (stand > alpha) alpha = stand;
+
+  // try only captures
+  const caps = generateCaptures(game);
+  for (const mv of caps){
+    const before = game.at(mv.to.x, mv.to.y);
+    const res = make(game, mv);
+    if(!res?.ok){ undo(game); continue; }
+
+    const score = -quiesce(game, -beta, -alpha, -color, aiColor, rep, qNodes, qDepth+1);
+
+    undo(game);
+    if (score >= beta) return beta;
+    if (score > alpha) alpha = score;
+  }
+  return alpha;
+}
+
+/* ------------------------- Negamax ------------------------- */
+function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budget, stats, ply=0){
   if (stats.nodes++ > budget.limit) return { score: 0, move:null, cutoff:true };
+
   const st = game?.status?.();
   if (st && (st.state==='checkmate' || st.state==='stalemate')){
     if (st.state==='checkmate') return { score: color * (-100000 + depth), move:null };
-    return { score:0, move:null };
+    return { score: 0, move:null };
   }
-  if (depth===0) return { score: color * evalLeaf(game, rep, countState, aiColor), move:null };
 
-  rep.push(posKey(game));
-  let best=-Infinity, bestMove=null;
-  const moves = generateMoves(game);
-  if (!moves.length){
-    rep.pop();
-    return { score: color * evalLeaf(game, rep, countState, aiColor), move:null };
+  const key = posKey(game);
+  const ttHit = TT.get(key);
+  if (ttHit && ttHit.depth >= depth){
+    const v = ttHit.score;
+    if (ttHit.flag===TT_EXACT)   return { score:v, move:ttHit.move||null };
+    if (ttHit.flag===TT_LOWER && v > alpha) alpha = v;
+    else if (ttHit.flag===TT_UPPER && v < beta) beta = v;
+    if (alpha >= beta) return { score:v, move:ttHit.move||null };
   }
+
+  if (depth===0){
+    const qNodes={count:0};
+    const v = quiesce(game, alpha, beta, color, aiColor, rep, qNodes, 0);
+    return { score: v, move:null };
+  }
+
+  rep.push(key);
+
+  // Move ordering: TT move -> captures -> killers -> history
+  let moves = generateMoves(game);
+  if (ttHit?.move){
+    moves.sort((a,b)=>{
+      const isA = sameMove(a, ttHit.move), isB = sameMove(b, ttHit.move);
+      if (isA && !isB) return -1; if (isB && !isA) return 1; return 0;
+    });
+  }
+  const kArr = killers[ply%64];
+
+  moves.sort((a,b)=>{
+    // captures first handled inside generateMoves; now boost killers/history
+    const ka = sameMove(a,kArr[0])||sameMove(a,kArr[1]) ? 1 : 0;
+    const kb = sameMove(b,kArr[0])||sameMove(b,kArr[1]) ? 1 : 0;
+    if (ka!==kb) return kb-ka;
+    return (historyValue(b) - historyValue(a));
+  });
+
+  let best=-Infinity, bestMove=null;
+  let localAlpha = alpha;
 
   for (const mv of moves){
     const before = game.at(mv.to.x, mv.to.y);
@@ -197,21 +299,40 @@ function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budg
     const delta = moveDeltaBonus(game, mv, !!before, res?.status?.state==='check')
                 + countingAdjust(aiColor, countState, !!before, aiLead);
 
-    const child = negamax(game, depth-1, -beta, -alpha, -color, aiColor, rep, countState, budget, stats);
-    const childScore = (child.cutoff ? -alpha : -(child.score)) + (color * delta);
+    const child = negamax(game, depth-1, -beta, -localAlpha, -color, aiColor, rep, countState, budget, stats, ply+1);
+    const childScore = (child.cutoff ? -localAlpha : -(child.score)) + (color * delta);
 
     undo(game);
 
-    if (childScore>best){ best=childScore; bestMove=mv; }
-    if (best>alpha) alpha=best;
-    if (alpha>=beta) break;
+    if (childScore > best){
+      best = childScore; bestMove = mv;
+      if (best > localAlpha) localAlpha = best;
+      if (localAlpha >= beta){
+        if (!before) recordKiller(ply, mv);
+        break;
+      }
+    }
   }
+
   rep.pop();
+
+  // TT store
+  let flag = TT_EXACT;
+  if      (best <= alpha) flag = TT_UPPER;
+  else if (best >= beta)  flag = TT_LOWER;
+  TT.set(key, { depth, score:best, flag, move:bestMove });
+
+  if (bestMove && !sameMove(bestMove, killers[ply%64][0])) addHistory(bestMove, depth);
+
   return { score:best, move:bestMove };
 }
 
-/* ------------------------------ Public -------------------------------- */
+function sameMove(a,b){
+  if(!a||!b) return false;
+  return a.from.x===b.from.x && a.from.y===b.from.y && a.to.x===b.to.x && a.to.y===b.to.y;
+}
 
+/* --------------------------- Public API --------------------------- */
 export async function chooseAIMove(game, opts={}){
   const level      = opts.level || 'Medium';
   const aiColor    = opts.aiColor || game.turn;
@@ -220,28 +341,27 @@ export async function chooseAIMove(game, opts={}){
   // Opening book first
   try{
     const book = await loadOpeningBook();
-    const key  = historyKeyFromGame(game);
-    const cand = book[key];
-    if (Array.isArray(cand) && cand.length){
-      const pick = cand[Math.floor(Math.random()*cand.length)];
-      const mv = parseBookMove(pick, game);
-      if (mv) return mv;
+    if (book && USE_BOOK){
+      const key = historyKeyFromGame(game);
+      const cand = book[key];
+      if (Array.isArray(cand) && cand.length){
+        const pick = cand[Math.floor(Math.random()*cand.length)];
+        const mv = parseBookMove(pick, game);
+        if (mv) return mv;
+      }
     }
   }catch{}
 
-  const depth  = SEARCH_DEPTH[level] ?? 2;
-  const budget = { limit: NODE_LIMIT[level] ?? 10000 };
+  // Engine search
+  const depth  = SEARCH_DEPTH[level] ?? 3;
+  const budget = { limit: NODE_LIMIT[level] ?? 16000 };
   const rep = new RepTracker();
   const stats = { nodes:0 };
-
-  const { move } = negamax(game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats);
+  const { move } = negamax(game, depth, -Infinity, Infinity, +1, aiColor, rep, countState, budget, stats, 0);
   return move || null;
 }
 
 export function setAIDifficulty(level){
-  return {
-    depth: SEARCH_DEPTH[level] ?? 2,
-    nodeLimit: NODE_LIMIT[level] ?? 10000
-  };
+  return { depth: SEARCH_DEPTH[level] ?? 3, nodeLimit: NODE_LIMIT[level] ?? 16000 };
 }
 export const pickAIMove = chooseAIMove;

@@ -1,5 +1,6 @@
 /* engine.worker.js — resilient UCI bridge for Fairy-Stockfish (Ouk Chatrang)
    Tries ESM factory first; if missing, falls back to spawning the JS as a worker.
+   Handles BOTH string and object message protocols when nested-worker is used.
    Expected files (relative to /games/):
      engine/fairy-stockfish.js
      engine/fairy-stockfish.wasm
@@ -15,19 +16,25 @@ function note(msg){ postMessage({ type:'uci', line: `[WORKER] ${msg}` }); }
 function wasmURL(){ return new URL('../engine/fairy-stockfish.wasm', self.location).href; }
 function jsURL(){   return new URL('../engine/fairy-stockfish.js',  self.location).href; }
 
+// Send a command to engine.
+// In nested-worker mode we *fan out* both raw string and {cmd:...} to cover both protocols.
 function send(cmd){
+  if (!cmd) return;
+
   if (engine && typeof engine.postMessage === 'function') {
     engine.postMessage(cmd);
-  } else if (innerWorker) {
-    innerWorker.postMessage(cmd); // direct UCI line
-  } else {
-    pending.push(cmd);
+    return;
   }
+  if (innerWorker) {
+    try { innerWorker.postMessage(cmd); } catch {}
+    try { innerWorker.postMessage({ cmd }); } catch {}
+    return;
+  }
+  pending.push(cmd);
 }
 
 async function loadAsFactory(wrapURL, wURL){
   let mod;
-  // Try ESM import
   try{
     mod = await import(/* @vite-ignore */ wrapURL);
     note('Wrapper loaded as ES module.');
@@ -36,11 +43,10 @@ async function loadAsFactory(wrapURL, wURL){
     return null;
   }
 
-  // Dump available exports for debugging
+  // Log exports for traceability
   try{
     const keys = Object.keys(mod || {});
     note(`ESM exports: ${keys.length ? keys.join(', ') : '(none)'}`);
-    // Also log typeof for the common suspects
     const suspects = {
       default: typeof mod?.default,
       FairyStockfish: typeof mod?.FairyStockfish,
@@ -62,14 +68,14 @@ async function loadAsFactory(wrapURL, wURL){
     locateFile: (p) => (p.endsWith('.wasm') ? wURL : p)
   });
 
-  // Wire output
+  // Pipe stdout-ish lines to main thread
   if (typeof inst.addMessageListener === 'function'){
     inst.addMessageListener((line)=> postMessage({ type:'uci', line }));
   } else if (typeof inst.onmessage === 'function'){
     const prev = inst.onmessage;
     inst.onmessage = (line)=>{ try{ postMessage({ type:'uci', line }); }catch{} prev && prev(line); };
   } else if (typeof inst.addEventListener === 'function'){
-    inst.addEventListener('message', (e)=> postMessage({ type:'uci', line: e.data }));
+    inst.addEventListener('message', (e)=> postMessage({ type:'uci', line: e?.data ?? '' }));
   }
 
   return inst;
@@ -77,10 +83,17 @@ async function loadAsFactory(wrapURL, wURL){
 
 async function loadAsNestedWorker(wrapURL){
   try{
-    // Spawn the stockfish JS as its own worker; many builds are worker scripts.
-    innerWorker = new Worker(wrapURL); // classic worker
+    // Classic worker (most FSF distros are classic-worker scripts)
+    innerWorker = new Worker(wrapURL);
     innerWorker.onmessage = (e)=>{
-      const line = (e && e.data) || '';
+      // Many builds send strings; some send {type:'stdout', data:'...'}
+      const data = e?.data;
+      const line =
+        (typeof data === 'string') ? data
+        : (data && typeof data.data === 'string') ? data.data
+        : (data && typeof data.stdout === 'string') ? data.stdout
+        : (data && typeof data.line === 'string') ? data.line
+        : (data != null ? String(data) : '');
       postMessage({ type:'uci', line });
     };
     note('Nested worker mode engaged (JS acts as UCI engine).');
@@ -98,18 +111,17 @@ async function loadEngine(){
   note(`Loading WASM wrapper: ${wrapURL}`);
   note(`WASM URL: ${wURL}`);
 
-  // 1) Try factory-based engine via ESM
+  // 1) Prefer factory-based ESM (if the build supports it)
   const inst = await loadAsFactory(wrapURL, wURL);
   if (inst) {
     engine = inst;
-    // Init UCI + variant
+    // Init UCI + variant (harmless if some options are unknown)
     send('uci');
     send('setoption name UCI_Variant value Ouk Chatrang');
-    // optional, harmless if unsupported
     send('setoption name CountingRule value cambodian');
     send('isready');
 
-    // Flush queued commands
+    // Flush queued
     while (pending.length) engine.postMessage(pending.shift());
     note('Engine ready (factory mode).');
     return;
@@ -117,18 +129,22 @@ async function loadEngine(){
 
   note('Factory export not found; trying nested worker fallback…');
 
-  // 2) Fallback: spawn the JS as a worker and bridge
+  // 2) Nested worker: spawn the JS as a worker and bridge messages
   const ok = await loadAsNestedWorker(wrapURL);
   if (!ok) throw new Error('Could not initialize engine in any mode');
 
-  // In nested worker mode, we still send init lines (many builds accept them)
-  send('uci');
-  send('setoption name UCI_Variant value Ouk Chatrang');
-  send('setoption name CountingRule value cambodian');
-  send('isready');
+  // Initial UCI handshake; also send object-form to satisfy both protocols
+  send('uci');                        send({ cmd: 'uci' });
+  send('setoption name UCI_Variant value Ouk Chatrang'); send({ cmd: 'setoption name UCI_Variant value Ouk Chatrang' });
+  send('setoption name CountingRule value cambodian');   send({ cmd: 'setoption name CountingRule value cambodian' });
+  send('isready');                    send({ cmd: 'isready' });
 
-  // Flush queued UCI lines
-  while (pending.length) innerWorker.postMessage(pending.shift());
+  // Flush queued UCI lines in both forms
+  while (pending.length){
+    const p = pending.shift();
+    try { innerWorker.postMessage(p); } catch {}
+    try { innerWorker.postMessage({ cmd: p }); } catch {}
+  }
   note('Engine ready (nested worker mode).');
 }
 

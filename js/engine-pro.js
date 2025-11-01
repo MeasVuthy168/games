@@ -1,24 +1,32 @@
-// engine-pro.js — ask the WASM engine for a best move (Master level)
+// engine-pro.js — ask the Fairy-Stockfish (Makruk) worker for a best move
 // API: await getEngineBestMove({ fen, movetimeMs })
+
 let _w = null;
 let _awaiters = [];
 
+// Use classic worker (NOT module). Resolve path relative to this file.
+function workerURL() {
+  return new URL('./engine.worker.js', import.meta.url);
+}
+
 export function startEngineWorker(){
   if (_w) return;
-  _w = new Worker('./js/engine.worker.js', { type: 'module' });
+
+  // Classic worker so engine.worker.js can use importScripts(...)
+  _w = new Worker(workerURL(), { /* classic */ });
+
   _w.onmessage = (e) => {
     const { type, line } = e.data || {};
-    if (type !== 'uci') return;
+    if (type !== 'uci' || !line) return;
 
-    // Resolve bestmove
     if (line.startsWith('bestmove')) {
       const parts = line.split(/\s+/);
-      // UCI move like "e3e4"
       const uci = parts[1];
       for (const fn of _awaiters) fn(uci);
       _awaiters = [];
     }
-    // You may console.log lines for debugging.
+
+    // Uncomment to debug engine lines:
     // console.log('[FSF]', line);
   };
 }
@@ -29,13 +37,11 @@ export function stopEngineWorker(){
 }
 
 export function positionFromFEN(fen){
-  // Build UCI "position" command from a full FEN (variant-aware)
   return `position fen ${fen}`;
 }
 
 export function goMoveTime(ms){
-  // Keep short for mobile; tune later if you want stronger play
-  return `go movetime ${Math.max(50, ms|0)}`;
+  return `go movetime ${Math.max(50, (ms|0))}`;
 }
 
 export function setNewGame(){
@@ -46,7 +52,7 @@ export function setPositionFEN(fen){
   _w?.postMessage({ cmd: positionFromFEN(fen) });
 }
 
-export function getEngineBestMove({ fen, movetimeMs = 500 }){
+export function getEngineBestMove({ fen, movetimeMs = 600 }){
   return new Promise((resolve) => {
     startEngineWorker();
     _awaiters.push((uci)=>resolve(uci));

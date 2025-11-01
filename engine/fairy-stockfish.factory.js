@@ -1,87 +1,89 @@
-/* fairy-stockfish.factory.js — ESM shim that exposes a factory returning a
+/* fairy-stockfish.factory.js — ESM shim exposing a factory that returns a
    bridge to the legacy classic Worker (engine/fairy-stockfish.js).
-   It normalizes command formats for various FSF builds.
-
-   Returns a Promise of:
-     {
-       postMessage(cmd:string): void,      // send UCI command
-       addMessageListener(fn): void,       // subscribe to stdout lines
-       terminate(): void
-     }
+   It normalizes both input (stdin) and output lines for many FS ports.
 */
 
 export async function FairyStockfish(options = {}){
   const wasmURL = options.wasmPath || null;
 
-  // Spawn vendor worker (classic)
+  // Spawn vendor worker in *classic* mode
   const workerURL = new URL('./fairy-stockfish.js', import.meta.url);
   const w = new Worker(workerURL, { type: 'classic', name: 'fairy-stockfish-legacy' });
 
-  // Hint wasm path (ignored by some builds; harmless if so)
-  if (wasmURL){
-    try { w.postMessage({ type: 'wasmPath', path: wasmURL }); } catch {}
-    try { w.postMessage({ wasmPath: wasmURL }); } catch {}
-  }
+  // Try to hint WASM path (different ports look for different keys)
+  try { if (wasmURL) w.postMessage({ type: 'wasmPath', path: wasmURL }); } catch {}
+  try { if (wasmURL) w.postMessage({ wasmPath: wasmURL }); } catch {}
 
-  // Listeners
+  // Observers
   const listeners = new Set();
   const addMessageListener = (fn) => { if (typeof fn === 'function') listeners.add(fn); };
 
-  // Normalize outputs to "line" strings
+  // Normalize outputs to plain "line" strings for the page debug console
   w.addEventListener('message', (e)=>{
-    let line = e?.data;
+    let d = e?.data;
 
-    // Many ports send raw strings already; keep them
-    if (typeof line === 'string') {
-      for (const fn of listeners) { try{ fn(line); }catch{} }
+    // Most ports already post raw strings
+    if (typeof d === 'string'){
+      for (const fn of listeners) try{ fn(d) }catch{}
       return;
     }
 
-    // Some send objects like { type:'stdout', data:'...' }
-    if (line && typeof line === 'object'){
-      if (typeof line.data === 'string') {
-        for (const fn of listeners) { try{ fn(line.data); }catch{} }
+    // Common object patterns
+    if (d && typeof d === 'object'){
+      if (typeof d.data === 'string'){            // { data: '...' }
+        for (const fn of listeners) try{ fn(d.data) }catch{}
         return;
       }
-      // Or { line:'...' }
-      if (typeof line.line === 'string'){
-        for (const fn of listeners) { try{ fn(line.line); }catch{} }
+      if (typeof d.line === 'string'){            // { line: '...' }
+        for (const fn of listeners) try{ fn(d.line) }catch{}
         return;
       }
-      // Last resort: show JSON for visibility
+      if (typeof d.stdout === 'string'){          // { stdout: '...' }
+        for (const fn of listeners) try{ fn(d.stdout) }catch{}
+        return;
+      }
+      // As a last resort, stringify so devs can see shape
       try {
-        const s = JSON.stringify(line);
-        for (const fn of listeners) { try{ fn(s); }catch{} }
+        const s = '[obj] ' + JSON.stringify(d);
+        for (const fn of listeners) try{ fn(s) }catch{}
       } catch {}
     }
   });
 
-  // Robust command sender: try multiple formats many FSF builds accept
+  // Ultra-robust sender: hammer all known command shapes
   function postMessage(cmd){
     if (typeof cmd !== 'string' || !cmd) return;
 
+    const s      = cmd;
+    const sNL    = s.endsWith('\n') ? s : (s + '\n');
+
     // 1) Plain string
-    try { w.postMessage(cmd); } catch {}
-
-    // 2) String + newline (some parsers prefer \n)
-    try { w.postMessage(cmd.endsWith('\n') ? cmd : (cmd + '\n')); } catch {}
-
-    // 3) Emscripten-style objects seen in some forks
-    try { w.postMessage({ cmd }); } catch {}
-    try { w.postMessage({ type: 'cmd', cmd }); } catch {}
-    try { w.postMessage({ uci: cmd }); } catch {}
+    try { w.postMessage(s); } catch {}
+    // 2) String + newline (Emscripten stdin)
+    try { w.postMessage(sNL); } catch {}
+    // 3) Objects seen in various forks
+    try { w.postMessage({ cmd: s }); } catch {}
+    try { w.postMessage({ type: 'cmd', cmd: s }); } catch {}
+    try { w.postMessage({ uci: s }); } catch {}
+    try { w.postMessage({ event: 'stdin', data: sNL }); } catch {}
+    try { w.postMessage({ stdin: sNL }); } catch {}
   }
 
-  // Small hello so you can confirm the shim is alive
+  // Hello ping so you know the bridge is alive
   setTimeout(()=>{
-    for (const fn of listeners) { try{ fn('[LEGACY] Classic worker online'); }catch{} }
+    for (const fn of listeners) try{ fn('[LEGACY] Classic worker online') }catch{}
   }, 0);
 
-  // Optional: kick the engine (harmless if duplicates come later)
-  setTimeout(()=>{
-    // Some builds are passive until first input; this wakes them.
-    try { postMessage('uci'); } catch {}
-  }, 30);
+  // Some ports need multiple early pokes before they start emitting UCI
+  let primed = false;
+  const prime = () => {
+    if (primed) return;
+    primed = true;
+    setTimeout(()=>{ try { postMessage('uci');     } catch {} },  10);
+    setTimeout(()=>{ try { postMessage('isready'); } catch {} },  40);
+    setTimeout(()=>{ try { postMessage('uci');     } catch {} }, 100);
+  };
+  prime();
 
   return {
     postMessage,

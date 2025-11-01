@@ -1,74 +1,65 @@
-// engine-pro.js — WASM engine bridge (Makruk) with debug taps.
+// engine-pro.js — Master level bridge to the WASM engine
 
 let _w = null;
 let _awaiters = [];
-let DBG = (msg)=>{}; // no-op until set
-let DBG_KIND = (msg, kind)=>{ DBG(`[ENGINE] ${msg}`, kind); };
+let _dbg = null;
 
-export function setEngineDebugLogger(fn){ if (typeof fn==='function') DBG = fn; }
-export function _debug__peekWorkerURL(){ return new URL('./engine.worker.js', import.meta.url).toString(); }
+function dbg(msg, kind){ (_dbg ? _dbg : console.log)(msg, kind); }
 
-// Use MODULE worker (important!)
-// engine-pro.js
+export function setEngineDebugLogger(fn){ _dbg = fn; }
 function workerURL(){
-  // cache-bust so old SW cached worker doesn't stick
-  return new URL(`./engine.worker.js?v=${Date.now()}`, import.meta.url);
+  // Resolve relative to this module file
+  const url = new URL('./engine.worker.js', import.meta.url);
+  // Cache-bust to avoid SW/GP caches during debug
+  url.searchParams.set('v', String(Date.now()));
+  return url.href;
 }
+export function _debug__peekWorkerURL(){ return workerURL(); }
 
 export function startEngineWorker(){
   if (_w) return;
-
   const url = workerURL();
-  DBG_KIND(`Starting worker: ${url}`, 'warn');
-
-  // MODULE so we can "import" fairy-stockfish.js inside the worker
+  dbg(`[ENGINE] Starting worker: ${url}`);
   _w = new Worker(url, { type: 'module' });
 
-  _w.addEventListener('error', (e)=>{
-    DBG_KIND(`Worker error: ${e.message || e.filename || e.type}`, 'err');
-  });
-  _w.addEventListener('messageerror', (e)=>{
-    DBG_KIND(`Worker messageerror: ${e.type}`, 'err');
-  });
-
   _w.onmessage = (e) => {
-    const { type, line, note } = e.data || {};
+    const { type, line } = e.data || {};
+    if (type !== 'uci') return;
 
-    if (note) DBG_KIND(`Worker note: ${note}`, 'warn');
+    // Debug pipe to UI
+    if (line && _dbg) _dbg(`[ENGINE] ${line}`);
 
-    if (type === 'uci' && line){
-      DBG_KIND(`UCI: ${line}`);
-      if (line.startsWith('bestmove')){
-        const parts = line.split(/\s+/);
-        const uci = parts[1];
-        for (const fn of _awaiters) fn(uci);
-        _awaiters = [];
-      }
+    // Capture bestmove
+    if (typeof line === 'string' && line.startsWith('bestmove')){
+      const parts = line.split(/\s+/);
+      const uci = parts[1] || '';
+      for (const fn of _awaiters) { try{ fn(uci); }catch{} }
+      _awaiters = [];
     }
   };
 }
 
 export function stopEngineWorker(){
-  if (_w){ DBG_KIND('Terminating worker.'); _w.terminate(); _w = null; }
+  if (_w){ try{ _w.terminate(); }catch{} _w = null; }
   _awaiters = [];
 }
 
 export function positionFromFEN(fen){ return `position fen ${fen}`; }
-export function goMoveTime(ms){ return `go movetime ${Math.max(50, (ms|0))}`; }
-
+export function goMoveTime(ms){ return `go movetime ${Math.max(50, ms|0)}`; }
 export function setNewGame(){ _w?.postMessage({ cmd: 'ucinewgame' }); }
 export function setPositionFEN(fen){ _w?.postMessage({ cmd: positionFromFEN(fen) }); }
 
 export function getEngineBestMove({ fen, movetimeMs = 600 }){
-  return new Promise((resolve) => {
-    startEngineWorker();
-    DBG_KIND(`Request bestmove: movetime=${movetimeMs}ms, FEN=${fen.slice(0,80)}...`);
-    _awaiters.push((uci)=>{
-      DBG_KIND(`Resolved bestmove: ${uci}`);
-      resolve(uci);
-    });
-    _w.postMessage({ cmd: 'ucinewgame' });
-    _w.postMessage({ cmd: positionFromFEN(fen) });
-    _w.postMessage({ cmd: goMoveTime(movetimeMs) });
+  return new Promise((resolve, reject)=>{
+    try{
+      startEngineWorker();
+      _awaiters.push(resolve);
+      _w.postMessage({ cmd:'ucinewgame' });
+      _w.postMessage({ cmd: positionFromFEN(fen) });
+      _w.postMessage({ cmd: goMoveTime(movetimeMs) });
+      dbg(`[ENGINE] Request bestmove: movetime=${movetimeMs}ms, FEN=${fen.slice(0,64)}...`);
+    }catch(e){
+      reject(e);
+    }
   });
 }

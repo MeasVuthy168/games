@@ -1,5 +1,5 @@
 // game.js — Khmer Chess (Makruk-style) core engine
-// Exports: SIZE, COLORS, PT, Game, initialPosition, piece
+// Exports: SIZE, COLORS, PT, Game, initialPosition, piece, toFen
 // Movement rules implemented:
 // - King (ស្តេច): 1-step any direction; FIRST MOVE ONLY: (±2 files, +1 rank forward), non-capturing, no jump
 // - Neang / Queen (នាង): 1-step diagonals; FIRST MOVE ONLY: straight forward 2, non-capturing, no jump
@@ -336,5 +336,52 @@ export class Game{
     });
     this.winner=null;
     return true;
+  }
+}
+
+/* ---------------------- FEN export (NEW) ---------------------- */
+// Convert current position to a chess-like FEN string
+// (castling/en-passant are not used in Ouk Chatrang)
+export function toFen(game){
+  // Pieces
+  const rows = [];
+  for (let y = 0; y < 8; y++){
+    let row = '';
+    let empties = 0;
+    for (let x = 0; x < 8; x++){
+      const p = game.at(x,y);
+      if (!p){ empties++; continue; }
+      if (empties){ row += String(empties); empties = 0; }
+      const letter = pieceLetter(p);
+      row += (p.c === 'w') ? letter : letter.toLowerCase();
+    }
+    if (empties) row += String(empties);
+    rows.push(row);
+  }
+  const boardPart = rows.join('/');
+
+  // side to move
+  const stm = (game.turn === 'w') ? 'w' : 'b';
+
+  // For Ouk Chatrang we can zero-out castling/en passant; halfmove/fullmove simple
+  return `${boardPart} ${stm} - - 0 1`;
+}
+
+function pieceLetter(p){
+  switch (p.t){
+    case 'K': return 'K';       // King
+    case 'Q': return 'Q';       // Neang (Ferz)
+    case 'B': return 'B';       // Khon (General)
+    case 'R': return 'R';       // Boat
+    case 'N': return 'N';       // Horse
+    case 'P': return 'P';       // Fish
+    // Khmer aliases (if ever present)
+    case 'S': return 'K';
+    case 'D': return 'Q';
+    case 'G': return 'B';
+    case 'T': return 'R';
+    case 'H': return 'N';
+    case 'F': return 'P';
+    default:  return 'P';
   }
 }

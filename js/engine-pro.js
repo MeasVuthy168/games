@@ -9,7 +9,11 @@ export function setEngineDebugLogger(fn){ if (typeof fn==='function') DBG = fn; 
 export function _debug__peekWorkerURL(){ return new URL('./engine.worker.js', import.meta.url).toString(); }
 
 // Use MODULE worker (important!)
-function workerURL(){ return new URL('./engine.worker.js', import.meta.url); }
+// engine-pro.js
+function workerURL(){
+  // cache-bust so old SW cached worker doesn't stick
+  return new URL(`./engine.worker.js?v=${Date.now()}`, import.meta.url);
+}
 
 export function startEngineWorker(){
   if (_w) return;

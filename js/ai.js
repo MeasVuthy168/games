@@ -1,13 +1,15 @@
 // js/ai.js — Fast Khmer Chess AI (ID + TT + Pruning + Levels + Book)
-//
-// Public API (unchanged):
+// Master level uses WASM pro engine (Ouk Chatrang) via engine-pro.js
+
+// --- NEW IMPORTS (served as ES modules) ---
+import { getEngineBestMove } from './engine-pro.js';
+import { toFen } from './game.js';
+
+// ---------------------------------------------------------------------
+// Public API (unchanged to callers):
 //   chooseAIMove(game, { level:'Easy'|'Medium'|'Hard'|'Master', aiColor:'w'|'b', countState })
 //   setAIDifficulty(level)
 //   pickAIMove (alias)
-//
-// Depends on your Game API (unchanged): at, turn, legalMoves, move, undo, status(), squareAttacked(), history
-// Works with Khmer piece aliases via TYPE_MAP.
-//
 // ---------------------------------------------------------------------
 
 /* =========================== Tunables ============================ */
@@ -21,7 +23,7 @@ const LEVEL = {
   Easy:   { timeMs:  60, maxDepth: 3,  nodeCap:  9000,  temp: 0.50 },
   Medium: { timeMs: 120, maxDepth: 4,  nodeCap: 16000, temp: 0.25 },
   Hard:   { timeMs: 220, maxDepth: 5,  nodeCap: 26000, temp: 0.00 },
-  Master: { timeMs: 350, maxDepth: 6,  nodeCap: 38000, temp: 0.00 },
+  Master: { timeMs: 600, maxDepth: 6,  nodeCap: 38000, temp: 0.00 }, // Master uses WASM; local values unused
 };
 
 // Quiescence guard
@@ -359,9 +361,9 @@ function pickByTemperature(items, T){
   return items[0].move;
 }
 
-/* ============================== Public API ============================= */
-
-export async function chooseAIMove(game, opts={}){
+/* ==================== Local (Easy/Medium/Hard) engine ================== */
+// Kept as-is and renamed; Master will call Pro engine.
+async function chooseAIMove_Local(game, opts={}){
   const level      = opts.level || 'Medium';
   const L          = LEVEL[level] || LEVEL.Medium;
   const aiColor    = opts.aiColor || game.turn;
@@ -401,7 +403,7 @@ export async function chooseAIMove(game, opts={}){
 
   if (!bestMove) return null;
 
-  // Small top list for temperature pick (keeps Easy/Medium human-ish)
+  // Small top list for temperature pick
   const all = orderMoves(game, generateMoves(game)).slice(0, 6).map(mv=>{
     const res = game.move(mv.from, mv.to);
     if(!res?.ok){ game.undo(); return null; }
@@ -414,6 +416,45 @@ export async function chooseAIMove(game, opts={}){
 
   const picked = pickByTemperature(all.length?all:[{move:bestMove,score:bestScore}], L.temp) || bestMove;
   return picked;
+}
+
+/* ============================== Public API ============================= */
+
+// Wrapper that routes Master -> Pro engine; others -> local engine
+export async function chooseAIMove(game, opts={}){
+  const level   = opts.level || 'Medium';
+  const aiColor = opts.aiColor || game.turn;
+
+  if (level === 'Master'){
+    try{
+      const fen = toFen(game);
+      // Short time keeps mobile UX responsive; raise for stronger play
+      const uci = await getEngineBestMove({ fen, movetimeMs: 600, color: aiColor });
+      const mv = uciToMove(uci);
+      // Validate against legal moves to be safe
+      if (mv && game.legalMoves(mv.from.x, mv.from.y).some(m => m.x===mv.to.x && m.y===mv.to.y)){
+        return mv;
+      }
+      // If engine returned something weird, fall back to local
+      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+    }catch(e){
+      // On any failure, fall back gracefully
+      return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
+    }
+  }
+
+  // Easy/Medium/Hard -> local engine
+  return await chooseAIMove_Local(game, opts);
+}
+
+function uciToMove(uci){
+  if (!uci || uci.length < 4) return null;
+  const fx = uci.charCodeAt(0) - 97;            // a..h -> 0..7
+  const fy = 8 - (uci.charCodeAt(1) - 48);      // '8'..'1' -> 0..7
+  const tx = uci.charCodeAt(2) - 97;
+  const ty = 8 - (uci.charCodeAt(3) - 48);
+  if (fx<0||fx>7||fy<0||fy>7||tx<0||tx>7||ty<0||ty>7) return null;
+  return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
 }
 
 export function setAIDifficulty(level){

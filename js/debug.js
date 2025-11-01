@@ -1,73 +1,125 @@
-// js/debug.js — temporary on-page console
+// js/debug.js  — lightweight in-page debug console for Worker/WASM
 
-import { setEngineDebugLogger, _debug__peekWorkerURL } from './engine-pro.js';
+// ---------- DOM ----------
+const $log   = document.getElementById('debug-log');
+const $run   = document.getElementById('dbg-run-checks');
+const $copy  = document.getElementById('dbg-copy');
+const $clear = document.getElementById('dbg-clear');
 
-const el = document.getElementById('debug-log');
-const btnClear = document.getElementById('dbg-clear');
-const btnCopy  = document.getElementById('dbg-copy');
-const btnCheck = document.getElementById('dbg-run-checks');
-
-function now(){ const d=new Date(); return d.toISOString().split('T')[1].replace('Z',''); }
-function line(txt, cls=''){
-  if(!el) return;
-  const span = document.createElement('div');
-  if (cls) span.className = cls;
-  span.textContent = `[${now()}] ${txt}`;
-  el.appendChild(span);
-  el.scrollTop = el.scrollHeight;
+// Basic style in case .debug-log has no CSS yet
+if ($log) {
+  $log.style.minHeight = '180px';
+  $log.style.maxHeight = '36vh';
+  $log.style.overflowY = 'auto';
+  $log.style.background = '#0b1220';
+  $log.style.color = '#e6f0ff';
+  $log.style.padding = '10px';
+  $log.style.borderRadius = '10px';
+  $log.style.font = '12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  $log.style.whiteSpace = 'pre-wrap';
 }
 
-line('Debug console ready.', 'ok');
+// ---------- Logger ----------
+function now() {
+  try {
+    const d = new Date();
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    const ss = String(d.getSeconds()).padStart(2,'0');
+    const ms = String(d.getMilliseconds()).padStart(3,'0');
+    return `[${hh}:${mm}:${ss}.${ms}]`;
+  } catch { return ''; }
+}
 
-// Mirror console.error/warn into panel (keep originals)
-const _ce = console.error.bind(console);
-const _cw = console.warn.bind(console);
-const _cl = console.log.bind(console);
+export function dbgLog(msg) {
+  if (!$log) return;
+  const line = `${now()} ${msg}`;
+  $log.textContent += ( $log.textContent ? '\n' : '' ) + line;
+  $log.scrollTop = $log.scrollHeight;
+  // also mirror to console for devtools
+  // eslint-disable-next-line no-console
+  console.log(line);
+}
 
-console.error = (...a)=>{ line(a.map(String).join(' '), 'err'); _ce(...a); };
-console.warn  = (...a)=>{ line(a.map(String).join(' '), 'warn'); _cw(...a); };
-console.log   = (...a)=>{ line(a.map(String).join(' ')); _cl(...a); };
+// expose globally so engine-pro / workers can use window.dbgLog?.('...')
+window.dbgLog = dbgLog;
 
-// Global error taps
-window.addEventListener('error', (e)=>{
-  line(`Page error: ${e.message} @ ${e.filename}:${e.lineno}`, 'err');
-});
-window.addEventListener('unhandledrejection', (e)=>{
-  line(`Unhandled rejection: ${e.reason && e.reason.message ? e.reason.message : String(e.reason)}`, 'err');
-});
+// greet
+dbgLog('Debug console ready.');
 
-// Buttons
-btnClear?.addEventListener('click', ()=>{ el.textContent=''; line('Cleared.'); });
-btnCopy ?.addEventListener('click', async ()=>{
-  const txt = Array.from(el.querySelectorAll('div')).map(d=>d.textContent).join('\n');
-  try{ await navigator.clipboard.writeText(txt); line('Copied to clipboard.', 'ok'); }
-  catch{ line('Copy failed.', 'err'); }
-});
-
-// Path checks
-btnCheck?.addEventListener('click', async ()=>{
-  line('Running path checks...', 'warn');
-  const tests = [
-    { url: 'engine/fairy-stockfish.js',  label: 'JS'   },
-    { url: 'engine/fairy-stockfish.wasm',label: 'WASM' }
-  ];
-  for (const t of tests){
-    try{
-      const r = await fetch(t.url, { method:'GET', cache:'no-store' });
-      line(`${t.label} fetch ${t.url} -> ${r.status} ${r.ok?'OK':'FAIL'}`, r.ok?'ok':'err');
-    }catch(err){
-      line(`${t.label} fetch ${t.url} -> ${err}`, 'err');
-    }
+// ---------- Helpers ----------
+async function fetchHead(url) {
+  try {
+    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    return `${res.status} ${res.ok ? 'OK' : res.statusText || ''}`;
+  } catch (e) {
+    return `ERROR ${e?.message || e}`;
   }
-  const wurl = _debug__peekWorkerURL?.();
-  if (wurl) line(`Worker URL resolved to: ${wurl}`, 'ok');
+}
+
+function resolved(href) {
+  return new URL(href, location.href).href;
+}
+
+// ---------- Path checks ----------
+async function runPathChecks() {
+  dbgLog('Running path checks...');
+  const jsUrl  = resolved('engine/fairy-stockfish.js');
+  const wasmUrl= resolved('engine/fairy-stockfish.wasm');
+  const wUrl   = resolved('js/engine.worker.js');
+
+  const jsStat   = await fetchHead(jsUrl);
+  dbgLog(`JS fetch engine/fairy-stockfish.js -> ${jsStat}`);
+
+  const wasmStat = await fetchHead(wasmUrl);
+  dbgLog(`WASM fetch engine/fairy-stockfish.wasm -> ${wasmStat}`);
+
+  dbgLog(`Worker URL resolved to: ${wUrl}`);
+}
+
+// ---------- Self-test (optional) ----------
+async function selfTest() {
+  try {
+    dbgLog('[ENGINE] Forcing self-test…');
+    const { getEngineBestMove, startEngineWorker } = await import('./engine-pro.js');
+    startEngineWorker?.();
+    // Simple test FEN (same one you used)
+    const fen = 'rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1';
+    dbgLog('[ENGINE] Request bestmove: movetime=600ms, FEN=' + fen.slice(0,80) + '...');
+    const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
+    dbgLog('[ENGINE] bestmove -> ' + (uci || '(none)'));
+  } catch (e) {
+    dbgLog('[ENGINE] Self-test error: ' + (e?.message || e));
+  }
+}
+
+// ---------- Wire buttons ----------
+$run?.addEventListener('click', async () => {
+  await runPathChecks();
+  // kick a quick engine test after checks
+  await selfTest();
 });
 
-// Feed engine logs into panel
-setEngineDebugLogger((msg, kind='log')=>{
-  const cls = kind==='err' ? 'err' : (kind==='warn'?'warn':'');
-  line(msg, cls);
+$copy?.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($log?.textContent || '');
+    dbgLog('Copied to clipboard.');
+  } catch (e) {
+    dbgLog('Copy failed: ' + (e?.message || e));
+  }
 });
 
-// First auto-check (optional)
-// btnCheck?.click();
+$clear?.addEventListener('click', () => {
+  if ($log) $log.textContent = '';
+});
+
+// ---------- Listen to worker-originated notes (optional) ----------
+// If your engine worker posts {type:'uci', line:'...'} (as in engine.worker.js), mirror here.
+window.addEventListener('message', (e) => {
+  try {
+    const d = e?.data;
+    if (d && typeof d === 'object' && d.type === 'uci' && typeof d.line === 'string') {
+      dbgLog(`UCI: ${d.line}`);
+    }
+  } catch {}
+});

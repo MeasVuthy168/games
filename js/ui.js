@@ -1,6 +1,8 @@
-// ui.js — Khmer Chess (Play page) + AI turn integration
+// ui.js — Khmer Chess (Play page) + AI turn integration (fixed & enhanced)
 import { Game, SIZE, COLORS } from './game.js';
-import { pickAIMove } from './ai.js';
+// Safe AI import: supports either pickAIMove or chooseAIMove from ai.js
+import * as AI from './ai.js';
+const AIPICK = AI.pickAIMove || AI.chooseAIMove;
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
@@ -207,7 +209,7 @@ export function initUI(){
   function setBoardBusy(on){
     AILock = !!on;
     if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
-    document.body.classList.toggle('ai-thinking', !!on);
+    document.body.classList.toggle('ai-thinking', !!on); // works with body.ai-thinking #board { ... }
   }
   const isAITurn = () => settings.aiEnabled && (
     (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
@@ -259,15 +261,8 @@ export function initUI(){
 
   // Normalize piece types: accept both western and Khmer-coded letters
   const TYPE_MAP = {
-    // western
     R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K',
-    // Khmer-coded variants seen in projects
-    T:'R',   // Tuk (Boat)
-    H:'N',   // Horse
-    G:'B',   // Khon / General
-    D:'Q',   // Neang (บางโปรเจกต์ใช้ D)
-    F:'P',   // Fish
-    S:'K'    // Sdech (if used)
+    T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K'
   };
   function normType(t){ return TYPE_MAP[t] || t; }
 
@@ -446,10 +441,11 @@ export function initUI(){
     }
     const last = game.history[game.history.length-1];
     if(last){
-      cells[last.from.y*SIZE+last.from.x].classList.add('last-from');
-      const toCell = cells[last.to.y*SIZE+last.x? last.to.x : last.to.x]; // keep
-      cells[last.to.y*SIZE+last.to.x].classList.add('last-to');
-      if(last.captured) cells[last.to.y*SIZE+last.to.x].classList.add('last-capture');
+      const fromIdx = last.from.y*SIZE + last.from.x;
+      const toIdx   = last.to.y*SIZE + last.to.x;
+      cells[fromIdx].classList.add('last-from');
+      cells[toIdx].classList.add('last-to');
+      if(last.captured) cells[toIdx].classList.add('last-capture');
     }
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
@@ -461,8 +457,17 @@ export function initUI(){
     if (!isAITurn() || AILock) return;
     setBoardBusy(true);
     try{
-      // tiny delay to feel more natural
-      const mv = await pickAIMove(game, { level: settings.aiLevel, timeMs: 120 });
+      // If your AI implementation accepts (game, { level, aiColor, countState }), pass them here:
+      const aiOpts = {
+        level: settings.aiLevel,
+        aiColor: settings.aiColor,
+        // Provide counting-draw info if your AI uses it
+        countState: { active: !!countState.active, remaining: countState.remaining||0, side: countState.side||null },
+        // If your AI supports soft time control, it can ignore this safely:
+        timeMs: 120
+      };
+
+      const mv = await Promise.resolve(AIPICK(game, aiOpts));
       if (!mv){ setBoardBusy(false); return; }
 
       const prevTurn = game.turn;
@@ -486,6 +491,9 @@ export function initUI(){
         }else if(res.status?.state==='stalemate'){
           stopCountingDraw();
           setTimeout(()=> alert('អាប់ — ស្មើជាមួយ AI!'), 60);
+        }else{
+          // If AI vs AI or multiple turns, allow follow-up
+          if (isAITurn()) setTimeout(thinkAndPlay, 0);
         }
       }
     } finally {

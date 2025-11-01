@@ -1,18 +1,60 @@
-// js/ai.js — Khmer Chess AI (Easy/Medium/Hard)
+// js/ai.js — Khmer Chess AI (Easy/Medium/Hard) + Opening Book
 //
-// Plugs into your Game API used in ui.js:
-// - game.at(x,y) -> {t:'R|N|B|Q|P|K' or Khmer variants, c:'w'|'b'} | null
-// - game.turn -> 'w'|'b'
-// - game.legalMoves(x,y) -> [{x,y}, ...]
-// - game.move({x,y},{x,y}) -> { ok:true, status:{state:'normal|check|checkmate|stalemate'}, captured?:... }
-// - game.undo()
+// Public API
+//   - chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState })
+//   - setAIDifficulty(level)
+//   - pickAIMove (alias of chooseAIMove for backward-compat)
 //
-// Call from UI:  chooseAIMove(game, { level:'Easy'|'Medium'|'Hard', aiColor:'w'|'b', countState:{active,remaining,side} })
+// Game API expectations (same as your code):
+//   game.at(x,y) -> {t:'R|N|B|Q|P|K' or Khmer variants T,H,G,D,F,S, c:'w'|'b'} | null
+//   game.turn    -> 'w'|'b'
+//   game.legalMoves(x,y) -> [{x,y}, ...]
+//   game.move({x,y},{x,y}) -> { ok:true, status:{state:'normal|check|checkmate|stalemate'}, captured?:... }
+//   game.undo()
+//   game.history -> array of {from:{x,y}, to:{x,y}} (used for opening keys)
 //
-// Notes:
-// - Uses light eval tuned like chess: R≈500, N≈320, B≈330, Q≈900, P≈100
-// - Khmer aliases mapped to R,N,B,Q,P,K where seen (T,H,G,D,F,S)
-// - Temperature sampling: Easy T=0.60, Medium T=0.30, Hard T=0.0
+// ---------------------------------------------------------------------
+
+/* ======================= Opening book (lightweight) ======================= */
+
+let _bookPromise = null;
+async function loadOpeningBook(){
+  if (_bookPromise) return _bookPromise;
+  _bookPromise = fetch('assets/book-mini.json').then(r=>r.json()).catch(()=> ({}));
+  return _bookPromise;
+}
+
+// Convert {x,y} (0..7) to algebraic "a1..h8"
+function toAlg(sq){
+  const file = String.fromCharCode(97 + sq.x);     // a..h
+  const rank = String(8 - sq.y);                    // 8..1
+  return file + rank;
+}
+
+// Convert history [{from,to},...] to key "e2e4 g8f6 ..." (spaces between plies)
+function historyKeyFromGame(game){
+  if (!Array.isArray(game.history) || game.history.length===0) return '';
+  return game.history.map(m => toAlg(m.from) + toAlg(m.to)).join(' ');
+}
+
+// Parse a "e2e4" string into a legal move object for the current position.
+// We *only* return a move that exists in game.legalMoves() for its 'from' square.
+function parseBookMove(uci, game){
+  if (!uci || uci.length < 4) return null;
+  const fx = uci.charCodeAt(0) - 97;  // a..h -> 0..7
+  const fy = 8 - (uci.charCodeAt(1) - 48); // '1'..'8' -> rank -> y
+  const tx = uci.charCodeAt(2) - 97;
+  const ty = 8 - (uci.charCodeAt(3) - 48);
+  if (fx<0||fx>7||tx<0||tx>7||fy<0||fy>7||ty<0||ty>7) return null;
+
+  const legals = game.legalMoves(fx, fy);
+  for (const m of legals){
+    if (m.x === tx && m.y === ty){
+      return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+    }
+  }
+  return null;
+}
 
 /* =========================== Config / Tuning =========================== */
 
@@ -281,10 +323,24 @@ function negamax(game, depth, alpha, beta, color, aiColor, rep, countState, budg
 /* ============================== Public API ============================= */
 
 export async function chooseAIMove(game, opts={}){
-  const level    = opts.level || 'Medium';
-  const aiColor  = opts.aiColor || (game.turn); // default: whoever is to move
+  const level      = opts.level || 'Medium';
+  const aiColor    = opts.aiColor || (game.turn); // default: whoever is to move
   const countState = opts.countState || null;
 
+  // ---------- Opening book first ----------
+  try{
+    const book = await loadOpeningBook();
+    const key  = historyKeyFromGame(game);     // e.g., "e2e4 e7e5 g1f3 ..."
+    const cand = book[key];
+    if (Array.isArray(cand) && cand.length){
+      // pick a random book move to keep variety
+      const pick = cand[Math.floor(Math.random()*cand.length)];
+      const mv = parseBookMove(pick, game);
+      if (mv) return mv;
+    }
+  }catch{ /* ignore book errors */ }
+
+  // ---------- Engine search fallback ----------
   const depth  = SEARCH_DEPTH[level] ?? 3;
   const temp   = TEMP_BY_LEVEL[level] ?? 0;
   const budget = { limit: NODE_LIMIT_BY_LEVEL[level] ?? 20000 };
@@ -327,10 +383,12 @@ export async function chooseAIMove(game, opts={}){
 }
 
 export function setAIDifficulty(level){
-  // kept for API symmetry; you already store in localStorage from Home
   return {
     depth: SEARCH_DEPTH[level] ?? 3,
     temperature: TEMP_BY_LEVEL[level] ?? 0,
     nodeLimit: NODE_LIMIT_BY_LEVEL[level] ?? 20000
   };
 }
+
+// Backward compatibility (older UI imports)
+export const pickAIMove = chooseAIMove;

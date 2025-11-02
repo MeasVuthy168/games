@@ -22,6 +22,25 @@
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
     }
+
+    /* === spinner for AI thinking === */
+    .ai-thinking {
+      position: fixed; inset: 0; display: none;
+      align-items: center; justify-content: center;
+      background: rgba(0,0,0,.35); z-index: 9999;
+      -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+    }
+    .ai-card{
+      min-width: 180px; padding: 14px 16px; border-radius: 12px;
+      background:#101826; color:#fff; text-align:center; font-family: Krasar, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    }
+    .ai-spinner{
+      width: 28px; height: 28px; margin: 0 auto 8px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,.25); border-top-color:#fff;
+      animation: ai-spin .8s linear infinite;
+    }
+    @keyframes ai-spin { to { transform: rotate(360deg); } }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -114,7 +133,21 @@
     </div>
   </div>
 
+  <!-- AI thinking overlay -->
+  <div class="ai-thinking" id="aiThinking">
+    <div class="ai-card">
+      <div class="ai-spinner"></div>
+      <div>🤖 កំពុងគិត…</div>
+    </div>
+  </div>
+
   <!-- JS (no debug.js, no engine-pro.js) -->
   <script type="module" src="./js/main.js"></script>
+
+  <!-- expose tiny helpers for spinner (used by ai.js automatically) -->
+  <script>
+    window.__aiShow = () => { const el = document.getElementById('aiThinking'); if (el) el.style.display='flex'; };
+    window.__aiHide = () => { const el = document.getElementById('aiThinking'); if (el) el.style.display='none'; };
+  </script>
 </body>
 </html>

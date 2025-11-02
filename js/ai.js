@@ -1,50 +1,63 @@
-// js/ai.js — Khmer Chess "Master++" Engine (no WASM)
-// API (unchanged):
+// js/ai.js — Khmer Chess "Master++ Aggressive" (no WASM)
+//
+// Public API (unchanged):
 //   - chooseAIMove(game, { aiColor: 'w'|'b', countState })
-//   - setAIDifficulty(level) -> returns active Master config
+//   - setAIDifficulty(level)  -> returns active Master config
 //   - pickAIMove alias
+//
+// Highlights:
+// - PVS + iterative deepening + aspiration windows
+// - Zobrist TT (fast hashing), killer moves, history heuristic
+// - LMR, futility, razoring, (guarded) null-move
+// - Quiescence with delta-pruning + checks probing
+// - Light PST + mobility + king-pressure/threat incentives
+// - Softer fear of defended squares => less "escape" behavior
+// - Counting-draw synergy + repetition control kept
 
-//////////////////////// Master++ Tunables //////////////////////
+//////////////////////// Master Profile //////////////////////
 
 const MASTER = {
-  timeMs:   1500,    // per-move budget (avg). Tune up/down for strength/speed.
-  maxDepth: 9,       // hard ceiling (iterative deepening will try to reach this)
-  nodeCap:  400_000, // absolute guardrail
+  timeMs:   1200,     // per-move time budget (tune up/down for strength/speed)
+  maxDepth: 9,        // hard ceiling (ID tries to reach this)
+  nodeCap:  400_000,  // global guardrail
 };
 
 const USE_BOOK   = true;
 const BOOK_URL   = 'assets/book-khmer.json';
-const TEMP_T     = 0.00;
+const TEMP_T     = 0.00; // root randomness (0 = deterministic)
 
-// Pruning / reductions
-const FUT_MARGIN_BASE = 120;   // futility base margin at depth 1
-const RAZOR_MARGIN    = 220;   // razoring margin
+//////////////////////// Pruning / Reductions //////////////////////
+
+const FUT_MARGIN_BASE = 120;
+const RAZOR_MARGIN    = 220;
 const Q_NODE_CAP      = 40_000;
 const Q_DEPTH_MAX     = 8;
 const LMR_MIN_DEPTH   = 3;
-const LMR_BASE_RED    = 1.0;   // base reduction for late quiets
+const LMR_BASE_RED    = 1;     // smaller = search more quiet moves
 const NULL_MOVE_R     = 2;
 const NULL_MOVE_MIND  = 3;
 
-// Repetition control (kept)
+//////////////////////// Repetition & Counting //////////////////////
+
 const REP_SHORT_WINDOW=8, REP_SOFT_PENALTY=15, REP_HARD_PENALTY=220;
 
-// Counting-draw synergy (kept)
-const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
+const COUNT_BURN_PENALTY=6;  // softened to reduce over-passivity
+const COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
 
-// Piece values (mapped via TYPE_MAP)
+//////////////////////// Values //////////////////////
+
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
 const ATTACKER_VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
 
-// Khmer piece aliases → normalized
+// Khmer aliases → normal
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 function normType(t){ return TYPE_MAP[t] || t; }
 
-//////////////////////// Debug hook //////////////////////
+//////////////////////// Debug hook (safe no-op) //////////////////////
 
 const log = (s, kind) => { try{ window.__dbglog?.(`[AI] ${s}`, kind); }catch{} };
 
-//////////////////////// Opening book ////////////////////
+//////////////////////// Opening book //////////////////////
 
 let _bookPromise=null;
 async function loadOpeningBook(){
@@ -81,9 +94,9 @@ function rnd32(){
   return (t ^ (t>>>14)) >>> 0;
 }
 
-// Zobrist table [y][x][pieceIndex], plus side-to-move
+// table[y][x][pieceIndex], plus side-to-move
 const Z = { table: [], side: rnd32() };
-const Z_PIECES = []; // map piece code "wP", "bQ", etc. to index
+const Z_PIECES = []; // "wP","bQ",...
 (function initZobrist(){
   const kinds = ['P','N','B','R','Q','K'];
   const colors = ['w','b'];
@@ -100,9 +113,7 @@ const Z_PIECES = []; // map piece code "wP", "bQ", etc. to index
 function pieceIndex(p){
   if (!p) return -1;
   const t = normType(p.t);
-  const key = p.c + t;
-  const idx = Z_PIECES.indexOf(key);
-  return idx;
+  return Z_PIECES.indexOf(p.c + t);
 }
 
 function zobrist(game){
@@ -153,68 +164,44 @@ function countingAdjust(aiColor, countState, captured, matLead){
   return adj;
 }
 
-//////////////////////// Mild PST & phase //////////////////////
+//////////////////////// PST & helpers //////////////////////
 
 const PST = {
   P: [
-    0,  6,  6,  8,  8,  6,  6,  0,
-    2,  6,  8, 12, 12,  8,  6,  2,
-    1,  4,  6, 10, 10,  6,  4,  1,
-    0,  2,  4,  6,  6,  4,  2,  0,
-    0,  2,  3,  4,  4,  3,  2,  0,
-    0,  2,  2,  2,  2,  2,  2,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0
+    0,6,6,8,8,6,6,0,  2,6,8,12,12,8,6,2,
+    1,4,6,10,10,6,4,1, 0,2,4,6,6,4,2,0,
+    0,2,3,4,4,3,2,0,  0,2,2,2,2,2,2,0,
+    0,0,0,0,0,0,0,0,  0,0,0,0,0,0,0,0
   ],
   N: [
-    -6,-2,  0,  2,  2,  0, -2, -6,
-    -2, 0,  2,  4,  4,  2,  0, -2,
-     0, 2,  6,  8,  8,  6,  2,  0,
-     2, 4,  8, 10, 10,  8,  4,  2,
-     2, 4,  8, 10, 10,  8,  4,  2,
-     0, 2,  6,  8,  8,  6,  2,  0,
-    -2, 0,  2,  4,  4,  2,  0, -2,
-    -6,-2,  0,  2,  2,  0, -2, -6
+    -6,-2,0,2,2,0,-2,-6, -2,0,2,4,4,2,0,-2,
+     0,2,6,8,8,6,2,0,   2,4,8,10,10,8,4,2,
+     2,4,8,10,10,8,4,2, 0,2,6,8,8,6,2,0,
+    -2,0,2,4,4,2,0,-2, -6,-2,0,2,2,0,-2,-6
   ],
   B: [
-     0,  0,  2,  4,  4,  2,  0,  0,
-     0,  2,  3,  6,  6,  3,  2,  0,
-     2,  3,  6,  8,  8,  6,  3,  2,
-     2,  4,  8, 10, 10,  8,  4,  2,
-     2,  4,  8, 10, 10,  8,  4,  2,
-     2,  3,  6,  8,  8,  6,  3,  2,
-     0,  2,  3,  6,  6,  3,  2,  0,
-     0,  0,  2,  4,  4,  2,  0,  0
+     0,0,2,4,4,2,0,0, 0,2,3,6,6,3,2,0,
+     2,3,6,8,8,6,3,2, 2,4,8,10,10,8,4,2,
+     2,4,8,10,10,8,4,2, 2,3,6,8,8,6,3,2,
+     0,2,3,6,6,3,2,0, 0,0,2,4,4,2,0,0
   ],
   R: [
-     2,  4,  4,  6,  6,  4,  4,  2,
-     3,  6,  6,  8,  8,  6,  6,  3,
-     2,  4,  4,  6,  6,  4,  4,  2,
-     1,  2,  2,  4,  4,  2,  2,  1,
-     1,  2,  2,  4,  4,  2,  2,  1,
-     0,  2,  2,  3,  3,  2,  2,  0,
-     0,  0,  0,  2,  2,  0,  0,  0,
-     0,  0,  0,  1,  1,  0,  0,  0
+     2,4,4,6,6,4,4,2, 3,6,6,8,8,6,6,3,
+     2,4,4,6,6,4,4,2, 1,2,2,4,4,2,2,1,
+     1,2,2,4,4,2,2,1, 0,2,2,3,3,2,2,0,
+     0,0,0,2,2,0,0,0, 0,0,0,1,1,0,0,0
   ],
   Q: [
-     0,  1,  2,  3,  3,  2,  1,  0,
-     1,  2,  3,  4,  4,  3,  2,  1,
-     2,  3,  5,  6,  6,  5,  3,  2,
-     3,  4,  6,  8,  8,  6,  4,  3,
-     3,  4,  6,  8,  8,  6,  4,  3,
-     2,  3,  5,  6,  6,  5,  3,  2,
-     1,  2,  3,  4,  4,  3,  2,  1,
-     0,  1,  2,  3,  3,  2,  1,  0
+     0,1,2,3,3,2,1,0, 1,2,3,4,4,3,2,1,
+     2,3,5,6,6,5,3,2, 3,4,6,8,8,6,4,3,
+     3,4,6,8,8,6,4,3, 2,3,5,6,6,5,3,2,
+     1,2,3,4,4,3,2,1, 0,1,2,3,3,2,1,0
   ],
   K: [
-    -4, -2, -2, -1, -1, -2, -2, -4,
-    -2,  0,  0,  0,  0,  0,  0, -2,
-    -2,  0,  1,  1,  1,  1,  0, -2,
-    -1,  0,  1,  2,  2,  1,  0, -1,
-    -1,  0,  1,  2,  2,  1,  0, -1,
-    -2,  0,  1,  1,  1,  1,  0, -2,
-    -2,  0,  0,  0,  0,  0,  0, -2,
-    -4, -2, -2, -1, -1, -2, -2, -4
+    -4,-2,-2,-1,-1,-2,-2,-4, -2,0,0,0,0,0,0,-2,
+    -2,0,1,1,1,1,0,-2, -1,0,1,2,2,1,0,-1,
+    -1,0,1,2,2,1,0,-1, -2,0,1,1,1,1,0,-2,
+    -2,0,0,0,0,0,0,-2, -4,-2,-2,-1,-1,-2,-2,-4
   ]
 };
 
@@ -247,7 +234,6 @@ function pstEval(game){
 }
 
 function mobilityEval(game){
-  // limited & cheap mobility proxy
   let moves=0;
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
@@ -259,11 +245,35 @@ function mobilityEval(game){
   return (game.turn==='w'?+1:-1)*Math.min(moves,28);
 }
 
+// small initiative when behind
+const INITIATIVE_WHEN_BEHIND = 18;
+
 function evalLeaf(game, rep, countState, aiColor){
   const mat = materialEval(game);
   const pst = pstEval(game);
   const mob = mobilityEval(game);
   let score = mat + pst + mob + repetitionPenalty(rep, zobrist(game));
+
+  // Initiative when behind (encourage complications)
+  if ((aiColor==='w' ? -mat : mat) > 120) {
+    if (game.turn===aiColor) score += INITIATIVE_WHEN_BEHIND;
+  }
+
+  // King pressure bonus: reward attacking enemy king (if helpers exist)
+  try{
+    const enemy = (aiColor==='w' ? 'b' : 'w');
+    const findKing = game.findKing?.bind(game);
+    const attackersOf = game.attackersOf?.bind(game);
+    if (findKing && attackersOf){
+      const k = findKing(enemy);
+      if (k){
+        const atk = attackersOf(k.x, k.y, aiColor) || [];
+        if (atk.length) score += 25 * atk.length;
+      }
+    }
+  }catch{}
+
+  // Counting-draw conservatism (softened)
   const lead = (aiColor==='w'?mat:-mat);
   if (countState?.active && lead>0 && countState.side===aiColor){
     const near = Math.max(0, 6 - (countState.remaining||0));
@@ -272,7 +282,7 @@ function evalLeaf(game, rep, countState, aiColor){
   return score;
 }
 
-//////////////////////// SEE (fast, conservative) //////////////////////
+//////////////////////// SEE (conservative, softened) //////////////////////
 
 function see(game, from, to){
   const attacker= game.at(from.x,from.y);
@@ -281,7 +291,7 @@ function see(game, from, to){
   const atkV = VAL[normType(attacker.t)]||0;
   let gain   = (VAL[normType(target.t)]||0) - atkV;
   const opp  = (game.turn==='w'?'b':'w');
-  if (game.squareAttacked(to.x,to.y, opp)) gain -= 40;
+  if (game.squareAttacked(to.x,to.y, opp)) gain -= 20; // was 40
   return gain;
 }
 
@@ -320,27 +330,56 @@ const TT = new Map(); // key -> {depth, score, flag, move, age}
 const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
 
 const KILLER = Array.from({length:128},()=>[null,null]); // two per ply
-const HIST   = new Map(); // key "fxfy-tx ty" -> score
+const HIST   = new Map(); // hashed key -> score
 
 function histKey(m){ return ((m.from.x<<6)|(m.from.y<<3)|m.to.x) + (m.to.y<<9); }
 function histGet(k){ return HIST.get(k)|0; }
 function histAdd(k, v){ HIST.set(k, Math.min(50000, (HIST.get(k)|0)+v)); }
 
 function orderMoves(game, moves, ttMove, ply){
+  const opp = (game.turn==='w'?'b':'w');
   for (const mv of moves){
     let score = 0;
+
+    // Hash move first
     if (ttMove && mv.from.x===ttMove.from.x && mv.from.y===ttMove.from.y && mv.to.x===ttMove.to.x && mv.to.y===ttMove.to.y){
-      score = 3_000_000; // hash move first
+      score = 3_000_000;
     } else if (mv.isCapture){
+      // MVV/LVA + SEE
       score = 2_000_000 + mv.mvv*12 - mv.lva;
       if (mv.mvv >= 300) score += see(game, mv.from, mv.to);
     } else {
-      // killer?
+      // killer / history / center
       const k0=KILLER[ply][0], k1=KILLER[ply][1];
       if (k0 && mv.from.x===k0.from.x && mv.from.y===k0.from.y && mv.to.x===k0.to.x && mv.to.y===k0.to.y) score = 1_000_500;
       else if (k1 && mv.from.x===k1.from.x && mv.from.y===k1.from.y && mv.to.x===k1.to.x && mv.to.y===k1.to.y) score = 1_000_400;
       else score = 200_000 + histGet(histKey(mv)) + mv.center;
     }
+
+    // Softer defended-square penalties + bravery bonuses
+    const defended = game.squareAttacked(mv.to.x,mv.to.y, opp);
+    if (mv.isCapture){
+      score += defended ? -25 : +250; // was -60 / +220
+    } else {
+      score += defended ? -5 : +20;   // was -20 / +10
+    }
+
+    // Threat detection: reward creating attacks on valuable enemy pieces nearby
+    try{
+      for (let dy=-1; dy<=1; dy++){
+        for (let dx=-1; dx<=1; dx++){
+          if (!dx && !dy) continue;
+          const tx = mv.to.x + dx, ty = mv.to.y + dy;
+          if (tx<0||tx>7||ty<0||ty>7) continue;
+          const tp = game.at(tx,ty);
+          if (tp && tp.c===opp){
+            const val = VAL[normType(tp.t)]||0;
+            if (val >= 300) score += Math.min(60, val/10);
+          }
+        }
+      }
+    }catch{}
+
     mv._hs = score;
   }
   moves.sort((a,b)=> b._hs - a._hs);
@@ -363,27 +402,20 @@ function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0, all
   if (stand >= beta) return beta;
   if (stand > alpha) alpha = stand;
 
-  // Delta pruning for hopeless small captures
-  const delta = 975; // queen-ish margin
+  // Delta pruning (skip hopeless swings)
+  const delta = 975;
   if (stand + delta < alpha) return alpha;
 
-  // Captures (+ optionally checking moves)
+  // Captures (+ probe a couple checking quiets)
   let moves = generateMoves(game).filter(m=>m.isCapture);
   if (allowChecks) {
-    // add checking quiets lightly: we detect by result status
     const quiets = generateMoves(game).filter(m=>!m.isCapture);
-    // only consider top 2 quiets by center bias to probe checks quickly
     quiets.sort((a,b)=> b.center - a.center);
     moves = moves.concat(quiets.slice(0,2));
   }
   orderMoves(game, moves, null, 0);
 
   for (const mv of moves){
-    // Simple futility inside q-search: skip tiny captures far below alpha
-    if (mv.isCapture===false) {
-      // only keep if it gives check
-    }
-
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
 
@@ -402,6 +434,10 @@ function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0, all
 }
 
 //////////////////////// Negamax + PVS //////////////////////
+
+function totalMaterialAbs(game){
+  return materialSide(game,'w') + materialSide(game,'b');
+}
 
 function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, allowNull=true){
   if (timers.timeUp() || stats.nodes++ > timers.nodeCap) return { score: 0, move:null, cutoff:true, pv:null };
@@ -430,7 +466,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
     return { score: v, move:null, pv:null };
   }
 
-  // Razoring (shallow, safe)
+  // Razoring (frontier)
   if (depth===1){
     const sp = color * evalLeaf(game, timers.rep, timers.countState, aiColor);
     if (sp + RAZOR_MARGIN <= alpha){
@@ -440,11 +476,10 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
     }
   }
 
-  // Null-move pruning (not in check)
-  if (allowNull && depth>=NULL_MOVE_MIND){
+  // Null-move pruning (disabled in thin endgames)
+  if (allowNull && depth>=NULL_MOVE_MIND && totalMaterialAbs(game) > 1600){
     const stand = color * evalLeaf(game, timers.rep, timers.countState, aiColor);
     if (stand >= beta){
-      // verify with reduced shallow search (no real null move available in this API)
       return { score: beta, move:null, pv:null };
     }
   }
@@ -452,7 +487,6 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
   // Generate + order
   let moves = orderMoves(game, generateMoves(game), ttMove, ply);
   if (!moves.length){
-    // No legal moves: return static eval (safety)
     return { score: color * evalLeaf(game, timers.rep, timers.countState, aiColor), move:null, pv:null };
   }
 
@@ -462,7 +496,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
 
   // PVS
   for (const mv of moves){
-    // Frontier futility for quiets at depth 1
+    // futility at frontier for quiets
     if (depth===1 && !mv.isCapture){
       const est = color * evalLeaf(game, timers.rep, timers.countState, aiColor) - (FUT_MARGIN_BASE);
       if (est <= alpha){ idx++; if (timers.timeUp()) break; continue; }
@@ -473,28 +507,25 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
 
     // Late move reduction for quiets not giving check
     let nextDepth = depth-1;
-    let reduced = false;
     if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=3){
-      const red = Math.min(2, 1 + ((idx>7)|0)) * LMR_BASE_RED;
+      const red = Math.min(2, 1 + ((idx>7)|0)) * LMR_BASE_RED; // gentle LMR
       nextDepth = Math.max(0, depth-1 - red|0);
-      reduced = nextDepth < depth-1;
     }
 
-    // First move: full window; others: PVS zero-window then re-search on fail-high
+    // First move: full window; others: null-window then re-search
     let child;
     if (idx===0){
       child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats, ply+1, true);
     } else {
       child = negamax(game, nextDepth, -alpha-1, -alpha, -color, aiColor, timers, stats, ply+1, true);
       if (!child.cutoff && child.score > alpha){
-        // re-search with full window
         child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats, ply+1, true);
       }
     }
 
     let childScore = (child.cutoff ? -alpha : -(child.score));
 
-    // small tactical sweeteners
+    // tactical sweeteners (captures/checks)
     if (mv.isCapture || res?.status?.state==='check'){
       const mat = materialEval(game);
       const aiLead = (aiColor==='w'?mat:-mat);
@@ -511,7 +542,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, a
         pvLine = child?.pv ? [mv, ...child.pv] : [mv];
       }
       if (alpha >= beta){
-        // store killer move for quiet beta cutoffs
+        // record killer + history on quiet beta cut
         if (!mv.isCapture){
           const kslot = KILLER[ply];
           if (!kslot[0] || !(kslot[0].from.x===mv.from.x && kslot[0].from.y===mv.from.y && kslot[0].to.x===mv.to.x && kslot[0].to.y===mv.to.y)){
@@ -581,18 +612,16 @@ async function chooseAIMove_LocalMaster(game, opts={}){
   let bestScore = -Infinity;
   let lastScore = 0;
 
-  // aspiration window around lastScore
   for (let depth=1; depth<=MASTER.maxDepth; depth++){
-    let alpha = (depth>2 ? lastScore - 60 : -Infinity);
-    let beta  = (depth>2 ? lastScore + 60 :  Infinity);
+    let alpha = (depth>2 ? lastScore - 90 : -Infinity);
+    let beta  = (depth>2 ? lastScore + 90 :  Infinity);
 
-    // 2 retries with widened windows
     for (let tries=0; tries<2; tries++){
       const { move, score } = negamax(game, depth, alpha, beta, +1, aiColor, timers, stats, 0, true);
       if (timers.timeUp()) break;
 
-      if (score <= alpha){ alpha = -Infinity; beta = (Number.isFinite(lastScore)? (lastScore + 120) : Infinity); continue; }
-      if (score >= beta ){ alpha = (Number.isFinite(lastScore)? (lastScore - 120) : -Infinity); beta = Infinity; continue; }
+      if (score <= alpha){ alpha = -Infinity; beta = (Number.isFinite(lastScore)? (lastScore + 140) : Infinity); continue; }
+      if (score >= beta ){ alpha = (Number.isFinite(lastScore)? (lastScore - 140) : -Infinity); beta = Infinity; continue; }
 
       if (move){ bestMove = move; bestScore = score; lastScore = score; }
       break;

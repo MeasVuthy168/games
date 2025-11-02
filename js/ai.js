@@ -1,26 +1,13 @@
-// js/ai.js — Fast Khmer Chess AI (ID + TT + Pruning + Levels + Book)
-// Master level uses WASM pro engine (Makruk/Ouk Chatrang) via engine-pro.js
-
-// --- IMPORTS ---
-import { getEngineBestMove } from './engine-pro.js';
-import { toFen } from './game.js';
-
-// Unified logger → debug panel (prefers __dbglog, then dbgLog, then console)
-const _logFn = (msg, kind) => {
-  if (typeof window !== 'undefined') {
-    if (typeof window.__dbglog === 'function') return window.__dbglog(msg, kind);
-    if (typeof window.dbgLog   === 'function') return window.dbgLog(msg, kind);
-  }
-  return (kind === 'err' ? console.error : console.log)(msg);
-};
-const log = (s, kind) => { try { _logFn(`[AI] ${s}`, kind); } catch { /* noop */ } };
-
-// ---------------------------------------------------------------------
-// Public API (unchanged to callers):
+// js/ai.js — Pure-JS Khmer Chess AI (ID + TT + Aspiration + LMR + Killer/History)
+// Public API kept the same:
 //   chooseAIMove(game, { level:'Easy'|'Medium'|'Hard'|'Master', aiColor:'w'|'b', countState })
 //   setAIDifficulty(level)
-//   pickAIMove (alias)
-// ---------------------------------------------------------------------
+//   export const pickAIMove = chooseAIMove;
+
+import { toFen } from './game.js';
+
+// small logger to your in-page debug console if present
+const log = (s) => { try{ window.dbgLog?.(`[AI] ${s}`); }catch{} };
 
 /* =========================== Tunables ============================ */
 
@@ -28,18 +15,22 @@ const USE_BOOK = true;
 const BOOK_URL = 'assets/book-khmer.json';
 
 const LEVEL = {
-  Easy:   { timeMs:  60, maxDepth: 3,  nodeCap:  9000,  temp: 0.50 },
-  Medium: { timeMs: 120, maxDepth: 4,  nodeCap: 16000, temp: 0.25 },
-  Hard:   { timeMs: 220, maxDepth: 5,  nodeCap: 26000, temp: 0.00 },
-  Master: { timeMs: 600, maxDepth: 6,  nodeCap: 38000, temp: 0.00 }, // (unused locally)
+  Easy:   { timeMs:  70, maxDepth: 3, nodeCap:  9000,  temp: 0.60 },
+  Medium: { timeMs: 140, maxDepth: 4, nodeCap: 16000, temp: 0.30 },
+  Hard:   { timeMs: 260, maxDepth: 5, nodeCap: 27000, temp: 0.10 },
+  // Master now uses the same JS search but with beefier caps
+  Master: { timeMs: 600, maxDepth: 7, nodeCap: 52000, temp: 0.00 },
 };
 
-const Q_NODE_CAP = 15000;
-const Q_DEPTH_MAX = 6;
-const FUT_MARGIN = 120;
-const LMR_START_INDEX = 4;
-const LMR_MIN_DEPTH = 3;
+const Q_NODE_CAP   = 18000;
+const Q_DEPTH_MAX  = 6;
+const FUT_MARGIN   = 140;   // futility threshold at depth 1
+const LMR_START_AT = 4;     // reduce after Nth move
+const LMR_MIN_D    = 3;     // only reduce when remaining depth >= this
+const ASP_DELTA    = 60;    // aspiration half-window in cp
+const ASP_FAIL_GROW= 80;    // widen on fail
 
+// piece values (normalize your Khmer types via TYPE_MAP)
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:0 };
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 const ATTACKER_VAL = { P:100, N:320, B:330, R:500, Q:900, K:1000 };
@@ -146,9 +137,15 @@ function countingAdjust(aiColor, countState, captured, matLead){
   return adj;
 }
 
-/* ============================ Move-gen / ordering ================= */
+/* ===================== Move-gen, killers, history ================= */
+
+const KILLER_SLOTS = 2;
+const killers = Array.from({length:64}, ()=> Array(KILLER_SLOTS).fill(null)); // indexed by depth
+const historyTable = new Int32Array(64*64); // from*64+to
 
 function centerBias(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
+
+function sqIdx(x,y){ return (y<<3)|x; }
 
 function generateMoves(game){
   const out=[];
@@ -174,22 +171,33 @@ function generateMoves(game){
   return out;
 }
 
-function moveScoreHeuristic(game, mv){
+function moveScoreHeuristic(game, mv, depth){
+  // 1) hash move (if present in TT) handled elsewhere
+  // 2) captures first (MVV-LVA + simple defense check)
   let score = 0;
-  if (mv.isCapture){ score += 12000 + mv.mvv*12 - mv.lva; }
-  else { score += mv.center; }
-  const opp = (game.turn==='w'?'b':'w');
-  const defended = game.squareAttacked(mv.to.x, mv.to.y, opp);
   if (mv.isCapture){
-    score += defended ? -60 : +220;
-    if (mv.attackerType==='K'){ score += (mv.mvv>200) ? 400 : (defended ? -200 : +200); }
+    score += 12000 + mv.mvv*12 - mv.lva;
+    const opp = (game.turn==='w'?'b':'w');
+    const defended = game.squareAttacked(mv.to.x, mv.to.y, opp);
+    score += defended ? -80 : +220;
   } else {
-    score += defended ? -20 : +10;
+    // 3) killers
+    const d = Math.min(depth, killers.length-1);
+    const key = sqIdx(mv.from.x, mv.from.y)*64 + sqIdx(mv.to.x, mv.to.y);
+    if (killers[d][0] && key===killers[d][0]) score += 8000;
+    else if (killers[d][1] && key===killers[d][1]) score += 7000;
+    // 4) history
+    score += historyTable[key] | 0;
+    // 5) center
+    score += mv.center;
   }
+  // light king-move penalty unless checking/capture
+  if (!mv.isCapture && mv.attackerType==='K') score -= 25;
   return score;
 }
-function orderMoves(game, moves){
-  for (const mv of moves) mv._hs = moveScoreHeuristic(game, mv);
+
+function orderMoves(game, moves, depth){
+  for (const mv of moves) mv._hs = moveScoreHeuristic(game, mv, depth);
   moves.sort((a,b)=> b._hs - a._hs);
   return moves;
 }
@@ -226,11 +234,20 @@ function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0){
   if (stand >= beta) return beta;
   if (stand > alpha) alpha = stand;
 
-  const caps = orderMoves(game, generateMoves(game).filter(m=>m.isCapture));
+  // Captures only; skip "obviously bad" ones by a quick margin test
+  const caps = generateMoves(game).filter(m=>m.isCapture);
+  orderMoves(game, caps, 0);
   for (const mv of caps){
+    // cheap discard of losing trades: if MVV-LVA looks terrible, skip
+    if (mv.mvv - (mv.lva>>1) < -120) continue;
+
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
-    const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1);
+
+    // if giving check, extend
+    const ext = (res?.status?.state==='check') ? 1 : 0;
+
+    const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1+ext);
     undo(game);
     if (score >= beta) return beta;
     if (score > alpha) alpha = score;
@@ -241,7 +258,7 @@ function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0){
 
 /* ============================== Search ========================== */
 
-function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
+function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply){
   if (timers.timeUp() || stats.nodes++ > timers.nodeCap) return { score: 0, move:null, cutoff:true };
 
   const st = game?.status?.();
@@ -268,7 +285,7 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
 
   timers.rep.push(key);
 
-  let moves = orderMoves(game, generateMoves(game));
+  let moves = orderMoves(game, generateMoves(game), depth);
   if (!moves.length){
     timers.rep.pop();
     return { score: color * evalLeaf(game, timers.rep, timers.countState, aiColor), move:null };
@@ -282,19 +299,24 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
     const res = make(game, mv);
     if(!res?.ok){ undo(game); idx++; continue; }
 
+    // Simple futility at depth 1 for quiets
     if (depth===1 && !mv.isCapture && res?.status?.state!=='check'){
       const est = color * evalLeaf(game, timers.rep, timers.countState, aiColor) - FUT_MARGIN;
       if (est <= alpha){ undo(game); idx++; if (timers.timeUp()) break; continue; }
     }
 
+    // Late Move Reductions for quiet, non-check moves
     let nextDepth = depth-1;
-    if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=LMR_START_INDEX){
-      nextDepth = Math.max(0, depth-2);
+    if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_D && idx>=LMR_START_AT){
+      // small depth reduction; larger if very late in move list
+      const red = (idx>LMR_START_AT+6) ? 2 : 1;
+      nextDepth = Math.max(0, depth-1-red);
     }
 
-    const child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats);
+    const child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats, ply+1);
     let childScore = (child.cutoff ? -alpha : -(child.score));
 
+    // Light tactical bonuses
     if (mv.isCapture || res?.status?.state==='check'){
       const mat = materialEval(game);
       const aiLead = (aiColor==='w'?mat:-mat);
@@ -306,7 +328,20 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
 
     if (childScore > best){
       best = childScore; bestMove = mv;
-      if (best > alpha) alpha = best;
+      if (best > alpha){
+        // update killer/history for quiet moves that improved alpha
+        if (!mv.isCapture){
+          const d = Math.min(ply, killers.length-1);
+          const keyFT = sqIdx(mv.from.x, mv.from.y)*64 + sqIdx(mv.to.x, mv.to.y);
+          // shift killers
+          if (killers[d][0] !== keyFT){
+            killers[d][1] = killers[d][0];
+            killers[d][0] = keyFT;
+          }
+          historyTable[keyFT] = Math.min(historyTable[keyFT] + (depth*depth)*6, 40000);
+        }
+        alpha = best;
+      }
       if (alpha >= beta) break;
     }
 
@@ -339,7 +374,7 @@ function pickByTemperature(items, T){
   return items[0].move;
 }
 
-/* ==================== Local (Easy/Medium/Hard) engine ============ */
+/* ==================== Local engine (all levels) =================== */
 
 async function chooseAIMove_Local(game, opts={}){
   const level      = opts.level || 'Medium';
@@ -347,6 +382,7 @@ async function chooseAIMove_Local(game, opts={}){
   const aiColor    = opts.aiColor || game.turn;
   const countState = opts.countState || null;
 
+  // Opening book first
   try{
     const book = await loadOpeningBook();
     if (book && USE_BOOK){
@@ -368,95 +404,66 @@ async function chooseAIMove_Local(game, opts={}){
   };
   const stats = { nodes:0 };
 
+  // Aspiration window around previous iteration score
+  let guess = 0;
+  let alpha0 = -Infinity, beta0 = +Infinity;
+
   let bestMove = null;
   let bestScore = -Infinity;
 
   for (let depth=1; depth<=L.maxDepth; depth++){
-    const { move, score } = negamax(game, depth, -Infinity, Infinity, +1, aiColor, timers, stats);
-    if (move){ bestMove = move; bestScore = score; }
+    let alpha = (depth>1) ? Math.max(-Infinity, guess - ASP_DELTA) : alpha0;
+    let beta  = (depth>1) ? Math.min(+Infinity, guess + ASP_DELTA) : beta0;
+
+    // Re-search on fail-low/high
+    while (true){
+      const { move, score } = negamax(game, depth, alpha, beta, +1, aiColor, timers, stats, /*ply*/0);
+
+      let failedLow=false, failedHigh=false;
+      if (score <= alpha){ failedLow=true; alpha = Math.max(-Infinity, score - ASP_FAIL_GROW); }
+      else if (score >= beta){ failedHigh=true; beta = Math.min(+Infinity, score + ASP_FAIL_GROW); }
+      else {
+        if (move){ bestMove = move; bestScore = score; }
+        guess = score;
+        break;
+      }
+
+      if (timers.timeUp()) break;
+      if (failedLow && alpha<=-100000) break;
+      if (failedHigh && beta>=+100000) break;
+    }
+
     if (timers.timeUp()) break;
   }
 
-  if (!bestMove) return null;
+  if (!bestMove){
+    // fallback: pick something legal
+    const moves = generateMoves(game);
+    orderMoves(game, moves, 0);
+    bestMove = moves[0] || null;
+  }
 
-  const all = orderMoves(game, generateMoves(game)).slice(0, 6).map(mv=>{
+  // soft multi-probe to add a little variety
+  const all = orderMoves(game, generateMoves(game), 0).slice(0, 6).map(mv=>{
     const res = game.move(mv.from, mv.to);
     if(!res?.ok){ game.undo(); return null; }
     const timers2 = { ...timers, rep: new RepTracker() };
     const stats2 = { nodes:0 };
-    const sub = negamax(game, Math.max(1, (LEVEL[level]?.maxDepth||3)-1), -Infinity, Infinity, -1, aiColor, timers2, stats2);
+    const sub = negamax(game, Math.max(1, (LEVEL[level]?.maxDepth||3)-1), -Infinity, Infinity, -1, aiColor, timers2, stats2, 1);
     game.undo();
     return { move: mv, score: -(sub.score) };
   }).filter(Boolean).sort((a,b)=> b.score - a.score);
 
-  const picked = pickByTemperature(all.length?all:[{move:bestMove,score:bestScore}], L.temp) || bestMove;
+  const picked = pickByTemperature(all.length?all:[{move:bestMove,score:bestScore}], LEVEL[level].temp) || bestMove;
   return picked;
-}
-
-/* ====================== Pro engine safe wrapper =================== */
-
-function uciToMove(uci){
-  if (!uci || uci.length < 4) return null;
-  if (uci === '0000') return null; // explicit guard
-  const fx = uci.charCodeAt(0) - 97;
-  const fy = 8 - (uci.charCodeAt(1) - 48);
-  const tx = uci.charCodeAt(2) - 97;
-  const ty = 8 - (uci.charCodeAt(3) - 48);
-  if (fx<0||fx>7||fy<0||fy>7||tx<0||tx>7||ty<0||ty>7) return null;
-  return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
-}
-
-async function safeGetBestMove(fen, movetimeMs, timeoutMs=1300){
-  // Promise.race for timeout
-  const withTimeout = new Promise((_, rej)=>{
-    setTimeout(()=> rej(new Error('engine timeout')), timeoutMs);
-  });
-  return await Promise.race([ getEngineBestMove({ fen, movetimeMs }), withTimeout ]);
 }
 
 /* ============================== Public API ======================= */
 
 export async function chooseAIMove(game, opts={}){
-  const level   = opts.level || 'Medium';
-
-  // Master → WASM Pro (with timeout + 1 retry)
-  if (level === 'Master'){
-    const fen = toFen(game);
-    log(`Master request → movetime=600ms, FEN=${fen}`);
-
-    const attempt = async (tag) => {
-      try{
-        const uci = await safeGetBestMove(fen, 600);
-        if (!uci || typeof uci !== 'string' || uci === '0000' || uci.length < 4){
-          throw new Error(`invalid UCI: ${uci}`);
-        }
-        const mv = uciToMove(uci);
-        if (!mv) throw new Error(`parse failed for UCI: ${uci}`);
-        const legals = game.legalMoves(mv.from.x, mv.from.y);
-        if (!legals.some(m => m.x===mv.to.x && m.y===mv.to.y)){
-          throw new Error(`illegal in position: ${uci}`);
-        }
-        log(`${tag} bestmove accepted: ${uci}`);
-        return mv;
-      }catch(e){
-        log(`${tag} error: ${e?.message||e}`, 'err');
-        return null;
-      }
-    };
-
-    // First try
-    let mv = await attempt('Pro#1');
-    if (!mv){
-      // One quick retry (helps when worker is cold)
-      mv = await attempt('Pro#2');
-    }
-    if (mv) return mv;
-
-    log('Pro engine failed → fallback Hard');
-    return await chooseAIMove_Local(game, { ...opts, level:'Hard' });
-  }
-
-  // Easy/Medium/Hard → local
+  // All levels use local engine now (no external Pro/WASM)
+  const level = opts.level || 'Medium';
+  log(`${level} request → time=${(LEVEL[level]||LEVEL.Medium).timeMs}ms, FEN=${toFen(game)}`);
   return await chooseAIMove_Local(game, opts);
 }
 

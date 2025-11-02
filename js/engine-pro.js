@@ -1,11 +1,18 @@
 // js/engine-pro.js
-// Handshake & bestmove request with support for classic/global engine workers.
-
 let _log = () => {};
 export function setEngineDebugLogger(fn){ _log = typeof fn === 'function' ? fn : () => {}; }
 
-const WORKER_URL = new URL('./js/engine.worker.js', self.location.href).href;
-export function _debug__peekWorkerURL(){ return WORKER_URL; } // so UI won’t show (unknown)
+// Resolve the worker URL RELATIVE to the page, and add a cache buster
+function _resolveWorkerURL(){
+  const u = new URL('./js/engine.worker.js', window.location.href);
+  // cache-bust so old SW-cached workers don't linger
+  if (!u.searchParams.has('v')) u.searchParams.set('v', String(Date.now()));
+  return u.href;
+}
+const WORKER_URL = _resolveWorkerURL();
+
+// expose for the debug panel
+export function _debug__peekWorkerURL(){ return WORKER_URL; }
 
 let _w = null;
 let _ready = false;
@@ -28,12 +35,8 @@ function ensureWorker(){
     _log(line);
     if(/uciok/i.test(line)) _seenUciOk = true;
     if(/readyok/i.test(line)) _seenReadyOk = true;
+    if(/id name|option|uciok|readyok|bestmove/i.test(line)) _ready = true;
 
-    if(/id name|option|uciok|readyok|bestmove/i.test(line)) {
-      _ready = true;
-    }
-
-    // Capture bestmove
     const m = /^bestmove\s+([a-h][1-8][a-h][1-8]|0000)/i.exec(line);
     if(m && _pending){
       clearTimeout(_pending.timer);
@@ -49,22 +52,14 @@ async function handshake(timeoutMs=2500){
   _log('[ENGINE] Handshake starting (global-mode extension)...');
 
   const t0 = Date.now();
-
-  // 1) uci (both raw & newline forms)
   send('uci'); await sleep(80); sendNL('uci');
-
-  // 2) try variants used by Fairy-Stockfish ports
-  send('setoption name UCI_Variant value makruk');
-  send('setoption name UCI_Variant value ouk');
-
-  // 3) readiness
+  send('setoption name UCI_Variant value makruk'); // ok if ignored
+  send('setoption name UCI_Variant value ouk');    // ok if ignored
   send('isready');
 
-  // wait loop
   while((!_seenUciOk || !_seenReadyOk) && (Date.now()-t0)<timeoutMs){
     await sleep(100);
   }
-
   _ready = true;
   _log('[ENGINE] Handshake complete.');
 }

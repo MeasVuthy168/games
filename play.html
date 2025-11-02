@@ -16,56 +16,50 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="js/pwa.js" defer></script>
 
-  <!-- Board textures -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
+      --ui-font: "Krasar","Noto Sans Khmer",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
       --blue:#0d2d5c;
     }
+    html,body,.app,.app *{ font-family:var(--ui-font); }
 
-    /* ==== AI Spinner & Tap Blocker ==== */
+    /* Spinner mask */
     .ai-mask{
       position:fixed; inset:0;
-      background:rgba(13,45,92,.06);
-      backdrop-filter: blur(1px);
-      display:none;
-      z-index:9999;
+      background:rgba(13,45,92,.07);
+      backdrop-filter:saturate(140%) blur(1.5px);
+      display:none; align-items:center; justify-content:center;
+      z-index: 9999;
     }
-    .ai-mask.on{ display:block }
-
+    .ai-mask.on{ display:flex }
     .ai-card{
-      position:absolute; left:50%; top:42%;
-      transform:translate(-50%,-50%);
-      background:#fff; color:#0d2d5c;
-      border-radius:14px; padding:14px 18px;
-      box-shadow:0 10px 30px rgba(0,0,0,.18);
-      font-family:"Krasar","Noto Sans Khmer",system-ui;
-      text-align:center; min-width:220px;
+      min-width: 240px;
+      background:#fff; color:#222;
+      border-radius:16px; padding:18px 16px;
+      box-shadow:0 10px 24px rgba(0,0,0,.18);
+      text-align:center;
     }
-    .ai-row{ display:flex; align-items:center; gap:10px; justify-content:center }
+    .ai-row{ display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:6px }
     .ai-dot{
-      width:8px; height:8px; border-radius:50%;
-      background:#0d2d5c; opacity:.25;
-      animation: ai-b 1.1s linear infinite;
+      width:8px; height:8px; border-radius:50%; background:#0d2d5c; opacity:.25;
+      animation: ad 1s infinite ease-in-out;
     }
+    .ai-dot:nth-child(1){ animation-delay:0s }
     .ai-dot:nth-child(2){ animation-delay:.15s }
     .ai-dot:nth-child(3){ animation-delay:.3s }
-    @keyframes ai-b{
-      0%{ transform:translateY(0); opacity:.25 }
-      50%{ transform:translateY(-6px); opacity:.9 }
-      100%{ transform:translateY(0); opacity:.25 }
-    }
-    .ai-sub{ font-size:.9rem; margin-top:6px; opacity:.8 }
+    @keyframes ad { 0%,80%,100%{ transform:scale(.6); opacity:.25 } 40%{ transform:scale(1); opacity:1 } }
+    .ai-sub{ font-size:.92rem; color:#555; margin-top:4px }
 
-    /* ==== Debug panel (only if ?debug=1) ==== */
-    .dbg{ display:none; margin:12px; padding:10px; border-radius:10px; background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.08); }
-    .dbg.on{ display:block }
-    .dbg h3{ margin:0 0 6px 0; font-size:1.05rem; color:#0d2d5c }
-    .dbg .row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px }
-    .dbg button{ padding:.55rem .8rem; border-radius:10px; border:0; background:#0d2d5c; color:#fff; font-weight:700 }
-    .dbg .out{ font-family:ui-monospace,Consolas,monospace; font-size:.9rem; white-space:pre-wrap; background:#0b254514; padding:8px; border-radius:8px; max-height:160px; overflow:auto }
-    .pill{ display:inline-block; padding:.15rem .5rem; border-radius:999px; background:#eef4ff; color:#0d2d5c; font-weight:800; font-size:.85rem }
+    /* Input shield (blocks user moves during AI turn) */
+    .input-shield{
+      position:absolute; inset:0; z-index: 1500; display:none;
+    }
+    .input-shield.on{ display:block }
+
+    /* Place shield above the board only */
+    .board-wrap{ position: relative; }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -75,7 +69,7 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- Turn + counting draw -->
+        <!-- Turn + counting -->
         <div class="turn-wrap">
           <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
@@ -118,7 +112,11 @@
         </div>
 
         <!-- Board -->
-        <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
+        <div class="board-wrap">
+          <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
+          <!-- Input shield (prevents moving when AI turn or while thinking) -->
+          <div id="inputShield" class="input-shield" aria-hidden="true"></div>
+        </div>
 
         <!-- Bottom clock -->
         <div class="timers">
@@ -128,18 +126,12 @@
           </div>
         </div>
 
-        <!-- Debug panel (hidden unless ?debug=1) -->
-        <section id="dbg" class="dbg">
-          <h3>🧪 Debug / Test</h3>
-          <div class="row">
-            <button id="dbgPing">Ping Backend</button>
-            <button id="dbgAsk">Ask AI from current</button>
-            <button id="dbgForceRemote">Force Remote</button>
-            <button id="dbgForceLocal">Force Local</button>
-            <button id="dbgClearForce">Clear Force</button>
+        <!-- Chat placeholder -->
+        <section class="panel card chat-panel card-full">
+          <div class="card-left">
+            <div class="card-title">សន្ទនា (Chat)</div>
+            <div class="card-sub">coming soon</div>
           </div>
-          <div class="row"><span>Mode:</span><span id="dbgMode" class="pill">–</span></div>
-          <div id="dbgOut" class="out"></div>
         </section>
 
       </section>
@@ -164,63 +156,57 @@
     </div>
   </div>
 
-  <!-- ==== AI Spinner / tap blocker ==== -->
+  <!-- Spinner overlay (AI thinking) -->
   <div id="aiMask" class="ai-mask" aria-hidden="true">
     <div class="ai-card" role="status" aria-live="polite">
       <div class="ai-row">
         <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
-        <b>🤖 AI កំពុងគិត...</b>
+        <b id="aiTitle">🤖 AI កំពុងគិត…</b>
       </div>
-      <div id="aiSub" class="ai-sub">ប្រភព៖ –</div>
+      <div class="ai-sub" id="aiSub">កំពុងគិត • 0.0s</div>
     </div>
   </div>
 
-  <!-- JS -->
+  <!-- JS (keep your existing main.js), then our AI hook -->
   <script type="module" src="./js/main.js"></script>
   <script type="module" src="./js/ai-hook.js"></script>
 
-  <!-- global helpers for spinner + debug pills -->
+  <!-- Spinner controller + engine events -->
   <script>
     (function(){
       const mask = document.getElementById('aiMask');
-      const sub  = document.getElementById('aiSub');
-      const dbgMode = () => document.getElementById('dbgMode');
+      const title = document.getElementById('aiTitle');
+      const sub   = document.getElementById('aiSub');
+      let tick, t0;
 
-      window.__aiShow = (from) => {
-        if (from && sub) sub.textContent = 'ប្រភព៖ ' + (from==='remote' ? 'Remote (Render)' : 'Local');
+      window.__aiShow = (modeText='AI កំពុងគិត')=>{
+        if (title && modeText) title.textContent = `🤖 ${modeText}…`;
+        t0 = Date.now();
+        if (sub){
+          sub.textContent = 'កំពុងគិត • 0.0s';
+          clearInterval(tick);
+          tick = setInterval(()=>{
+            const s = ((Date.now()-t0)/1000).toFixed(1);
+            sub.textContent = `កំពុងគិត • ${s}s`;
+          }, 120);
+        }
         mask?.classList.add('on');
-        dbgMode()?.replaceChildren(document.createTextNode(from||'–'));
       };
-      window.__aiHide = ()=> mask?.classList.remove('on');
-    })();
+      window.__aiHide = ()=>{
+        clearInterval(tick);
+        mask?.classList.remove('on');
+      };
 
-    // Debug panel: show only with ?debug=1
-    (function(){
-      const u = new URL(location.href);
-      if (u.searchParams.get('debug') === '1') {
-        document.getElementById('dbg')?.classList.add('on');
-        const out = document.getElementById('dbgOut');
-        function log(s){ out.textContent = s + '\n' + out.textContent; }
-
-        const BE = (localStorage.getItem('kc_backend_url') || 'https://ouk-ai-backend.onrender.com').replace(/\/+$/,'');
-        document.getElementById('dbgPing').onclick = async ()=>{
-          const url = BE + '/health';
-          try{ const r = await fetch(url); log('PING ' + url + ' -> ' + r.status); }
-          catch(e){ log('PING failed: ' + e); }
-        };
-        document.getElementById('dbgAsk').onclick = async ()=>{
-          try{
-            // we don’t import here; rely on ai.js global selection via ai-hook
-            const fen = window.game?.fen?.() || window.game?.toFEN?.() || '(no FEN)';
-            log('Ask from FEN: ' + fen);
-            // trigger AI turn manually
-            window.dispatchEvent(new CustomEvent('dbg-ask-ai'));
-          }catch(e){ log('Ask failed: ' + e); }
-        };
-        document.getElementById('dbgForceRemote').onclick = ()=>{ localStorage.setItem('kc_force_ai','remote'); log('Force: remote'); };
-        document.getElementById('dbgForceLocal').onclick  = ()=>{ localStorage.setItem('kc_force_ai','local');  log('Force: local');  };
-        document.getElementById('dbgClearForce').onclick  = ()=>{ localStorage.removeItem('kc_force_ai');       log('Force cleared'); };
-      }
+      // These events are fired by ai.js
+      window.addEventListener('ai:phase', (e)=>{
+        const mode = (e.detail?.phase==='remote') ? 'Remote AI' : 'Local AI';
+        window.__aiShow?.(mode);
+      });
+      window.addEventListener('ai:elapsed', (e)=>{
+        const ms = e.detail?.ms|0;
+        if (sub) sub.textContent = `បានគិតរួច • ${(ms/1000).toFixed(1)}s`;
+        setTimeout(()=> window.__aiHide?.(), 350);
+      });
     })();
   </script>
 </body>

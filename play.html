@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
-  <title>អុកចត្រង្គ (Khmer Chess)</title>
+  <title>Play – អុកចត្រង្គ (Khmer Chess)</title>
 
   <!-- Font -->
   <link rel="preload" as="font" href="assets/fonts/Krasar-Regular.ttf" type="font/ttf" crossorigin>
@@ -22,20 +22,12 @@
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
     }
-    /* simple style so the debug panel is readable on mobile */
-    .debug-log{
-      background:#0b0f16; color:#dfe7ff; padding:12px; border-radius:14px;
-      max-height:30vh; overflow:auto; line-height:1.35; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size:.9rem;
-    }
-    #debug-panel .secondary{ padding:.55rem .8rem; border-radius:.75rem }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div id="app" class="app">
-
     <main class="layout layout-single">
       <section class="panel board-panel">
 
@@ -103,23 +95,6 @@
       </section>
     </main>
 
-    <!-- ======= TEMP DEBUG (AI only) ======= -->
-    <section class="panel card card-full" id="debug-panel">
-      <div class="card-left">
-        <div class="card-title">Debug Console</div>
-        <div class="card-sub">Local JS AI logs</div>
-      </div>
-      <div class="card-right" style="display:flex;gap:8px;align-items:center">
-        <button id="dbg-run-checks" class="secondary">Run Path Checks</button>
-        <button id="dbg-ai-test"   class="secondary">AI Self-Test</button>
-        <button id="dbg-copy"      class="secondary">Copy</button>
-        <button id="dbg-clear"     class="secondary">Clear</button>
-      </div>
-      <div class="card-body" style="width:100%;padding-top:10px">
-        <pre id="debug-log" class="debug-log" aria-live="polite"></pre>
-      </div>
-    </section>
-
     <!-- Bottom nav -->
     <footer id="appTabbar" class="bottom-bar">
       <a class="nav-item" href="index.html">
@@ -147,16 +122,8 @@
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 
-  <!-- Portrait-only overlay -->
-  <div class="orientation-blocker" id="orientationBlock" aria-hidden="true">
-    <div class="ob-card">
-      សូមប្រើទម្រង់បញ្ឈរ<br/>
-      <small>Rotate back to portrait to continue</small>
-    </div>
-  </div>
-
   <!-- JS -->
   <script type="module" src="./js/main.js"></script>
-  <script type="module" src="./js/debug.js"></script>
+  <!-- NOTE: debug.js removed -->
 </body>
 </html>

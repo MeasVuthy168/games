@@ -151,9 +151,12 @@
           <button class="level-btn" data-level="Easy"   title="ឆាប់រហ័ស សម្រាប់អ្នកថ្មី">Easy</button>
           <button class="level-btn" data-level="Medium" title="លេងមានហេតុផល (សម្រាប់ភាគច្រើន)">Medium</button>
           <button class="level-btn" data-level="Hard"   title="ជម្រៅច្រើន តិចកំហុស">Hard</button>
-          <button class="level-btn" data-level="Master" title="កម្រិតអ្នកជំនាញ (ខ្លាំងជាង)">Master</button>
+          <button class="level-btn" data-level="Master" title="ជម្រៅស្វែងរកខ្ពស់ + ការកាត់សាខាច្រើន">Master</button>
         </div>
-        <div class="level-hint">កម្រិត <b>Master</b> ប្រើជម្រៅស្វែងរកខ្ពស់ជាង និងសៀវភៅបើក (Khmer book) ឆ្លាតជាង។</div>
+        <div class="level-hint">
+          កម្រិត <b>Master</b> ប្រើអាល់ហ្គូរីធម៍ JS ឆ្លាតជាង (iterative deepening, null-move, LMR, SEE) —
+          មិនចាំបាច់មាន WASM/Worker។
+        </div>
 
         <div class="radio-row" style="margin-top:6px">
           <label><input type="radio" name="whoWhite" value="me" checked> ខ្ញុំ (White)</label>
@@ -167,10 +170,8 @@
     </div>
   </div>
 
-  <!-- NEW: preload WASM pro engine so Master is instant -->
-  <script type="module">
-    import './js/engine-pro.js';
-  </script>
+  <!-- (Removed) Pro/WASM preload -->
+  <!-- <script type="module" src="./js/engine-pro.js"></script> -->
 
   <script>
     /* ---------- Bottom bar spacer + autohide ---------- */

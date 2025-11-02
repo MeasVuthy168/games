@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
-  <title>Play – អុកចត្រង្គ (Khmer Chess)</title>
+  <title>អុកចត្រង្គ (Khmer Chess)</title>
 
   <!-- Font -->
   <link rel="preload" as="font" href="assets/fonts/Krasar-Regular.ttf" type="font/ttf" crossorigin>
@@ -16,7 +16,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <script src="js/pwa.js" defer></script>
 
-  <!-- Board textures for CSS variables -->
+  <!-- Board textures -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
@@ -31,7 +31,7 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- ======= Turn + Counting Draw ======= -->
+        <!-- Turn + counting draw -->
         <div class="turn-wrap">
           <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
@@ -97,33 +97,24 @@
 
     <!-- Bottom nav -->
     <footer id="appTabbar" class="bottom-bar">
-      <a class="nav-item" href="index.html">
-        <img class="ni-img" src="assets/ui/nav-home.png" alt="">
-        <span>Home</span>
-      </a>
-      <a class="nav-item" href="friends.html">
-        <img class="ni-img" src="assets/ui/nav-friends.png" alt="">
-        <span>Friend</span>
-      </a>
-      <a class="nav-item active" href="play.html" aria-current="page">
-        <img class="ni-img" src="assets/ui/nav-play.png" alt="">
-        <span>Play</span>
-      </a>
-      <a class="nav-item" href="settings.html">
-        <img class="ni-img" src="assets/ui/nav-settings.png" alt="">
-        <span>Setting</span>
-      </a>
-      <a class="nav-item" href="notifications.html">
-        <img class="ni-img" src="assets/ui/nav-bell.png" alt="">
-        <span>Notification</span>
-      </a>
+      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span></a>
+      <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span></a>
+      <a class="nav-item active" href="play.html" aria-current="page"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span></a>
+      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span></a>
+      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span></a>
     </footer>
-
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 
-  <!-- JS -->
+  <!-- Portrait-only overlay -->
+  <div class="orientation-blocker" id="orientationBlock" aria-hidden="true">
+    <div class="ob-card">
+      សូមប្រើទម្រង់បញ្ឈរ<br/>
+      <small>Rotate back to portrait to continue</small>
+    </div>
+  </div>
+
+  <!-- JS (no debug.js, no engine-pro.js) -->
   <script type="module" src="./js/main.js"></script>
-  <!-- NOTE: debug.js removed -->
 </body>
 </html>

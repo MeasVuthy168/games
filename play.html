@@ -21,26 +21,42 @@
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
+      --blue:#0d2d5c;
     }
 
-    /* === spinner for AI thinking === */
-    .ai-thinking {
-      position: fixed; inset: 0; display: none;
-      align-items: center; justify-content: center;
-      background: rgba(0,0,0,.35); z-index: 9999;
-      -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+    /* ==== AI Spinner (tap blocker) ==== */
+    .ai-mask{
+      position:fixed; inset:0;
+      background:rgba(13,45,92,.06);
+      backdrop-filter: blur(1px);
+      display:none;
+      z-index:9999;
     }
+    .ai-mask.on{ display:block }
+
     .ai-card{
-      min-width: 180px; padding: 14px 16px; border-radius: 12px;
-      background:#101826; color:#fff; text-align:center; font-family: Krasar, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      position:absolute; left:50%; top:42%;
+      transform:translate(-50%,-50%);
+      background:#fff; color:#0d2d5c;
+      border-radius:14px; padding:14px 18px;
+      box-shadow:0 10px 30px rgba(0,0,0,.18);
+      font-family:"Krasar","Noto Sans Khmer",system-ui;
+      text-align:center; min-width:220px;
     }
-    .ai-spinner{
-      width: 28px; height: 28px; margin: 0 auto 8px; border-radius: 50%;
-      border: 3px solid rgba(255,255,255,.25); border-top-color:#fff;
-      animation: ai-spin .8s linear infinite;
+    .ai-row{ display:flex; align-items:center; gap:10px; justify-content:center }
+    .ai-dot{
+      width:8px; height:8px; border-radius:50%;
+      background:#0d2d5c; opacity:.25;
+      animation: ai-b 1.1s linear infinite;
     }
-    @keyframes ai-spin { to { transform: rotate(360deg); } }
+    .ai-dot:nth-child(2){ animation-delay:.15s }
+    .ai-dot:nth-child(3){ animation-delay:.3s }
+    @keyframes ai-b{
+      0%{ transform:translateY(0); opacity:.25 }
+      50%{ transform:translateY(-6px); opacity:.9 }
+      100%{ transform:translateY(0); opacity:.25 }
+    }
+    .ai-sub{ font-size:.92rem; margin-top:6px; opacity:.75 }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -133,21 +149,28 @@
     </div>
   </div>
 
-  <!-- AI thinking overlay -->
-  <div class="ai-thinking" id="aiThinking">
-    <div class="ai-card">
-      <div class="ai-spinner"></div>
-      <div>🤖 កំពុងគិត…</div>
+  <!-- ==== AI Spinner / tap blocker (global) ==== -->
+  <div id="aiMask" class="ai-mask" aria-hidden="true">
+    <div class="ai-card" role="status" aria-live="polite">
+      <div class="ai-row">
+        <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
+        <b>🤖 AI កំពុងគិត...</b>
+      </div>
+      <div class="ai-sub">សូមមេត្តារំលងមិនចុចបន្ទះតាមអំឡុងពេលនេះ</div>
     </div>
   </div>
 
-  <!-- JS (no debug.js, no engine-pro.js) -->
+  <!-- JS -->
   <script type="module" src="./js/main.js"></script>
+  <script type="module" src="./js/ai-hook.js"></script>
 
-  <!-- expose tiny helpers for spinner (used by ai.js automatically) -->
+  <!-- expose show/hide for spinner -->
   <script>
-    window.__aiShow = () => { const el = document.getElementById('aiThinking'); if (el) el.style.display='flex'; };
-    window.__aiHide = () => { const el = document.getElementById('aiThinking'); if (el) el.style.display='none'; };
+    (function(){
+      const mask = document.getElementById('aiMask');
+      window.__aiShow = ()=> mask?.classList.add('on');
+      window.__aiHide = ()=> mask?.classList.remove('on');
+    })();
   </script>
 </body>
 </html>

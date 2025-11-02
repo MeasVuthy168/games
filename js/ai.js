@@ -1,43 +1,50 @@
-// js/ai.js — Master-only local AI for Khmer Chess (no WASM)
-// Techniques: ID-DFS, TT, Quiescence, SEE, Null-move, LMR, Futility, Repetition control
-// Public API:
+// js/ai.js — Khmer Chess "Master++" Engine (no WASM)
+// API (unchanged):
 //   - chooseAIMove(game, { aiColor: 'w'|'b', countState })
-//   - setAIDifficulty(level)  // kept for compatibility; always returns Master config
-//   - pickAIMove (alias)
+//   - setAIDifficulty(level) -> returns active Master config
+//   - pickAIMove alias
 
-//////////////////////// Tunables (Master profile) ////////////////////////
+//////////////////////// Master++ Tunables //////////////////////
 
 const MASTER = {
-  timeMs:   650,   // search time budget per move
-  maxDepth: 7,     // hard ceiling for ID
-  nodeCap:  120000 // extra guardrail
+  timeMs:   1500,    // per-move budget (avg). Tune up/down for strength/speed.
+  maxDepth: 9,       // hard ceiling (iterative deepening will try to reach this)
+  nodeCap:  400_000, // absolute guardrail
 };
 
 const USE_BOOK   = true;
-const BOOK_URL   = 'assets/book-khmer.json'; // optional, safe to miss
-const TEMP_T     = 0.00;  // no randomness at root
-const FUT_MARGIN = 120;   // futility pruning margin
-const Q_NODE_CAP = 20000; // quiescence node guard
-const Q_DEPTH_MAX= 7;     // max capture depth in quiescence
-const LMR_START_INDEX = 4;
-const LMR_MIN_DEPTH  = 3;
-const NULL_MOVE_R    = 2; // null-move depth reduction
-const NULL_MOVE_MIND = 3; // only apply null-move when depth >= 3
+const BOOK_URL   = 'assets/book-khmer.json';
+const TEMP_T     = 0.00;
 
-// Values (normalized to chess-like scale; mapped from Khmer types in TYPE_MAP)
+// Pruning / reductions
+const FUT_MARGIN_BASE = 120;   // futility base margin at depth 1
+const RAZOR_MARGIN    = 220;   // razoring margin
+const Q_NODE_CAP      = 40_000;
+const Q_DEPTH_MAX     = 8;
+const LMR_MIN_DEPTH   = 3;
+const LMR_BASE_RED    = 1.0;   // base reduction for late quiets
+const NULL_MOVE_R     = 2;
+const NULL_MOVE_MIND  = 3;
+
+// Repetition control (kept)
+const REP_SHORT_WINDOW=8, REP_SOFT_PENALTY=15, REP_HARD_PENALTY=220;
+
+// Counting-draw synergy (kept)
+const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
+
+// Piece values (mapped via TYPE_MAP)
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
 const ATTACKER_VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
 
-// Map your piece codes to standard letters for eval/SEE
-// (T,H,G,D,F,S are Khmer internal aliases the game may use)
+// Khmer piece aliases → normalized
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 function normType(t){ return TYPE_MAP[t] || t; }
 
-//////////////////////// Debug hook to your panel (optional) //////////////////////
+//////////////////////// Debug hook //////////////////////
 
 const log = (s, kind) => { try{ window.__dbglog?.(`[AI] ${s}`, kind); }catch{} };
 
-//////////////////////// Book (optional, safe if not found) //////////////////////
+//////////////////////// Opening book ////////////////////
 
 let _bookPromise=null;
 async function loadOpeningBook(){
@@ -63,24 +70,59 @@ function parseBookMove(uci, game){
   return null;
 }
 
-//////////////////////// Position Key + Repetition //////////////////////
+//////////////////////// Zobrist hashing //////////////////////
 
-function posKey(game){
-  let out='';
+// Deterministic PRNG
+let _seed = 0x9e3779b1|0;
+function rnd32(){
+  _seed |= 0; _seed = (_seed + 0x6D2B79F5)|0;
+  let t = Math.imul(_seed ^ (_seed>>>15), 1 | _seed);
+  t ^= t + Math.imul(t ^ (t>>>7), 61 | t);
+  return (t ^ (t>>>14)) >>> 0;
+}
+
+// Zobrist table [y][x][pieceIndex], plus side-to-move
+const Z = { table: [], side: rnd32() };
+const Z_PIECES = []; // map piece code "wP", "bQ", etc. to index
+(function initZobrist(){
+  const kinds = ['P','N','B','R','Q','K'];
+  const colors = ['w','b'];
+  colors.forEach(c=> kinds.forEach(k=> Z_PIECES.push(c+k)));
+  for (let y=0;y<8;y++){
+    Z.table[y]=[];
+    for(let x=0;x<8;x++){
+      Z.table[y][x]=new Uint32Array(Z_PIECES.length);
+      for (let i=0;i<Z_PIECES.length;i++) Z.table[y][x][i]=rnd32();
+    }
+  }
+})();
+
+function pieceIndex(p){
+  if (!p) return -1;
+  const t = normType(p.t);
+  const key = p.c + t;
+  const idx = Z_PIECES.indexOf(key);
+  return idx;
+}
+
+function zobrist(game){
+  let h=0>>>0;
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
       const p=game.at(x,y);
-      out += p ? (p.c + normType(p.t)) : '.';
+      const idx = pieceIndex(p);
+      if (idx>=0) h ^= Z.table[y][x][idx];
     }
-    out += '/';
   }
-  return out + ' ' + game.turn;
+  if (game.turn==='w') h ^= Z.side;
+  return h>>>0;
 }
 
-const REP_SHORT_WINDOW=8, REP_SOFT_PENALTY=15, REP_HARD_PENALTY=220;
+//////////////////////// Repetition //////////////////////
+
 class RepTracker{
   constructor(){ this.list=[]; }
-  push(k){ this.list.push(k); if(this.list.length>160) this.list.shift(); }
+  push(k){ this.list.push(k); if(this.list.length>200) this.list.shift(); }
   pop(){ this.list.pop(); }
   softCount(k){
     let n=0, s=Math.max(0,this.list.length-REP_SHORT_WINDOW);
@@ -96,9 +138,8 @@ function repetitionPenalty(rep, key){
   return p;
 }
 
-//////////////////////// Counting-draw synergy (your UI) //////////////////////
+//////////////////////// Counting synergy //////////////////////
 
-const COUNT_BURN_PENALTY=12, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
 function countingAdjust(aiColor, countState, captured, matLead){
   if (!countState?.active) return 0;
   let adj=0, aiOwns=(countState.side===aiColor);
@@ -112,36 +153,117 @@ function countingAdjust(aiColor, countState, captured, matLead){
   return adj;
 }
 
+//////////////////////// Mild PST & phase //////////////////////
+
+const PST = {
+  P: [
+    0,  6,  6,  8,  8,  6,  6,  0,
+    2,  6,  8, 12, 12,  8,  6,  2,
+    1,  4,  6, 10, 10,  6,  4,  1,
+    0,  2,  4,  6,  6,  4,  2,  0,
+    0,  2,  3,  4,  4,  3,  2,  0,
+    0,  2,  2,  2,  2,  2,  2,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0
+  ],
+  N: [
+    -6,-2,  0,  2,  2,  0, -2, -6,
+    -2, 0,  2,  4,  4,  2,  0, -2,
+     0, 2,  6,  8,  8,  6,  2,  0,
+     2, 4,  8, 10, 10,  8,  4,  2,
+     2, 4,  8, 10, 10,  8,  4,  2,
+     0, 2,  6,  8,  8,  6,  2,  0,
+    -2, 0,  2,  4,  4,  2,  0, -2,
+    -6,-2,  0,  2,  2,  0, -2, -6
+  ],
+  B: [
+     0,  0,  2,  4,  4,  2,  0,  0,
+     0,  2,  3,  6,  6,  3,  2,  0,
+     2,  3,  6,  8,  8,  6,  3,  2,
+     2,  4,  8, 10, 10,  8,  4,  2,
+     2,  4,  8, 10, 10,  8,  4,  2,
+     2,  3,  6,  8,  8,  6,  3,  2,
+     0,  2,  3,  6,  6,  3,  2,  0,
+     0,  0,  2,  4,  4,  2,  0,  0
+  ],
+  R: [
+     2,  4,  4,  6,  6,  4,  4,  2,
+     3,  6,  6,  8,  8,  6,  6,  3,
+     2,  4,  4,  6,  6,  4,  4,  2,
+     1,  2,  2,  4,  4,  2,  2,  1,
+     1,  2,  2,  4,  4,  2,  2,  1,
+     0,  2,  2,  3,  3,  2,  2,  0,
+     0,  0,  0,  2,  2,  0,  0,  0,
+     0,  0,  0,  1,  1,  0,  0,  0
+  ],
+  Q: [
+     0,  1,  2,  3,  3,  2,  1,  0,
+     1,  2,  3,  4,  4,  3,  2,  1,
+     2,  3,  5,  6,  6,  5,  3,  2,
+     3,  4,  6,  8,  8,  6,  4,  3,
+     3,  4,  6,  8,  8,  6,  4,  3,
+     2,  3,  5,  6,  6,  5,  3,  2,
+     1,  2,  3,  4,  4,  3,  2,  1,
+     0,  1,  2,  3,  3,  2,  1,  0
+  ],
+  K: [
+    -4, -2, -2, -1, -1, -2, -2, -4,
+    -2,  0,  0,  0,  0,  0,  0, -2,
+    -2,  0,  1,  1,  1,  1,  0, -2,
+    -1,  0,  1,  2,  2,  1,  0, -1,
+    -1,  0,  1,  2,  2,  1,  0, -1,
+    -2,  0,  1,  1,  1,  1,  0, -2,
+    -2,  0,  0,  0,  0,  0,  0, -2,
+    -4, -2, -2, -1, -1, -2, -2, -4
+  ]
+};
+
+function idx(x,y){ return (y<<3)|x; }
+
 //////////////////////// Evaluation //////////////////////
 
 function materialSide(game, side){
   let s=0;
   for(let y=0;y<8;y++) for(let x=0;x<8;x++){
     const p=game.at(x,y); if(!p || p.c!==side) continue;
-    const tt=normType(p.t);
-    s += (VAL[tt]||0);
+    s += VAL[normType(p.t)]||0;
   }
   return s;
 }
 function materialEval(game){ return materialSide(game,'w') - materialSide(game,'b'); }
 
+function pstEval(game){
+  let score=0;
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p=game.at(x,y); if(!p) continue;
+      const t=normType(p.t); const tbl=PST[t];
+      if (!tbl) continue;
+      const i = p.c==='w' ? idx(x,y) : idx(7-x,7-y);
+      score += (p.c==='w'? +1 : -1) * tbl[i];
+    }
+  }
+  return score;
+}
+
 function mobilityEval(game){
-  let moves=0, cap=28;
+  // limited & cheap mobility proxy
+  let moves=0;
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
       const p=game.at(x,y); if(!p || p.c!==game.turn) continue;
       moves += game.legalMoves(x,y).length;
-      if (moves>=cap) return (game.turn==='w'?+1:-1)*cap;
+      if (moves>=28) break;
     }
   }
-  return (game.turn==='w'?+1:-1)*moves;
+  return (game.turn==='w'?+1:-1)*Math.min(moves,28);
 }
 
 function evalLeaf(game, rep, countState, aiColor){
   const mat = materialEval(game);
+  const pst = pstEval(game);
   const mob = mobilityEval(game);
-  let score = mat + mob + repetitionPenalty(rep, posKey(game));
-  // discourage slow-burning when counting-draw held by AI and ahead
+  let score = mat + pst + mob + repetitionPenalty(rep, zobrist(game));
   const lead = (aiColor==='w'?mat:-mat);
   if (countState?.active && lead>0 && countState.side===aiColor){
     const near = Math.max(0, 6 - (countState.remaining||0));
@@ -150,28 +272,20 @@ function evalLeaf(game, rep, countState, aiColor){
   return score;
 }
 
-//////////////////////// SEE (Static Exchange Evaluation) //////////////////////
+//////////////////////// SEE (fast, conservative) //////////////////////
 
 function see(game, from, to){
-  // Conservative SEE using piece values, not full X-ray; fast and safe.
-  // Returns estimated net gain for the side-to-move if capturing from->to.
-  const target = game.at(to.x,to.y);
   const attacker= game.at(from.x,from.y);
+  const target  = game.at(to.x,to.y);
   if (!attacker || !target) return 0;
-
-  const atkV = VAL[normType(attacker.t)] || 0;
-  let gain = (VAL[normType(target.t)] || 0) - atkV;
-
-  // If the destination square is defended by opponent and our attacker is a low value,
-  // we may still accept. If heavily defended, penalize.
-  const opp = (game.turn==='w'?'b':'w');
-  const defended = game.squareAttacked(to.x,to.y, opp);
-  if (defended) gain -= 40;
-
+  const atkV = VAL[normType(attacker.t)]||0;
+  let gain   = (VAL[normType(target.t)]||0) - atkV;
+  const opp  = (game.turn==='w'?'b':'w');
+  if (game.squareAttacked(to.x,to.y, opp)) gain -= 40;
   return gain;
 }
 
-//////////////////////// Move generation + ordering //////////////////////
+//////////////////////// Move gen + ordering //////////////////////
 
 function centerBias(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
 
@@ -192,7 +306,7 @@ function generateMoves(game){
           mvv: target ? (VAL[normType(target.t)]||0) : 0,
           lva: ATTACKER_VAL[tt] || 0,
           center: centerBias(m),
-          see: target ? null : 0 // lazily filled if needed
+          _hs: 0
         });
       }
     }
@@ -200,32 +314,35 @@ function generateMoves(game){
   return out;
 }
 
-function moveScoreHeuristic(game, mv){
-  let score = 0;
-  if (mv.isCapture){
-    // MVV-LVA + capture safety
-    score += 12000 + mv.mvv*12 - mv.lva;
-    // quick on-the-fly SEE (cheap): only for big targets or skewed trades
-    if (mv.mvv >= 300){
-      const s = see(game, mv.from, mv.to);
-      score += (s>=0 ? 150 : -120) + s;
-    }
-  } else {
-    score += mv.center; // centralization
-  }
-  const opp = (game.turn==='w'?'b':'w');
-  const defended = game.squareAttacked(mv.to.x, mv.to.y, opp);
-  if (mv.isCapture){
-    score += defended ? -60 : +220;
-    if (mv.attackerType==='K'){ score += (mv.mvv>200) ? 400 : (defended ? -200 : +200); }
-  } else {
-    score += defended ? -20 : +10;
-  }
-  return score;
-}
+//////////////////////// TT, Killer, History //////////////////////
 
-function orderMoves(game, moves){
-  for (const mv of moves) mv._hs = moveScoreHeuristic(game, mv);
+const TT = new Map(); // key -> {depth, score, flag, move, age}
+const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
+
+const KILLER = Array.from({length:128},()=>[null,null]); // two per ply
+const HIST   = new Map(); // key "fxfy-tx ty" -> score
+
+function histKey(m){ return ((m.from.x<<6)|(m.from.y<<3)|m.to.x) + (m.to.y<<9); }
+function histGet(k){ return HIST.get(k)|0; }
+function histAdd(k, v){ HIST.set(k, Math.min(50000, (HIST.get(k)|0)+v)); }
+
+function orderMoves(game, moves, ttMove, ply){
+  for (const mv of moves){
+    let score = 0;
+    if (ttMove && mv.from.x===ttMove.from.x && mv.from.y===ttMove.from.y && mv.to.x===ttMove.to.x && mv.to.y===ttMove.to.y){
+      score = 3_000_000; // hash move first
+    } else if (mv.isCapture){
+      score = 2_000_000 + mv.mvv*12 - mv.lva;
+      if (mv.mvv >= 300) score += see(game, mv.from, mv.to);
+    } else {
+      // killer?
+      const k0=KILLER[ply][0], k1=KILLER[ply][1];
+      if (k0 && mv.from.x===k0.from.x && mv.from.y===k0.from.y && mv.to.x===k0.to.x && mv.to.y===k0.to.y) score = 1_000_500;
+      else if (k1 && mv.from.x===k1.from.x && mv.from.y===k1.from.y && mv.to.x===k1.to.x && mv.to.y===k1.to.y) score = 1_000_400;
+      else score = 200_000 + histGet(histKey(mv)) + mv.center;
+    }
+    mv._hs = score;
+  }
   moves.sort((a,b)=> b._hs - a._hs);
   return moves;
 }
@@ -235,113 +352,146 @@ function orderMoves(game, moves){
 function make(game,m){ return game.move(m.from,m.to); }
 function undo(game){ game.undo(); }
 
-//////////////////////// TT //////////////////////
-
-const TT = new Map();
-const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
-
 //////////////////////// Quiescence //////////////////////
 
-function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0){
+function quiesce(game, alpha, beta, color, aiColor, timers, qStat, depthQ=0, allowChecks=true){
   if (timers.timeUp()) return alpha;
   if (qStat.nodes++ > Q_NODE_CAP || depthQ>Q_DEPTH_MAX) return color * evalLeaf(game, timers.rep, null, aiColor);
 
-  // stand pat
+  // Stand pat
   let stand = color * evalLeaf(game, timers.rep, null, aiColor);
   if (stand >= beta) return beta;
   if (stand > alpha) alpha = stand;
 
-  // captures only
-  const caps = orderMoves(game, generateMoves(game).filter(m=>m.isCapture));
-  for (const mv of caps){
+  // Delta pruning for hopeless small captures
+  const delta = 975; // queen-ish margin
+  if (stand + delta < alpha) return alpha;
+
+  // Captures (+ optionally checking moves)
+  let moves = generateMoves(game).filter(m=>m.isCapture);
+  if (allowChecks) {
+    // add checking quiets lightly: we detect by result status
+    const quiets = generateMoves(game).filter(m=>!m.isCapture);
+    // only consider top 2 quiets by center bias to probe checks quickly
+    quiets.sort((a,b)=> b.center - a.center);
+    moves = moves.concat(quiets.slice(0,2));
+  }
+  orderMoves(game, moves, null, 0);
+
+  for (const mv of moves){
+    // Simple futility inside q-search: skip tiny captures far below alpha
+    if (mv.isCapture===false) {
+      // only keep if it gives check
+    }
+
     const res = make(game, mv);
     if(!res?.ok){ undo(game); continue; }
-    const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1);
+
+    const givesCheck = (res?.status?.state==='check');
+    if (!mv.isCapture && !givesCheck){ undo(game); continue; }
+
+    const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1, allowChecks && givesCheck);
     undo(game);
+
     if (score >= beta) return beta;
     if (score > alpha) alpha = score;
+
     if (timers.timeUp()) break;
   }
   return alpha;
 }
 
-//////////////////////// Search (negamax + pruning) //////////////////////
+//////////////////////// Negamax + PVS //////////////////////
 
-function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
-  if (timers.timeUp() || stats.nodes++ > timers.nodeCap) return { score: 0, move:null, cutoff:true };
+function negamax(game, depth, alpha, beta, color, aiColor, timers, stats, ply, allowNull=true){
+  if (timers.timeUp() || stats.nodes++ > timers.nodeCap) return { score: 0, move:null, cutoff:true, pv:null };
 
+  // terminal?
   const st = game?.status?.();
   if (st && (st.state==='checkmate' || st.state==='stalemate')){
-    if (st.state==='checkmate') return { score: color * (-100000 + depth), move:null };
-    return { score: 0, move:null };
+    if (st.state==='checkmate') return { score: color * (-100000 + ply), move:null, pv:null };
+    return { score: 0, move:null, pv:null };
   }
 
-  const key = posKey(game);
+  const key = zobrist(game);
   const tt = TT.get(key);
+  let ttMove = tt?.move || null;
   if (tt && tt.depth >= depth){
     let v = tt.score;
-    if (tt.flag===TT_EXACT) return { score:v, move:tt.move||null };
+    if (tt.flag===TT_EXACT) return { score:v, move:ttMove, pv:null };
     if (tt.flag===TT_LOWER && v > alpha) alpha = v;
     else if (tt.flag===TT_UPPER && v < beta) beta = v;
-    if (alpha >= beta) return { score:v, move:tt.move||null };
+    if (alpha >= beta) return { score:v, move:ttMove, pv:null };
   }
 
   if (depth===0){
     const qStat = { nodes:0 };
-    const v = quiesce(game, alpha, beta, color, aiColor, timers, qStat, 0);
-    return { score: v, move:null };
+    const v = quiesce(game, alpha, beta, color, aiColor, timers, qStat, 0, true);
+    return { score: v, move:null, pv:null };
   }
 
-  timers.rep.push(key);
+  // Razoring (shallow, safe)
+  if (depth===1){
+    const sp = color * evalLeaf(game, timers.rep, timers.countState, aiColor);
+    if (sp + RAZOR_MARGIN <= alpha){
+      const qStat = { nodes:0 };
+      const v = quiesce(game, alpha, beta, color, aiColor, timers, qStat, 0, false);
+      if (v <= alpha) return { score:v, move:null, pv:null };
+    }
+  }
 
-  // Null-move pruning (not in check, sufficient depth)
-  // Quick "in check" check: if side has zero legal non-captures that escape attack we rely on status, so keep simple:
-  if (depth >= NULL_MOVE_MIND){
-    // flip side to move without moving a piece: approximated by evaluating leaf as if we pass the turn:
-    // We simulate by a fast bound: if staticEval - margin >= beta -> prune
-    // safer: compute a cheap stand-pat and try reduction-beta cut
+  // Null-move pruning (not in check)
+  if (allowNull && depth>=NULL_MOVE_MIND){
     const stand = color * evalLeaf(game, timers.rep, timers.countState, aiColor);
     if (stand >= beta){
-      // Do a reduced null window to confirm
-      const nullBeta = beta;
-      const nullAlpha = beta - 1;
-      // lightweight: do not modify game; just trust stand pat (fast)
-      if (stand >= nullBeta) {
-        timers.rep.pop();
-        return { score: beta, move:null };
-      }
+      // verify with reduced shallow search (no real null move available in this API)
+      return { score: beta, move:null, pv:null };
     }
   }
 
   // Generate + order
-  let moves = orderMoves(game, generateMoves(game));
+  let moves = orderMoves(game, generateMoves(game), ttMove, ply);
   if (!moves.length){
-    // no moves: mate or stalemate handled above; fall back to eval
-    timers.rep.pop();
-    return { score: color * evalLeaf(game, timers.rep, timers.countState, aiColor), move:null };
+    // No legal moves: return static eval (safety)
+    return { score: color * evalLeaf(game, timers.rep, timers.countState, aiColor), move:null, pv:null };
   }
 
-  let best=-Infinity, bestMove=null;
-  let a0=alpha;
+  let best=-Infinity, bestMove=null, pvLine=null;
+  const a0=alpha;
   let idx=0;
 
+  // PVS
   for (const mv of moves){
-    // Futility at frontier (shallow non-captures)
+    // Frontier futility for quiets at depth 1
     if (depth===1 && !mv.isCapture){
-      const est = color * evalLeaf(game, timers.rep, timers.countState, aiColor) - FUT_MARGIN;
+      const est = color * evalLeaf(game, timers.rep, timers.countState, aiColor) - (FUT_MARGIN_BASE);
       if (est <= alpha){ idx++; if (timers.timeUp()) break; continue; }
     }
 
     const res = make(game, mv);
     if(!res?.ok){ undo(game); idx++; continue; }
 
-    // Late-move reduction for quiet moves
+    // Late move reduction for quiets not giving check
     let nextDepth = depth-1;
-    if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=LMR_START_INDEX){
-      nextDepth = Math.max(0, depth-2);
+    let reduced = false;
+    if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=3){
+      const red = Math.min(2, 1 + ((idx>7)|0)) * LMR_BASE_RED;
+      nextDepth = Math.max(0, depth-1 - red|0);
+      reduced = nextDepth < depth-1;
     }
 
-    const child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats);
+    // First move: full window; others: PVS zero-window then re-search on fail-high
+    let child;
+    if (idx===0){
+      child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats, ply+1, true);
+    } else {
+      child = negamax(game, nextDepth, -alpha-1, -alpha, -color, aiColor, timers, stats, ply+1, true);
+      if (!child.cutoff && child.score > alpha){
+        // re-search with full window
+        child = negamax(game, nextDepth, -beta, -alpha, -color, aiColor, timers, stats, ply+1, true);
+      }
+    }
+
     let childScore = (child.cutoff ? -alpha : -(child.score));
 
     // small tactical sweeteners
@@ -356,25 +506,37 @@ function negamax(game, depth, alpha, beta, color, aiColor, timers, stats){
 
     if (childScore > best){
       best = childScore; bestMove = mv;
-      if (best > alpha) alpha = best;
-      if (alpha >= beta) break;
+      if (best > alpha){
+        alpha = best;
+        pvLine = child?.pv ? [mv, ...child.pv] : [mv];
+      }
+      if (alpha >= beta){
+        // store killer move for quiet beta cutoffs
+        if (!mv.isCapture){
+          const kslot = KILLER[ply];
+          if (!kslot[0] || !(kslot[0].from.x===mv.from.x && kslot[0].from.y===mv.from.y && kslot[0].to.x===mv.to.x && kslot[0].to.y===mv.to.y)){
+            kslot[1]=kslot[0]; kslot[0]={from:mv.from,to:mv.to};
+          }
+          histAdd(histKey(mv), depth*depth);
+        }
+        break;
+      }
     }
 
     idx++;
     if (timers.timeUp()) break;
   }
 
-  timers.rep.pop();
-
+  // TT store
   let flag = TT_EXACT;
   if      (best <= a0) flag = TT_UPPER;
   else if (best >= beta) flag = TT_LOWER;
-  TT.set(key, { depth, score:best, flag, move:bestMove });
+  TT.set(key, { depth, score:best, flag, move:bestMove, age:0 });
 
-  return { score: best, move: bestMove };
+  return { score: best, move: bestMove, pv: pvLine };
 }
 
-//////////////////////// Iterative deepening root //////////////////////
+//////////////////////// Iterative deepening //////////////////////
 
 function pickByTemperature(items, T){
   if (!items.length) return null;
@@ -393,7 +555,7 @@ async function chooseAIMove_LocalMaster(game, opts={}){
   const aiColor    = opts.aiColor || game.turn;
   const countState = opts.countState || null;
 
-  // Try opening book once
+  // Opening book
   try{
     const book = await loadOpeningBook();
     if (book && USE_BOOK){
@@ -401,7 +563,7 @@ async function chooseAIMove_LocalMaster(game, opts={}){
       const cand = book[key];
       if (Array.isArray(cand) && cand.length){
         const mv = parseBookMove(cand[Math.floor(Math.random()*cand.length)], game);
-        if (mv){ log('Book move used'); return mv; }
+        if (mv){ log('Book move'); return mv; }
       }
     }
   }catch{}
@@ -417,28 +579,22 @@ async function chooseAIMove_LocalMaster(game, opts={}){
 
   let bestMove = null;
   let bestScore = -Infinity;
+  let lastScore = 0;
 
-  // Simple aspiration windows around last score
-  let alphaBase = -Infinity, betaBase = Infinity;
+  // aspiration window around lastScore
   for (let depth=1; depth<=MASTER.maxDepth; depth++){
-    let alpha = (Number.isFinite(bestScore) ? bestScore - 60 : alphaBase);
-    let beta  = (Number.isFinite(bestScore) ? bestScore + 60 : betaBase);
+    let alpha = (depth>2 ? lastScore - 60 : -Infinity);
+    let beta  = (depth>2 ? lastScore + 60 :  Infinity);
 
-    // Retry with widened window on fail-high/low
+    // 2 retries with widened windows
     for (let tries=0; tries<2; tries++){
-      const { move, score } = negamax(game, depth, alpha, beta, +1, aiColor, timers, stats);
+      const { move, score } = negamax(game, depth, alpha, beta, +1, aiColor, timers, stats, 0, true);
       if (timers.timeUp()) break;
 
-      if (score <= alpha){ // fail low => widen down
-        alpha = -Infinity; beta = (Number.isFinite(bestScore)? (bestScore + 120) : Infinity);
-        continue;
-      }
-      if (score >= beta){  // fail high => widen up
-        alpha = (Number.isFinite(bestScore)? (bestScore - 120) : -Infinity); beta = Infinity;
-        continue;
-      }
+      if (score <= alpha){ alpha = -Infinity; beta = (Number.isFinite(lastScore)? (lastScore + 120) : Infinity); continue; }
+      if (score >= beta ){ alpha = (Number.isFinite(lastScore)? (lastScore - 120) : -Infinity); beta = Infinity; continue; }
 
-      if (move){ bestMove = move; bestScore = score; }
+      if (move){ bestMove = move; bestScore = score; lastScore = score; }
       break;
     }
 
@@ -446,35 +602,32 @@ async function chooseAIMove_LocalMaster(game, opts={}){
   }
 
   if (!bestMove){
-    // last resort: shallow pick
-    const moves = orderMoves(game, generateMoves(game));
+    const moves = orderMoves(game, generateMoves(game), null, 0);
     return moves[0] || null;
   }
 
-  // tiny top-N verification to de-noise
-  const all = orderMoves(game, generateMoves(game)).slice(0, 6).map(mv=>{
+  // small top-N verification
+  const top = orderMoves(game, generateMoves(game), null, 0).slice(0, 6).map(mv=>{
     const res = game.move(mv.from, mv.to);
     if(!res?.ok){ game.undo(); return null; }
     const timers2 = { ...timers, rep: new RepTracker() };
     const stats2 = { nodes:0 };
-    const sub = negamax(game, Math.max(1, MASTER.maxDepth-2), -Infinity, Infinity, -1, aiColor, timers2, stats2);
+    const sub = negamax(game, Math.max(1, MASTER.maxDepth-2), -Infinity, Infinity, -1, aiColor, timers2, stats2, 1, true);
     game.undo();
     return { move: mv, score: -(sub.score) };
   }).filter(Boolean).sort((a,b)=> b.score - a.score);
 
-  const picked = pickByTemperature(all.length?all:[{move:bestMove,score:bestScore}], TEMP_T) || bestMove;
-  log(`Picked move: ${toAlg(picked.from)}-${toAlg(picked.to)} (score ${bestScore})`);
+  const picked = pickByTemperature(top.length?top:[{move:bestMove,score:bestScore}], TEMP_T) || bestMove;
+  log(`Picked ${toAlg(picked.from)}-${toAlg(picked.to)}; nodes=${stats.nodes}`);
   return picked;
 }
 
 //////////////////////// Public API //////////////////////
 
 export async function chooseAIMove(game, opts={}){
-  // Master-only local engine
   return await chooseAIMove_LocalMaster(game, opts);
 }
 
-// Kept for compatibility with old calls; always returns MASTER
 export function setAIDifficulty(/* level */){
   return { timeMs: MASTER.timeMs, maxDepth: MASTER.maxDepth, nodeLimit: MASTER.nodeCap, temperature: TEMP_T };
 }

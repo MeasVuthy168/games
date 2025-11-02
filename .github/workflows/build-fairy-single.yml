@@ -1,0 +1,88 @@
+name: Build Fairy-Stockfish (single-thread)
+
+on:
+  workflow_dispatch:          # allows "Run workflow" button
+  push:
+    paths:
+      - ".github/workflows/build-fairy-single.yml"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # ── Option A (engine source is INSIDE your repo) ───────────────
+      # If your Fairy-Stockfish wasm source is in a subfolder, set it here.
+      # Example: engine source sits in vendor/Fairy-Stockfish.wasm/
+      - name: Set engine source dir (adjust if needed)
+        id: srcdir
+        run: |
+          # CHANGE THIS if your engine lives elsewhere:
+          echo "dir=vendor/Fairy-Stockfish.wasm" >> $GITHUB_OUTPUT
+          # Other common locations people use:
+          # echo "dir=engine-src" >> $GITHUB_OUTPUT
+          # echo "dir=." >> $GITHUB_OUTPUT
+
+      # ── Option B (pull from a public repo) ─────────────────────────
+      # If you DON'T have source in your repo, uncomment this step and the 'working-directory' below.
+      # - name: Clone Fairy-Stockfish.wasm (ianfab)
+      #   run: |
+      #     rm -rf fairy-src
+      #     git clone --depth=1 https://github.com/ianfab/Fairy-Stockfish.wasm.git fairy-src
+
+      - name: Setup emsdk
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: "3.1.56"     # Any recent stable works
+          actions-cache-folder: emsdk-cache
+
+      - name: Show emsdk info
+        run: |
+          emcc -v
+          em++ -v
+
+      - name: Build single-thread JS/WASM
+        # If you cloned ianfab above: working-directory: fairy-src
+        working-directory: ${{ steps.srcdir.outputs.dir }}
+        shell: bash
+        run: |
+          set -e
+
+          # Try common Makefile targets with USE_PTHREADS=0 (disables SharedArrayBuffer)
+          # We chain attempts: first one that works wins.
+          (emmake make -j$(nproc) build-js USE_PTHREADS=0 && export OUTDIR=dist) \
+          || (emmake make -j$(nproc) js      USE_PTHREADS=0 && export OUTDIR=dist) \
+          || (emmake make -j$(nproc) wasm    USE_PTHREADS=0 && export OUTDIR=wasm) \
+          || (echo "No known make target matched. Check repo build instructions." && exit 1)
+
+          echo "OUTDIR=${OUTDIR}"
+
+          # Heuristic: find produced files
+          JS=$(ls ${OUTDIR}/*fairy*stockfish*.js 2>/dev/null | head -n1 || true)
+          WASM=$(ls ${OUTDIR}/*.wasm 2>/dev/null | head -n1 || true)
+
+          if [ -z "$JS" ] || [ -z "$WASM" ]; then
+            echo "Build finished but could not locate outputs in ${OUTDIR}"
+            echo "All candidates near here:"
+            find . -maxdepth 3 -type f \( -name '*.js' -o -name '*.wasm' \)
+            exit 1
+          fi
+
+          mkdir -p ../dist_single
+          cp "$JS"   ../dist_single/fairy-stockfish.single.js
+          cp "$WASM" ../dist_single/fairy-stockfish.single.wasm
+
+          echo "Artifacts:"
+          ls -l ../dist_single
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fairy-single
+          path: ${{ steps.srcdir.outputs.dir }}/../dist_single/*
+          if-no-files-found: error

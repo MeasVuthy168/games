@@ -24,7 +24,7 @@
       --blue:#0d2d5c;
     }
 
-    /* ==== AI Spinner (tap blocker) ==== */
+    /* ==== AI Spinner & Tap Blocker ==== */
     .ai-mask{
       position:fixed; inset:0;
       background:rgba(13,45,92,.06);
@@ -56,7 +56,16 @@
       50%{ transform:translateY(-6px); opacity:.9 }
       100%{ transform:translateY(0); opacity:.25 }
     }
-    .ai-sub{ font-size:.92rem; margin-top:6px; opacity:.75 }
+    .ai-sub{ font-size:.9rem; margin-top:6px; opacity:.8 }
+
+    /* ==== Debug panel (only if ?debug=1) ==== */
+    .dbg{ display:none; margin:12px; padding:10px; border-radius:10px; background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.08); }
+    .dbg.on{ display:block }
+    .dbg h3{ margin:0 0 6px 0; font-size:1.05rem; color:#0d2d5c }
+    .dbg .row{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:8px }
+    .dbg button{ padding:.55rem .8rem; border-radius:10px; border:0; background:#0d2d5c; color:#fff; font-weight:700 }
+    .dbg .out{ font-family:ui-monospace,Consolas,monospace; font-size:.9rem; white-space:pre-wrap; background:#0b254514; padding:8px; border-radius:8px; max-height:160px; overflow:auto }
+    .pill{ display:inline-block; padding:.15rem .5rem; border-radius:999px; background:#eef4ff; color:#0d2d5c; font-weight:800; font-size:.85rem }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -119,12 +128,18 @@
           </div>
         </div>
 
-        <!-- Chat placeholder -->
-        <section class="panel card chat-panel card-full">
-          <div class="card-left">
-            <div class="card-title">សន្ទនា (Chat)</div>
-            <div class="card-sub">coming soon</div>
+        <!-- Debug panel (hidden unless ?debug=1) -->
+        <section id="dbg" class="dbg">
+          <h3>🧪 Debug / Test</h3>
+          <div class="row">
+            <button id="dbgPing">Ping Backend</button>
+            <button id="dbgAsk">Ask AI from current</button>
+            <button id="dbgForceRemote">Force Remote</button>
+            <button id="dbgForceLocal">Force Local</button>
+            <button id="dbgClearForce">Clear Force</button>
           </div>
+          <div class="row"><span>Mode:</span><span id="dbgMode" class="pill">–</span></div>
+          <div id="dbgOut" class="out"></div>
         </section>
 
       </section>
@@ -149,14 +164,14 @@
     </div>
   </div>
 
-  <!-- ==== AI Spinner / tap blocker (global) ==== -->
+  <!-- ==== AI Spinner / tap blocker ==== -->
   <div id="aiMask" class="ai-mask" aria-hidden="true">
     <div class="ai-card" role="status" aria-live="polite">
       <div class="ai-row">
         <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
         <b>🤖 AI កំពុងគិត...</b>
       </div>
-      <div class="ai-sub">សូមមេត្តារំលងមិនចុចបន្ទះតាមអំឡុងពេលនេះ</div>
+      <div id="aiSub" class="ai-sub">ប្រភព៖ –</div>
     </div>
   </div>
 
@@ -164,12 +179,48 @@
   <script type="module" src="./js/main.js"></script>
   <script type="module" src="./js/ai-hook.js"></script>
 
-  <!-- expose show/hide for spinner -->
+  <!-- global helpers for spinner + debug pills -->
   <script>
     (function(){
       const mask = document.getElementById('aiMask');
-      window.__aiShow = ()=> mask?.classList.add('on');
+      const sub  = document.getElementById('aiSub');
+      const dbgMode = () => document.getElementById('dbgMode');
+
+      window.__aiShow = (from) => {
+        if (from && sub) sub.textContent = 'ប្រភព៖ ' + (from==='remote' ? 'Remote (Render)' : 'Local');
+        mask?.classList.add('on');
+        dbgMode()?.replaceChildren(document.createTextNode(from||'–'));
+      };
       window.__aiHide = ()=> mask?.classList.remove('on');
+    })();
+
+    // Debug panel: show only with ?debug=1
+    (function(){
+      const u = new URL(location.href);
+      if (u.searchParams.get('debug') === '1') {
+        document.getElementById('dbg')?.classList.add('on');
+        const out = document.getElementById('dbgOut');
+        function log(s){ out.textContent = s + '\n' + out.textContent; }
+
+        const BE = (localStorage.getItem('kc_backend_url') || 'https://ouk-ai-backend.onrender.com').replace(/\/+$/,'');
+        document.getElementById('dbgPing').onclick = async ()=>{
+          const url = BE + '/health';
+          try{ const r = await fetch(url); log('PING ' + url + ' -> ' + r.status); }
+          catch(e){ log('PING failed: ' + e); }
+        };
+        document.getElementById('dbgAsk').onclick = async ()=>{
+          try{
+            // we don’t import here; rely on ai.js global selection via ai-hook
+            const fen = window.game?.fen?.() || window.game?.toFEN?.() || '(no FEN)';
+            log('Ask from FEN: ' + fen);
+            // trigger AI turn manually
+            window.dispatchEvent(new CustomEvent('dbg-ask-ai'));
+          }catch(e){ log('Ask failed: ' + e); }
+        };
+        document.getElementById('dbgForceRemote').onclick = ()=>{ localStorage.setItem('kc_force_ai','remote'); log('Force: remote'); };
+        document.getElementById('dbgForceLocal').onclick  = ()=>{ localStorage.setItem('kc_force_ai','local');  log('Force: local');  };
+        document.getElementById('dbgClearForce').onclick  = ()=>{ localStorage.removeItem('kc_force_ai');       log('Force cleared'); };
+      }
     })();
   </script>
 </body>

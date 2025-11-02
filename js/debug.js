@@ -1,98 +1,98 @@
-// js/debug.js — in-page debug console & buttons
-(function(){
-  const logEl   = document.getElementById('debug-log');
-  const urlEl   = document.getElementById('dbg-worker-url');
-  const btnClear= document.getElementById('dbg-clear');
-  const btnCopy = document.getElementById('dbg-copy');
-  const btnRun  = document.getElementById('dbg-run-checks');
-  const btnForce= document.getElementById('dbg-force') || document.getElementById('dbg-engine-test');
+// js/debug.js — lightweight in-page console (no worker)
+// Plan B: pure-JS AI only
 
+(function(){
+  const el = document.getElementById('debug-log');
   const stamp = ()=> new Date().toTimeString().slice(0,8);
+
   function write(line, kind){
-    const out = `[${stamp()}] ${line}\n`;
-    if (logEl){ logEl.textContent += out; logEl.scrollTop = logEl.scrollHeight; }
+    const prefix = `[${stamp()}]`;
+    const out = `${prefix} ${line}\n`;
+    if (el){ el.textContent += out; el.scrollTop = el.scrollHeight; }
     (kind==='err' ? console.error : console.log)(out);
   }
-  // expose for other modules (ai.js uses window.dbgLog)
+
+  // expose for other modules (ai.js uses dbgLog)
   window.__dbglog = write;
-  window.dbgLog   = write;
+  window.dbgLog = write;
 
   write('Debug console ready.');
 
-  // ---- Worker URL resolution (robust) ----
-  async function peekWorkerURL(){
-    // Try via engine-pro helper (preferred)
+  const btnClear = document.getElementById('dbg-clear');
+  const btnCopy  = document.getElementById('dbg-copy');
+  const btnRun   = document.getElementById('dbg-run-checks');
+  const btnAITest= document.getElementById('dbg-ai-test'); // <- new id
+
+  if (btnClear) btnClear.addEventListener('click', ()=>{ if (el) el.textContent=''; });
+  if (btnCopy)  btnCopy.addEventListener('click', async ()=>{
     try{
-      const mod = await import('./engine-pro.js');
-      const fromMod = mod?._debug__peekWorkerURL?.();
-      if (fromMod) return fromMod;
+      await navigator.clipboard.writeText(el?.textContent||'');
+      write('Copied to clipboard.', 'ok');
     }catch(e){
-      // ignore; we’ll use fallback below
+      write('Copy failed: '+(e?.message||e),'err');
     }
-    // Fallback: resolve relative to the current page + cache-bust
+  });
+
+  // Quick environment checks for Plan B
+  if (btnRun) btnRun.addEventListener('click', async ()=>{
+    write('Running path checks (Plan B: pure-JS)...');
+
+    // 1) Opening book (optional)
     try{
-      const u = new URL('./js/engine.worker.js', window.location.href);
-      if (!u.searchParams.has('v')) u.searchParams.set('v', String(Date.now()));
-      return u.href;
-    }catch{
-      return '(unknown)';
+      const r = await fetch('assets/book-khmer.json', {cache:'no-store'});
+      write(`Book fetch assets/book-khmer.json -> ${r.status} ${r.ok?'OK':'ERR'}`);
+    }catch(e){
+      write(`Book fetch failed: ${e?.message||e}`, 'err');
     }
-  }
 
-  // Show Worker URL immediately
-  (async ()=>{
-    const url = await peekWorkerURL();
-    if (urlEl) urlEl.textContent = url;
-  })();
+    // 2) ai.js can be imported
+    try{
+      const m = await import('./ai.js');
+      const keys = Object.keys(m||{});
+      write(`ai.js imported: exports = [${keys.join(', ')}]`);
+    }catch(e){
+      write(`ai.js import failed: ${e?.message||e}`, 'err');
+    }
 
-  // ---- Buttons ----
-  if (btnClear) btnClear.addEventListener('click', ()=>{ if (logEl) logEl.textContent=''; });
-  if (btnCopy){
-    btnCopy.addEventListener('click', async ()=>{
+    // 3) Warn if Pro-engine files still exist (you chose Plan B)
+    // HEAD avoids large downloads
+    const probe = async (p)=> {
       try{
-        await navigator.clipboard.writeText(logEl?.textContent||'');
-        write('Copied to clipboard.', 'ok');
-      }catch(e){ write('Copy failed: '+(e?.message||e),'err'); }
-    });
-  }
+        const r = await fetch(p, {method:'HEAD', cache:'no-store'});
+        if (r.ok) write(`⚠ Found leftover Pro engine file: ${p} (delete for Plan B)`, 'err');
+      }catch{}
+    };
+    await probe('engine/fairy-stockfish.wasm');
+    await probe('engine/fairy-stockfish.js');
+    await probe('js/engine.worker.js');
+    await probe('js/engine-pro.js');
+  });
 
-  if (btnRun){
-    btnRun.addEventListener('click', async ()=>{
-      write('Running path checks...');
-      // 1) JS
-      try{
-        const r = await fetch('engine/fairy-stockfish.js', { cache:'no-store' });
-        write(`JS fetch engine/fairy-stockfish.js -> ${r.status} ${r.ok?'OK':'ERR'}`);
-      }catch(e){ write(`JS fetch failed: ${e?.message||e}`, 'err'); }
-      // 2) WASM
-      try{
-        const r = await fetch('engine/fairy-stockfish.wasm', { cache:'no-store' });
-        write(`WASM fetch engine/fairy-stockfish.wasm -> ${r.status} ${r.ok?'OK':'ERR'}`);
-      }catch(e){ write(`WASM fetch failed: ${e?.message||e}`, 'err'); }
-      // 3) Worker URL (same logic as initial render)
-      try{
-        const url = await peekWorkerURL();
-        write(`Worker URL resolved to: ${url}`);
-        if (urlEl) urlEl.textContent = url;
-      }catch(e){
-        write(`worker URL resolve failed: ${e?.message||e}`, 'err');
+  // Simple AI self-test using the current game (if available)
+  if (btnAITest) btnAITest.addEventListener('click', async ()=>{
+    write('AI self-test…');
+    try{
+      const { chooseAIMove } = await import('./ai.js');
+
+      // Try to find a live game instance created by your app
+      const cand =
+        window.__game || window.game || window.APP?.game ||
+        window.__app?.game || null;
+
+      if (!cand){
+        write('No game instance found on window. Open a board first, then retry.', 'err');
+        return;
       }
-    });
-  }
 
-  // Optional: Force Engine Test (if the button exists in the page)
-  if (btnForce){
-    btnForce.addEventListener('click', async ()=>{
-      try{
-        const { getEngineBestMove } = await import('./engine-pro.js');
-        write('[ENGINE] Forcing self-test…');
-        // simple opening-like FEN for test
-        const fen = 'rnbqkbnr/8/pppppppp/8/4P3/PPPP1PPP/8/RNBKQBNR b - - 0 1';
-        const uci = await getEngineBestMove({ fen, movetimeMs: 600 });
-        write(`[ENGINE] Self-test bestmove: ${uci}`);
-      }catch(e){
-        write(`[ENGINE] Self-test error: ${e?.message||e}`, 'err');
+      // Ask for a move at Hard to exercise the search
+      const mv = await chooseAIMove(cand, { level:'Hard' });
+      if (mv){
+        write(`AI chose: ${String.fromCharCode(97+mv.from.x)}${8-mv.from.y} -> ${String.fromCharCode(97+mv.to.x)}${8-mv.to.y}`, 'ok');
+      }else{
+        write('AI returned no move (possibly checkmate/stalemate or no legal moves).', 'err');
       }
-    });
-  }
+    }catch(e){
+      write(`AI test error: ${e?.message||e}`, 'err');
+    }
+  });
 })();

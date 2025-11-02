@@ -1,133 +1,83 @@
-/* ------------------------------------------------------------------
-   Remote-first wrapper + spinner
-   ------------------------------------------------------------------ */
-const AI_REMOTE_BASE = 'https://ouk-ai-backend.onrender.com'; // your live backend
-const AI_REMOTE_VARIANT = 'makruk';
-const AI_REMOTE_TIME_MS = 1200; // adjust if you want
+// js/ai.js — Remote-first AI with local Master fallback
+// Public API:
+//   chooseAIMove(game, { aiColor: 'w'|'b' })
+//   setAIDifficulty() -> returns Master config
+//   pickAIMove alias
 
-function __showSpin(){ try{ window.__aiShow?.(); }catch{} }
-function __hideSpin(){ try{ window.__aiHide?.(); }catch{} }
+/***********************
+ * Remote (backend) API
+ ***********************/
+const BACKEND_BASE =
+  (localStorage.getItem('kc_backend_url') || 'https://ouk-ai-backend.onrender.com').replace(/\/+$/,'');
 
-// Map UCI like "e2e4" to your game's move object
-function uciToMove(uci, game){
+/** Try multiple ways to read FEN from the current game object */
+function readFEN(game){
+  try{
+    if (typeof game.fen === 'function') return game.fen();
+    if (typeof game.toFEN === 'function') return game.toFEN();
+    if (typeof game.exportFEN === 'function') return game.exportFEN();
+    if (typeof game.getFEN === 'function') return game.getFEN();
+    const st = (typeof game.status==='function') ? game.status() : null;
+    if (st?.fen) return st.fen;
+  }catch{}
+  throw new Error('FEN not available from game object');
+}
+
+/** Turn "e2e4" into {from:{x,y}, to:{x,y}}, validated against legal moves */
+function parseUciToMove(uci, game){
   if (!uci || uci.length < 4) return null;
-  const fx = uci.charCodeAt(0) - 97;      // a -> 0
-  const fy = 8 - (uci.charCodeAt(1) - 48);
-  const tx = uci.charCodeAt(2) - 97;
-  const ty = 8 - (uci.charCodeAt(3) - 48);
-  if ((fx|fy|tx|ty) & ~7) return null;
-  const legals = (game.legalMoves?.(fx,fy)) || [];
+  const fx = uci.charCodeAt(0)-97, fy = 8 - (uci.charCodeAt(1)-48);
+  const tx = uci.charCodeAt(2)-97, ty = 8 - (uci.charCodeAt(3)-48);
+  if (fx|fy|tx|ty & ~7) return null;
+
+  const legals = game.legalMoves(fx, fy) || [];
   for (const m of legals){
     if (m.x===tx && m.y===ty) return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
   }
   return null;
 }
 
-// We’ll reuse TYPE_MAP later (declared below in your local engine)
-// to build a Makruk-compatible FEN if game.toFEN is absent.
-function toMakrukFEN(game){
-  if (typeof game.toFEN === 'function') return game.toFEN();
-  const TM = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
-  const rows = [];
-  for (let y=0;y<8;y++){
-    let run=0, row='';
-    for (let x=0;x<8;x++){
-      const p = game.at?.(x,y);
-      if (!p){ run++; continue; }
-      if (run){ row += String(run); run=0; }
-      const t = TM[p.t] || p.t || 'P';
-      row += (p.c==='w') ? t : t.toLowerCase();
-    }
-    if (run) row += String(run);
-    rows.push(row||'8');
-  }
-  const turn = game.turn || 'w';
-  return `${rows.join('/') } ${turn} - - 0 1`;
+async function requestRemoteMove(game, { aiColor }){
+  const fen = readFEN(game);
+  const body = { fen, variant: 'makruk', movetime: 1200 };
+
+  const res = await fetch(`${BACKEND_BASE}/api/ai/move`, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) throw new Error(`Remote AI HTTP ${res.status}`);
+  const data = await res.json().catch(()=> ({}));
+
+  // Expecting { uci: "e2e4", ... }
+  const uci = data?.uci || data?.bestmove || data?.move;
+  const mv = uci ? parseUciToMove(uci, game) : null;
+  if (!mv) throw new Error('Remote AI returned no legal move');
+  return mv;
 }
 
-async function chooseAIMove_Remote(game, { aiColor='w', movetime=AI_REMOTE_TIME_MS }={}){
-  const fen = toMakrukFEN(game);
-  const controller = new AbortController();
-  const timer = setTimeout(()=>controller.abort(), 15000);
-  try{
-    const res = await fetch(`${AI_REMOTE_BASE}/api/ai/move`,{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ fen, variant: AI_REMOTE_VARIANT, movetime, side: aiColor }),
-      signal: controller.signal
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const mv = uciToMove(data?.bestmove, game);
-    if (!mv) throw new Error('Mapping bestmove failed');
-    return mv;
-  } finally { clearTimeout(timer); }
-}
+/******************************************
+ * Local Master++ Search (your requested)
+ ******************************************/
 
-/* ==================================================================
-   Your existing "Master++ Aggressive" LOCAL AI (kept untouched)
-   ================================================================== */
+// === begin Master constants & engine ===
+const MASTER = { timeMs: 1200, maxDepth: 9, nodeCap: 400_000 };
+const USE_BOOK = true;
+const BOOK_URL = 'assets/book-khmer.json';
+const TEMP_T = 0.00;
 
-// js/ai.js — Khmer Chess "Master++ Aggressive" (no WASM)
-//
-// Public API (unchanged):
-//   - chooseAIMove(game, { aiColor: 'w'|'b', countState })
-//   - setAIDifficulty(level)  -> returns active Master config
-//   - pickAIMove alias
-//
-// Highlights:
-// - PVS + iterative deepening + aspiration windows
-// - Zobrist TT (fast hashing), killer moves, history heuristic
-// - LMR, futility, razoring, (guarded) null-move
-// - Quiescence with delta-pruning + checks probing
-// - Light PST + mobility + king-pressure/threat incentives
-// - Softer fear of defended squares => less "escape" behavior
-// - Counting-draw synergy + repetition control kept
-
-//////////////////////// Master Profile //////////////////////
-
-const MASTER = {
-  timeMs:   1200,     // per-move time budget (tune up/down for strength/speed)
-  maxDepth: 9,        // hard ceiling (ID tries to reach this)
-  nodeCap:  400_000,  // global guardrail
-};
-
-const USE_BOOK   = true;
-const BOOK_URL   = 'assets/book-khmer.json';
-const TEMP_T     = 0.00; // root randomness (0 = deterministic)
-
-//////////////////////// Pruning / Reductions //////////////////////
-
-const FUT_MARGIN_BASE = 120;
-const RAZOR_MARGIN    = 220;
-const Q_NODE_CAP      = 40_000;
-const Q_DEPTH_MAX     = 8;
-const LMR_MIN_DEPTH   = 3;
-const LMR_BASE_RED    = 1;     // smaller = search more quiet moves
-const NULL_MOVE_R     = 2;
-const NULL_MOVE_MIND  = 3;
-
-//////////////////////// Repetition & Counting //////////////////////
+const FUT_MARGIN_BASE=120, RAZOR_MARGIN=220, Q_NODE_CAP=40_000, Q_DEPTH_MAX=8, LMR_MIN_DEPTH=3, LMR_BASE_RED=1, NULL_MOVE_R=2, NULL_MOVE_MIND=3;
 
 const REP_SHORT_WINDOW=8, REP_SOFT_PENALTY=15, REP_HARD_PENALTY=220;
-
-const COUNT_BURN_PENALTY=6;  // softened to reduce over-passivity
-const COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
-
-//////////////////////// Values //////////////////////
+const COUNT_BURN_PENALTY=6, COUNT_RESEED_BONUS=80, COUNT_URGENT_NEAR=3;
 
 const VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
 const ATTACKER_VAL = { P:100, N:320, B:330, R:500, Q:900, K:10000 };
-
-// Khmer aliases → normal
 const TYPE_MAP = { R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K', T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K' };
 function normType(t){ return TYPE_MAP[t] || t; }
 
-//////////////////////// Debug hook (safe no-op) //////////////////////
-
 const log = (s, kind) => { try{ window.__dbglog?.(`[AI] ${s}`, kind); }catch{} };
-
-//////////////////////// Opening book //////////////////////
 
 let _bookPromise=null;
 async function loadOpeningBook(){
@@ -153,48 +103,343 @@ function parseBookMove(uci, game){
   return null;
 }
 
-/* ……… (the whole of your local engine stays exactly the same) ………
-   ⬇️  I’m keeping all your functions unchanged from here down:
-   - zobrist / repetition / eval / move ordering
-   - quiesce / negamax / iterative deepening
-   - chooseAIMove_LocalMaster(game, opts)
-   - setAIDifficulty
-   - etc.
-   (For brevity in this message, I won’t re-expand every line again.)
-   Use the same content you pasted previously.
----------------------------------------------------------------------*/
-
-/* ---------------- keep your original LOCAL engine code here ------- */
-/* [Your entire existing code from “//////////////////////// Zobrist …”
-   all the way down to the end of chooseAIMove_LocalMaster()]        */
-/* ------------------------------------------------------------------ */
-
-
-/* ------------------------------------------------------------------
-   FINAL PUBLIC API: spinner + remote-first + local fallback
-   ------------------------------------------------------------------ */
-export async function chooseAIMove(game, opts={}){
-  __showSpin();
-  try{
-    // 1) try remote engine first
-    try{
-      const mv = await chooseAIMove_Remote(game, {
-        aiColor : opts.aiColor || game.turn,
-        movetime: (opts.movetime ?? AI_REMOTE_TIME_MS)
-      });
-      if (mv) return mv;
-    }catch(e){
-      console.warn('[AI] remote failed, falling back:', e?.message || e);
+// zobrist
+let _seed = 0x9e3779b1|0;
+function rnd32(){ _seed|=0; _seed = (_seed+0x6D2B79F5)|0; let t=Math.imul(_seed^(_seed>>>15),1|_seed); t^=t+Math.imul(t^(t>>>7),61|t); return (t^(t>>>14))>>>0; }
+const Z = { table: [], side: rnd32() };
+const Z_PIECES = [];
+(function(){
+  const kinds = ['P','N','B','R','Q','K'], colors=['w','b'];
+  colors.forEach(c=> kinds.forEach(k=> Z_PIECES.push(c+k)));
+  for (let y=0;y<8;y++){
+    Z.table[y]=[];
+    for(let x=0;x<8;x++){
+      Z.table[y][x]=new Uint32Array(Z_PIECES.length);
+      for (let i=0;i<Z_PIECES.length;i++) Z.table[y][x][i]=rnd32();
     }
-    // 2) fallback to your local Master
-    return await chooseAIMove_LocalMaster(game, opts);
-  } finally {
-    __hideSpin();
   }
+})();
+function pieceIndex(p){ if(!p) return -1; const t=normType(p.t); return Z_PIECES.indexOf(p.c+t); }
+function zobrist(game){
+  let h=0>>>0;
+  for (let y=0;y<8;y++) for (let x=0;x<8;x++){
+    const p=game.at(x,y); const idx=pieceIndex(p);
+    if (idx>=0) h ^= Z.table[y][x][idx];
+  }
+  if (game.turn==='w') h ^= Z.side;
+  return h>>>0;
 }
 
-export function setAIDifficulty(/* level */){
-  return { timeMs: MASTER.timeMs, maxDepth: MASTER.maxDepth, nodeLimit: MASTER.nodeCap, temperature: 0 };
+class RepTracker{
+  constructor(){ this.list=[]; }
+  push(k){ this.list.push(k); if(this.list.length>200) this.list.shift(); }
+  pop(){ this.list.pop(); }
+  softCount(k){ let n=0, s=Math.max(0,this.list.length-REP_SHORT_WINDOW); for(let i=s;i<this.list.length;i++) if(this.list[i]===k) n++; return n; }
+  wouldThreefold(k){ return (this.list.filter(x=>x===k).length + 1) >= 3; }
+}
+function repetitionPenalty(rep,key){ let p=0,soft=rep.softCount(key); if(soft>0) p-=REP_SOFT_PENALTY*soft; if(rep.wouldThreefold(key)) p-=REP_HARD_PENALTY; return p; }
+
+function countingAdjust(aiColor,countState,captured,matLead){
+  if(!countState?.active) return 0;
+  let adj=0, aiOwns=(countState.side===aiColor);
+  if(aiOwns){
+    if(captured) adj+=COUNT_RESEED_BONUS;
+    else if(matLead>0) adj-=COUNT_BURN_PENALTY;
+    if((countState.remaining||0)<=COUNT_URGENT_NEAR) adj-=50;
+  }else if(captured){ adj+=(COUNT_RESEED_BONUS>>1); }
+  return adj;
+}
+
+const PST = {
+  P:[0,6,6,8,8,6,6,0,2,6,8,12,12,8,6,2,1,4,6,10,10,6,4,1,0,2,4,6,6,4,2,0,0,2,3,4,4,3,2,0,0,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  N:[-6,-2,0,2,2,0,-2,-6,-2,0,2,4,4,2,0,-2,0,2,6,8,8,6,2,0,2,4,8,10,10,8,4,2,2,4,8,10,10,8,4,2,0,2,6,8,8,6,2,0,-2,0,2,4,4,2,0,-2,-6,-2,0,2,2,0,-2,-6],
+  B:[0,0,2,4,4,2,0,0,0,2,3,6,6,3,2,0,2,3,6,8,8,6,3,2,2,4,8,10,10,8,4,2,2,4,8,10,10,8,4,2,2,3,6,8,8,6,3,2,0,2,3,6,6,3,2,0,0,0,2,4,4,2,0,0],
+  R:[2,4,4,6,6,4,4,2,3,6,6,8,8,6,6,3,2,4,4,6,6,4,4,2,1,2,2,4,4,2,2,1,1,2,2,4,4,2,2,1,0,2,2,3,3,2,2,0,0,0,0,2,2,0,0,0,0,0,0,1,1,0,0,0],
+  Q:[0,1,2,3,3,2,1,0,1,2,3,4,4,3,2,1,2,3,5,6,6,5,3,2,3,4,6,8,8,6,4,3,3,4,6,8,8,6,4,3,2,3,5,6,6,5,3,2,1,2,3,4,4,3,2,1,0,1,2,3,3,2,1,0],
+  K:[-4,-2,-2,-1,-1,-2,-2,-4,-2,0,0,0,0,0,0,-2,-2,0,1,1,1,1,0,-2,-1,0,1,2,2,1,0,-1,-1,0,1,2,2,1,0,-1,-2,0,1,1,1,1,0,-2,-2,0,0,0,0,0,0,-2,-4,-2,-2,-1,-1,-2,-2,-4]
+};
+function idx(x,y){ return (y<<3)|x; }
+
+function materialSide(game, side){ let s=0; for(let y=0;y<8;y++) for(let x=0;x<8;x++){ const p=game.at(x,y); if(!p||p.c!==side) continue; s+=VAL[normType(p.t)]||0; } return s; }
+function materialEval(game){ return materialSide(game,'w')-materialSide(game,'b'); }
+function pstEval(game){
+  let score=0;
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p=game.at(x,y); if(!p) continue;
+      const t=normType(p.t); const tbl=PST[t]; if(!tbl) continue;
+      const i = p.c==='w' ? idx(x,y) : idx(7-x,7-y);
+      score += (p.c==='w'? +1 : -1) * tbl[i];
+    }
+  }
+  return score;
+}
+function mobilityEval(game){
+  let moves=0;
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p=game.at(x,y); if(!p||p.c!==game.turn) continue;
+      moves += game.legalMoves(x,y).length;
+      if (moves>=28) break;
+    }
+  }
+  return (game.turn==='w'?+1:-1)*Math.min(moves,28);
+}
+const INITIATIVE_WHEN_BEHIND=18;
+function evalLeaf(game,rep,countState,aiColor){
+  const mat=materialEval(game), pst=pstEval(game), mob=mobilityEval(game);
+  let score = mat+pst+mob+repetitionPenalty(rep,zobrist(game));
+  if ((aiColor==='w' ? -mat : mat) > 120){
+    if (game.turn===aiColor) score+=INITIATIVE_WHEN_BEHIND;
+  }
+  try{
+    const enemy=(aiColor==='w'?'b':'w'), findK=game.findKing?.bind(game), attackers=game.attackersOf?.bind(game);
+    if(findK && attackers){ const k=findK(enemy); if(k){ const a=attackers(k.x,k.y,aiColor)||[]; if(a.length) score += 25*a.length; } }
+  }catch{}
+  const lead=(aiColor==='w'?mat:-mat);
+  if(countState?.active && lead>0 && countState.side===aiColor){
+    const near=Math.max(0,6-(countState.remaining||0)); score -= (COUNT_BURN_PENALTY*near);
+  }
+  return score;
+}
+function see(game,from,to){
+  const a=game.at(from.x,from.y), t=game.at(to.x,to.y); if(!a||!t) return 0;
+  const atkV=VAL[normType(a.t)]||0; let gain=(VAL[normType(t.t)]||0)-atkV; const opp=(game.turn==='w'?'b':'w');
+  if (game.squareAttacked(to.x,to.y,opp)) gain -= 20; return gain;
+}
+function centerBias(sq){ const cx=Math.abs(3.5-sq.x), cy=Math.abs(3.5-sq.y); return 8-(cx+cy); }
+function generateMoves(game){
+  const out=[];
+  for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+    const p=game.at(x,y); if(!p||p.c!==game.turn) continue;
+    const tt=normType(p.t); const legals=game.legalMoves(x,y);
+    for(const m of legals){
+      const target=game.at(m.x,m.y);
+      out.push({ from:{x,y}, to:{x:m.x,y:m.y}, attackerType:tt, isCapture:!!target,
+        targetType: target?normType(target.t):null, mvv: target?(VAL[normType(target.t)]||0):0,
+        lva: ATTACKER_VAL[tt]||0, center:centerBias(m), _hs:0 });
+    }
+  }
+  return out;
+}
+const TT=new Map(); const TT_EXACT=0, TT_LOWER=1, TT_UPPER=2;
+const KILLER=Array.from({length:128},()=>[null,null]); const HIST=new Map();
+function histKey(m){ return ((m.from.x<<6)|(m.from.y<<3)|m.to.x)+(m.to.y<<9); }
+function histGet(k){ return HIST.get(k)|0; }
+function histAdd(k,v){ HIST.set(k, Math.min(50000, (HIST.get(k)|0)+v)); }
+function orderMoves(game,moves,ttMove,ply){
+  const opp=(game.turn==='w'?'b':'w');
+  for(const mv of moves){
+    let score=0;
+    if (ttMove && mv.from.x===ttMove.from.x && mv.from.y===ttMove.from.y && mv.to.x===ttMove.to.x && mv.to.y===ttMove.to.y){
+      score=3_000_000;
+    } else if (mv.isCapture){
+      score=2_000_000 + mv.mvv*12 - mv.lva;
+      if (mv.mvv>=300) score += see(game, mv.from, mv.to);
+    } else {
+      const k0=KILLER[ply][0], k1=KILLER[ply][1];
+      if (k0 && mv.from.x===k0.from.x && mv.from.y===k0.from.y && mv.to.x===k0.to.x && mv.to.y===k0.to.y) score=1_000_500;
+      else if (k1 && mv.from.x===k1.from.x && mv.from.y===k1.from.y && mv.to.x===k1.to.x && mv.to.y===k1.to.y) score=1_000_400;
+      else score=200_000 + histGet(histKey(mv)) + mv.center;
+    }
+    const defended = game.squareAttacked(mv.to.x,mv.to.y,opp);
+    if (mv.isCapture){ score += defended ? -25 : +250; } else { score += defended ? -5 : +20; }
+    try{
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        if(!dx && !dy) continue; const tx=mv.to.x+dx, ty=mv.to.y+dy;
+        if(tx<0||tx>7||ty<0||ty>7) continue; const tp=game.at(tx,ty);
+        if(tp && tp.c===opp){ const val=VAL[normType(tp.t)]||0; if(val>=300) score += Math.min(60, val/10); }
+      }
+    }catch{}
+    mv._hs=score;
+  }
+  moves.sort((a,b)=> b._hs-a._hs);
+  return moves;
+}
+function make(game,m){ return game.move(m.from,m.to); }
+function undo(game){ game.undo(); }
+function quiesce(game,alpha,beta,color,aiColor,timers,qStat,depthQ=0,allowChecks=true){
+  if (timers.timeUp()) return alpha;
+  if (qStat.nodes++ > Q_NODE_CAP || depthQ>Q_DEPTH_MAX) return color * evalLeaf(game, timers.rep, null, aiColor);
+  let stand = color * evalLeaf(game, timers.rep, null, aiColor);
+  if (stand >= beta) return beta;
+  if (stand > alpha) alpha = stand;
+  const delta=975; if (stand + delta < alpha) return alpha;
+  let moves = generateMoves(game).filter(m=>m.isCapture);
+  if (allowChecks){
+    const quiets = generateMoves(game).filter(m=>!m.isCapture);
+    quiets.sort((a,b)=> b.center - a.center);
+    moves = moves.concat(quiets.slice(0,2));
+  }
+  orderMoves(game, moves, null, 0);
+  for (const mv of moves){
+    const res = make(game, mv);
+    if(!res?.ok){ undo(game); continue; }
+    const givesCheck = (res?.status?.state==='check');
+    if (!mv.isCapture && !givesCheck){ undo(game); continue; }
+    const score = -quiesce(game, -beta, -alpha, -color, aiColor, timers, qStat, depthQ+1, allowChecks && givesCheck);
+    undo(game);
+    if (score >= beta) return beta;
+    if (score > alpha) alpha = score;
+    if (timers.timeUp()) break;
+  }
+  return alpha;
+}
+function totalMaterialAbs(game){ return materialSide(game,'w')+materialSide(game,'b'); }
+function negamax(game,depth,alpha,beta,color,aiColor,timers,stats,ply,allowNull=true){
+  if (timers.timeUp() || stats.nodes++ > timers.nodeCap) return { score:0, move:null, cutoff:true, pv:null };
+  const st=game?.status?.(); if (st && (st.state==='checkmate'||st.state==='stalemate')){
+    if (st.state==='checkmate') return { score: color*(-100000+ply), move:null, pv:null };
+    return { score:0, move:null, pv:null };
+  }
+  const key=zobrist(game); const tt=TT.get(key); let ttMove=tt?.move||null;
+  if (tt && tt.depth>=depth){
+    let v=tt.score;
+    if (tt.flag===TT_EXACT) return { score:v, move:ttMove, pv:null };
+    if (tt.flag===TT_LOWER && v>alpha) alpha=v; else if (tt.flag===TT_UPPER && v<beta) beta=v;
+    if (alpha>=beta) return { score:v, move:ttMove, pv:null };
+  }
+  if (depth===0){ const qStat={nodes:0}; const v=quiesce(game,alpha,beta,color,aiColor,timers,qStat,0,true); return { score:v, move:null, pv:null }; }
+  if (depth===1){
+    const sp=color*evalLeaf(game,timers.rep,timers.countState,aiColor);
+    if (sp+RAZOR_MARGIN<=alpha){
+      const qStat={nodes:0}; const v=quiesce(game,alpha,beta,color,aiColor,timers,qStat,0,false);
+      if (v<=alpha) return { score:v, move:null, pv:null };
+    }
+  }
+  if (allowNull && depth>=NULL_MOVE_MIND && totalMaterialAbs(game)>1600){
+    const stand=color*evalLeaf(game,timers.rep,timers.countState,aiColor);
+    if (stand>=beta) return { score:beta, move:null, pv:null };
+  }
+  let moves=orderMoves(game, generateMoves(game), ttMove, ply);
+  if (!moves.length) return { score: color*evalLeaf(game,timers.rep,timers.countState,aiColor), move:null, pv:null };
+
+  let best=-Infinity, bestMove=null, pvLine=null; const a0=alpha; let idx=0;
+  for (const mv of moves){
+    if (depth===1 && !mv.isCapture){
+      const est=color*evalLeaf(game,timers.rep,timers.countState,aiColor) - (FUT_MARGIN_BASE);
+      if (est<=alpha){ idx++; if(timers.timeUp()) break; continue; }
+    }
+    const res=make(game,mv);
+    if(!res?.ok){ undo(game); idx++; continue; }
+    let nextDepth=depth-1;
+    if (!mv.isCapture && res?.status?.state!=='check' && depth>=LMR_MIN_DEPTH && idx>=3){
+      const red=Math.min(2,1+((idx>7)|0))*LMR_BASE_RED; nextDepth=Math.max(0, depth-1 - red|0);
+    }
+    let child;
+    if (idx===0){
+      child=negamax(game,nextDepth,-beta,-alpha,-color,aiColor,timers,stats,ply+1,true);
+    }else{
+      child=negamax(game,nextDepth,-alpha-1,-alpha,-color,aiColor,timers,stats,ply+1,true);
+      if (!child.cutoff && child.score>alpha){
+        child=negamax(game,nextDepth,-beta,-alpha,-color,aiColor,timers,stats,ply+1,true);
+      }
+    }
+    let childScore=(child.cutoff ? -alpha : -(child.score));
+    if (mv.isCapture || res?.status?.state==='check'){
+      const mat=materialEval(game); const aiLead=(aiColor==='w'?mat:-mat);
+      if (mv.isCapture) childScore += 24 + countingAdjust(aiColor, timers.countState, true, aiLead);
+      if (res?.status?.state==='check') childScore += 14;
+    }
+    undo(game);
+    if (childScore>best){
+      best=childScore; bestMove=mv;
+      if (best>alpha){ alpha=best; pvLine = child?.pv ? [mv, ...child.pv] : [mv]; }
+      if (alpha>=beta){
+        if (!mv.isCapture){
+          const kslot=KILLER[ply];
+          if (!kslot[0] || !(kslot[0].from.x===mv.from.x && kslot[0].from.y===mv.from.y && kslot[0].to.x===mv.to.x && kslot[0].to.y===mv.to.y)){
+            kslot[1]=kslot[0]; kslot[0]={from:mv.from,to:mv.to};
+          }
+          histAdd(histKey(mv), depth*depth);
+        }
+        break;
+      }
+    }
+    idx++;
+    if (timers.timeUp()) break;
+  }
+  let flag=TT_EXACT; if (best<=a0) flag=TT_UPPER; else if (best>=beta) flag=TT_LOWER;
+  TT.set(key,{depth,score:best,flag,move:bestMove,age:0});
+  return { score:best, move:bestMove, pv:pvLine };
+}
+function pickByTemperature(items,T){
+  if (!items.length) return null;
+  if (T<=0) return items[0].move;
+  const exps=items.map(m=>Math.exp(m.score/Math.max(1,T)));
+  const sum=exps.reduce((a,b)=>a+b,0); let r=Math.random()*sum;
+  for(let i=0;i<items.length;i++){ r-=exps[i]; if(r<=0) return items[i].move; }
+  return items[0].move;
+}
+async function chooseAIMove_LocalMaster(game, opts={}){
+  const aiColor = opts.aiColor || game.turn;
+  try{
+    const book = await loadOpeningBook();
+    if (book && USE_BOOK){
+      const key = historyKeyFromGame(game);
+      const cand = book[key];
+      if (Array.isArray(cand) && cand.length){
+        const mv = parseBookMove(cand[Math.floor(Math.random()*cand.length)], game);
+        if (mv){ log('Book move'); return mv; }
+      }
+    }
+  }catch{}
+  const start = performance.now ? performance.now() : Date.now();
+  const timers = {
+    timeUp: ()=> ((performance.now?performance.now():Date.now()) - start) > MASTER.timeMs,
+    nodeCap: MASTER.nodeCap,
+    rep: new RepTracker(),
+    countState: null
+  };
+  const stats={nodes:0};
+  let bestMove=null, bestScore=-Infinity, lastScore=0;
+  for(let depth=1; depth<=MASTER.maxDepth; depth++){
+    let alpha=(depth>2? lastScore-90 : -Infinity), beta=(depth>2? lastScore+90 : Infinity);
+    for(let tries=0; tries<2; tries++){
+      const { move, score } = negamax(game, depth, alpha, beta, +1, aiColor, timers, stats, 0, true);
+      if (timers.timeUp()) break;
+      if (score<=alpha){ alpha=-Infinity; beta=(Number.isFinite(lastScore)? lastScore+140 : Infinity); continue; }
+      if (score>=beta){ alpha=(Number.isFinite(lastScore)? lastScore-140 : -Infinity); beta=Infinity; continue; }
+      if (move){ bestMove=move; bestScore=score; lastScore=score; }
+      break;
+    }
+    if (timers.timeUp()) break;
+  }
+  if (!bestMove){
+    const moves=orderMoves(game, generateMoves(game), null, 0);
+    return moves[0] || null;
+  }
+  const top = orderMoves(game, generateMoves(game), null, 0).slice(0, 6).map(mv=>{
+    const res=game.move(mv.from,mv.to);
+    if(!res?.ok){ game.undo(); return null; }
+    const timers2={...timers, rep:new RepTracker()};
+    const stats2={nodes:0};
+    const sub=negamax(game, Math.max(1, MASTER.maxDepth-2), -Infinity, Infinity, -1, aiColor, timers2, stats2, 1, true);
+    game.undo();
+    return { move: mv, score: -(sub.score) };
+  }).filter(Boolean).sort((a,b)=> b.score-a.score);
+  const picked = pickByTemperature(top.length?top:[{move:bestMove,score:bestScore}], TEMP_T) || bestMove;
+  log(`Picked ${toAlg(picked.from)}-${toAlg(picked.to)}; nodes=${stats.nodes}`);
+  return picked;
+}
+// === end local engine ===
+
+/*******************
+ * Public API
+ *******************/
+export async function chooseAIMove(game, opts={}){
+  // Try remote first
+  try{
+    return await requestRemoteMove(game, opts);
+  }catch(e){
+    console.warn('[AI] remote failed, using local engine:', e?.message||e);
+  }
+  // Fallback: local Master
+  return await chooseAIMove_LocalMaster(game, opts);
+}
+
+export function setAIDifficulty(){
+  return { timeMs: MASTER.timeMs, maxDepth: MASTER.maxDepth, nodeLimit: MASTER.nodeCap, temperature: TEMP_T };
 }
 
 export const pickAIMove = chooseAIMove;

@@ -1,77 +1,54 @@
-// js/ai.js — Remote-first AI (Render) with stronger search + spinner
-// Public API (unchanged):
-//   - chooseAIMove(game, { aiColor: 'w'|'b', countState })
-//   - setAIDifficulty(level)
-//   - pickAIMove (alias)
+// js/ai.js — Remote-first AI (Render) with spinner, stronger settings, and rich error reporting
 
-//////////////////////// Render backend ////////////////////////
+// ========= 1) Remote config =========
 const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
 const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
 const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
 
-// Networking & defaults
-const REMOTE_TIMEOUT  = 20000; // allow cold-start
+// Stronger/safer defaults (Render can be slow to wake)
+const REMOTE_MOVETIME = 2500;   // ms the engine will think (stronger than before)
+const REMOTE_TIMEOUT  = 30000;  // overall network timeout (handles spin-up)
 const VARIANT         = 'makruk';
 
-// Strength knobs (safe on Render free; increase if you upgrade)
-const THREADS  = 1;    // 1 CPU on free tier
-const HASH_MB  = 96;   // 64–128 MB is safe on free tier
-
-// Phase-based movetime (ms): more time in endgames for deeper search
-function phaseMovetime(game) {
-  try {
-    let pieces = 0;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) if (game.at?.(x,y)) pieces++;
-    if (pieces > 22) return 2400;   // opening
-    if (pieces > 14) return 3300;   // middlegame
-    return 4300;                    // endgame
-  } catch { return 3000; }
-}
-
-//////////////////////////// Spinner ////////////////////////////
-function ensureSpinner() {
+// ========= 2) Spinner =========
+function ensureSpinner(){
   let el = document.getElementById('aiSpinner');
-  if (!el) {
+  if (!el){
     el = document.createElement('div');
     el.id = 'aiSpinner';
-    el.setAttribute('role','status');
-    el.setAttribute('aria-label','AI is thinking');
-    el.style.cssText = `
-      position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-      width:34px; height:34px; border-radius:50%;
-      background: conic-gradient(#0d2d5c 0 25%, transparent 25% 100%);
-      mask: radial-gradient(circle 12px at 50% 50%, transparent 98%, #000 100%);
-      opacity:0; pointer-events:none; transition:opacity .16s ease;
-      animation: kcSpin 0.9s linear infinite;
-      filter: drop-shadow(0 2px 6px rgba(13,45,92,.25));
-      z-index: 30;
-    `;
-    const board = document.getElementById('board');
-    (board?.parentElement || document.body).appendChild(el);
-
-    const key = document.createElement('style');
-    key.textContent = `
-      @keyframes kcSpin { from{transform:translate(-50%,-50%) rotate(0deg)}
-                           to  {transform:translate(-50%,-50%) rotate(360deg)} }`;
-    document.head.appendChild(key);
+    el.style.position = 'absolute';
+    el.style.left = '50%';
+    el.style.transform = 'translateX(-50%)';
+    el.style.top = 'calc(50% - 12px)';
+    el.style.width = '18px';
+    el.style.height = '18px';
+    el.style.borderRadius = '50%';
+    el.style.boxShadow = '0 0 0 3px rgba(13,45,92,.15) inset, 0 0 0 2px rgba(13,45,92,.15)';
+    el.style.background = 'radial-gradient(circle at 35% 35%, #a3ff8f 0 25%, #7fd95e 26% 60%, #5fb941 61% 100%)';
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'opacity .18s ease';
+    const board = document.getElementById('board') || document.body;
+    (board.parentElement || board).appendChild(el);
   }
   return el;
 }
-function setSpinner(on) { ensureSpinner().style.opacity = on ? '1' : '0'; }
+function setSpinner(on){ ensureSpinner().style.opacity = on ? '1' : '0'; }
 
-//////////////////////////// FEN ////////////////////////////////
-function getFenFromGame(game) {
-  try {
+// ========= 3) FEN helpers =========
+function getFenFromGame(game){
+  try{
     if (typeof game.toFEN === 'function') return game.toFEN();
-    if (typeof game.fen === 'function')   return game.fen();
-    if (typeof game.fen === 'string')     return game.fen;
-    if (game.state?.fen)                  return game.state.fen;
-  } catch {}
+    if (typeof game.fen   === 'function') return game.fen();
+    if (typeof game.fen   === 'string')   return game.fen;
+    if (game.state?.fen) return game.state.fen;
+  }catch{}
+  // last resort (legal empty board FEN)
   return '8/8/8/8/8/8/8/8 w - - 0 1';
 }
 
-//////////////////////////// UCI helpers ////////////////////////
-function uciToMoveObj(uci) {
+// ========= 4) UCI helpers =========
+function uciToMoveObj(uci){
   if (!uci || typeof uci !== 'string' || uci.length < 4) return null;
   const fx = uci.charCodeAt(0) - 97;
   const fy = 8 - (uci.charCodeAt(1) - 48);
@@ -80,107 +57,119 @@ function uciToMoveObj(uci) {
   if (fx|fy|tx|ty & ~7) return null;
   return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
 }
-function extractMoveFromResponse(json) {
+function extractMoveFromResponse(json){
   if (!json) return null;
-  if (typeof json.uci === 'string')      return uciToMoveObj(json.uci);
-  if (typeof json.bestmove === 'string')  return uciToMoveObj(json.bestmove);
-  if (typeof json.move === 'string')      return uciToMoveObj(json.move);
+  if (typeof json.uci      === 'string') return uciToMoveObj(json.uci);
+  if (typeof json.bestmove === 'string') return uciToMoveObj(json.bestmove);
+  if (typeof json.move     === 'string') return uciToMoveObj(json.move);
   if (json.move && json.move.from && json.move.to) return json.move;
-  if (typeof json.raw === 'string') {
-    const m = json.raw.match(/bestmove\s+([a-h][1-8][a-h][1-8][qrnb]?)/i);
+  if (typeof json.raw === 'string'){
+    const m = json.raw.match(/bestmove\s+([a-h][1-8][a-h][1-8])/i);
     if (m) return uciToMoveObj(m[1]);
   }
   return null;
 }
 
-//////////////////////////// Network utils //////////////////////
-function withTimeout(p, ms) {
-  return new Promise((resolve, reject) => {
+// ========= 5) Network helpers =========
+function withTimeout(promise, ms){
+  return new Promise((resolve, reject)=>{
     const t = setTimeout(()=>reject(new Error('timeout')), ms);
-    p.then(v=>{clearTimeout(t);resolve(v);}, e=>{clearTimeout(t);reject(e);});
+    promise.then(v=>{ clearTimeout(t); resolve(v); },
+                 e=>{ clearTimeout(t); reject(e); });
   });
 }
-async function pingBackend() {
-  try {
-    const r = await withTimeout(fetch(REMOTE_PING, { cache:'no-store' }), 5000);
+async function pingBackend(){
+  try{
+    const r = await withTimeout(fetch(REMOTE_PING, { cache:'no-store' }), 6000);
     if (!r.ok) return false;
-    const j = await r.json().catch(()=> ({}));
-    return (j?.ok === true) || (j?.status === 'ok');
-  } catch { return false; }
+    const j = await r.json().catch(()=>({}));
+    return j && (j.ok === true || j.status === 'ok');
+  }catch{ return false; }
 }
-
-async function fetchRemoteMove(fen, game) {
-  const movetime = phaseMovetime(game);
-  const body = {
-    fen,
-    variant: 'makruk',
-    movetime,
-    threads: THREADS,
-    hash: HASH_MB
-    // If you prefer fixed-depth instead of time, add: depth: 18
-  };
-
+async function fetchRemoteMove(fen, variant=VARIANT, movetime=REMOTE_MOVETIME){
   const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(body)
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify({ fen, variant, movetime })
   }), REMOTE_TIMEOUT);
 
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const j = await res.json();
-  const mv = extractMoveFromResponse(j);
-  if (!mv) throw new Error('Remote returned no move');
+  // If server returns an error, read the text to show *why*
+  if (!res.ok){
+    let serverText = '';
+    try{ serverText = await res.text(); }catch{}
+    const err = new Error(`HTTP ${res.status}`);
+    err.serverText = serverText;
+    throw err;
+  }
+  const json = await res.json();
+  const mv = extractMoveFromResponse(json);
+  if (!mv){
+    const err = new Error('No move found in response');
+    err.serverText = JSON.stringify(json);
+    throw err;
+  }
   return mv;
 }
 
-//////////////////////////// Fallback ///////////////////////////
-function pickRandomLegal(game) {
-  const moves = [];
+// ========= 6) Fallback (random legal) =========
+function pickRandomLegal(game){
+  const legals=[];
   for (let y=0;y<8;y++){
     for (let x=0;x<8;x++){
       const p = game.at?.(x,y);
       if (!p || p.c !== game.turn) continue;
       const ms = game.legalMoves?.(x,y) || [];
-      for (const m of ms) moves.push({ from:{x,y}, to:{x:m.x,y:m.y} });
+      for (const m of ms) legals.push({ from:{x,y}, to:{x:m.x,y:m.y} });
     }
   }
-  if (!moves.length) return null;
-  return moves[(Math.random()*moves.length)|0];
+  if (!legals.length) return null;
+  return legals[(Math.random()*legals.length)|0];
 }
 
-//////////////////////////// Public API /////////////////////////
-export async function chooseAIMove(game, opts = {}) {
+// ========= 7) Public API =========
+export async function chooseAIMove(game, opts={}){
   const fen = getFenFromGame(game);
   setSpinner(true);
 
-  try {
+  try{
+    // 1) quick ping (avoid long dead waits)
     const alive = await pingBackend();
-    if (!alive) throw new Error('backend not alive');
-    const mv = await fetchRemoteMove(fen, game);
+    if (!alive) throw new Error('Backend ping failed');
+
+    // 2) ask backend
+    const mv = await fetchRemoteMove(fen, VARIANT, REMOTE_MOVETIME);
     setSpinner(false);
     return mv;
-  } catch (e) {
-    console.warn('[AI] Remote failure → fallback:', e?.message || e);
-    const mv = pickRandomLegal(game);
+
+  }catch(err){
     setSpinner(false);
-    if (!mv) return null;
-    try {
-      if (!sessionStorage.getItem('ai_remote_warned')) {
-        alert('Remote AI unavailable; using local fallback.');
+
+    // Show *why* the server refused (once per session)
+    try{
+      if (!sessionStorage.getItem('ai_remote_warned')){
+        const msg = [
+          'Remote AI unavailable; using local fallback.',
+          err?.message ? `\n\nError: ${err.message}` : '',
+          err?.serverText ? `\n\nServer says:\n${err.serverText}` : ''
+        ].join('');
+        alert(msg);
         sessionStorage.setItem('ai_remote_warned','1');
       }
-    } catch {}
-    return mv;
+      console.error('[AI] Remote call failed:', err?.message, err?.serverText || '');
+    }catch{}
+
+    // Fallback
+    return pickRandomLegal(game);
   }
 }
 
-export function setAIDifficulty(/* level */){
+export function setAIDifficulty(){
   return {
-    mode: 'Remote (phase movetime) + Fallback',
-    server: REMOTE_AI_URL,
-    threads: THREADS,
-    hashMB: HASH_MB,
-    timeoutMs: REMOTE_TIMEOUT
+    mode:'Remote+Fallback',
+    server:REMOTE_AI_URL,
+    movetime:REMOTE_MOVETIME,
+    timeoutMs:REMOTE_TIMEOUT,
+    variant:VARIANT
   };
 }
 export const pickAIMove = chooseAIMove;

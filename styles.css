@@ -465,26 +465,20 @@ body.ai-thinking #board{
 .debug-log .warn{ color:#ffd479 }
 .debug-log .err{ color:#ff7b7b }
 
-/* AI spinner overlay */
+
+/* ===== AI overlay & turn blocking ===== */
 #aiBusy{
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255,255,255,.55);
-  backdrop-filter: blur(2px);
-  z-index: 9999;
+  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+  background:rgba(255,255,255,.55); backdrop-filter:blur(2px); z-index:9999;
 }
-.ai-spinner{
-  display:flex; flex-direction:column; align-items:center; gap:.5rem;
-  padding:.9rem 1.1rem; border-radius:.9rem;
-  background:#fff; box-shadow:0 8px 24px rgba(0,0,0,.18);
+.ai-spinner{ display:flex; flex-direction:column; align-items:center; gap:.5rem;
+  background:#fff; padding:.9rem 1.1rem; border-radius:.9rem; box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
-.ai-dot{
-  width:16px; height:16px; border-radius:50%;
-  border:3px solid #0d2d5c; border-top-color:transparent;
-  animation: ai-spin .9s linear infinite; box-sizing:border-box;
+.ai-dot{ width:16px; height:16px; border-radius:50%;
+  border:3px solid #0d2d5c; border-top-color:transparent; animation:ai-spin .9s linear infinite; box-sizing:border-box;
 }
 .ai-text{ font-weight:700; color:#0d2d5c }
-@keyframes ai-spin{ to { transform: rotate(360deg) } }
+@keyframes ai-spin{ to{ transform:rotate(360deg) } }
+
+/* When AI is thinking or it's AI's turn, block board input */
+.ai-thinking .board, .ai-turn .board{ pointer-events:none; }

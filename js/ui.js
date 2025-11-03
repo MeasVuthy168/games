@@ -129,9 +129,7 @@ export function initUI(){
     );
   }
 
-  function maybeTriggerAI(){
-    if (!AILock && isAITurn()) setTimeout(thinkAndPlay, 400);
-  }
+  // **MODIFIED:** Removed maybeTriggerAI as its logic is now inline or simplified.
 
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
@@ -194,36 +192,69 @@ export function initUI(){
     applyTurnClass();
   }
 
+  // **FULLY MODIFIED thinkAndPlay for continuous, recursive AI moves**
   async function thinkAndPlay(){
-    if(!isAITurn()||AILock)return;
+    // Check if it's the AI's turn and the board isn't already busy
+    if (!isAITurn() || AILock) {
+      // If it's not the AI's turn, we are done
+      return;
+    }
+
     setBoardBusy(true);
-    try{
-      const aiOpts={ level:settings.aiLevel, aiColor:settings.aiColor, timeMs:120 };
-      const mv=await Promise.resolve(AIPICK(game,aiOpts));
-      if(!mv){ setBoardBusy(false); return; }
+    
+    try {
+      const aiOpts = { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
+      // Introduce a small delay to make the AI thinking visible/feel natural
+      await new Promise(resolve => setTimeout(resolve, 400));
+      
+      const mv = await Promise.resolve(AIPICK(game, aiOpts));
+      
+      if (!mv) {
+        // AI couldn't find a move, stop and unbusy the board
+        setBoardBusy(false);
+        return;
+      }
 
-      const prev=game.turn;
-      const before=game.at(mv.to.x,mv.to.y);
-      const res=game.move(mv.from,mv.to);
-      if(res?.ok){
-        if(beeper.enabled){
-          if(before){ beeper.capture(); vibrate([20,40,30]); } else beeper.move();
-          if(res.status?.state==='check') beeper.check();
+      const prev = game.turn;
+      const before = game.at(mv.to.x, mv.to.y);
+      const res = game.move(mv.from, mv.to);
+      
+      if (res?.ok) {
+        if (beeper.enabled) {
+          if (before) { beeper.capture(); vibrate([20, 40, 30]); } else beeper.move();
+          if (res.status?.state === 'check') beeper.check();
         }
+        
         clocks.switchedByMove(prev);
-        render(); saveGameState(game,clocks);
+        render();
+        saveGameState(game, clocks);
 
-        if(res.status?.state==='checkmate'){
-          setTimeout(()=>alert('អុកស្លាប់! AI ឈ្នះ'),60);
-        }else if(res.status?.state==='stalemate'){
-          setTimeout(()=>alert('អាប់ — ស្មើជាមួយ AI!'),60);
-        }else{
-          // 🔁 keep playing continuously
-          maybeTriggerAI();
+        // Check for end of game conditions
+        if (res.status?.state === 'checkmate') {
+          setTimeout(() => alert('អុកស្លាប់! AI ឈ្នះ'), 60);
+        } else if (res.status?.state === 'stalemate') {
+          setTimeout(() => alert('អាប់ — ស្មើជាមួយ AI!'), 60);
+        } else {
+          // If the game is still on, immediately check if the AI needs to move again
+          // This creates the continuous AI turns loop until a human player's turn is reached
+          if (isAITurn()) {
+            // Note: Since the recursive call is *inside* the try block and before the 
+            // setBoardBusy(false) in finally, we *don't* unbusy the board here.
+            // The next call to thinkAndPlay will re-lock it, and the last one will unlock it.
+            // This is safer: we rely on the next call's try/finally, or the *current*
+            // finally block if the recursive call fails or doesn't happen.
+            // However, a simple recursive call is cleaner:
+            return thinkAndPlay();
+          }
         }
       }
+    } catch (error) {
+      console.error('AI move failed:', error);
     } finally {
-      setBoardBusy(false);
+      // Only set busy to false if it's no longer the AI's turn (or if an error occurred)
+      if (!isAITurn() || game.status().state !== 'ongoing') {
+        setBoardBusy(false);
+      }
     }
   }
 
@@ -240,12 +271,14 @@ export function initUI(){
     }
   }
 
+  // **UPDATED onCellTap to reliably trigger AI immediately after human move**
   function onCellTap(e){
     // block user input when AI thinking or its turn
-    if (isAITurn() || AILock){ beeper.error(); vibrate(40); return; }
+    if (AILock || isAITurn()){ beeper.error(); vibrate(40); return; }
 
     const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
     const p=game.at(x,y);
+    // Block selecting an AI piece (if settings.aiEnabled is true)
     if (settings.aiEnabled && p && p.c===settings.aiColor){ beeper.error(); vibrate(40); return; }
 
     if(p && p.c===game.turn){
@@ -265,12 +298,19 @@ export function initUI(){
       if(res.status?.state==='check') beeper.check();
       clocks.switchedByMove(prev);
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      
+      // Check for end of game conditions after the human move
       if(res.status?.state==='checkmate'){
         alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
       }else if(res.status?.state==='stalemate'){
         alert('អាប់ — ស្មើគ្នា!');
-      }else{
-        maybeTriggerAI(); // 🔁 let AI reply
+      }
+      
+      // ⚡️ Immediately trigger AI after a successful human move if it's the AI's turn
+      // The thinkAndPlay function is now responsible for handling recursive turns.
+      // We don't need a timeout here; thinkAndPlay has an internal one for UX.
+      if (game.status().state === 'ongoing') {
+          thinkAndPlay(); 
       }
     }
   }
@@ -286,20 +326,27 @@ export function initUI(){
   }
 
   // if AI should move first
-  maybeTriggerAI();
+  if (game.status().state === 'ongoing') {
+      thinkAndPlay();
+  }
 
   /* -------- controls -------- */
   btnReset?.addEventListener('click', ()=>{
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
-    maybeTriggerAI();
+    if (game.status().state === 'ongoing') {
+      thinkAndPlay();
+    }
   });
 
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      maybeTriggerAI();
+      // After undo, if it's now an AI turn, trigger it
+      if (game.status().state === 'ongoing') {
+          thinkAndPlay();
+      }
     }
   });
 

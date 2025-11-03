@@ -13,40 +13,18 @@ const VARIANT        = 'makruk';
 const SAFE_THREADS = 1;
 const SAFE_HASH    = 32;
 
-
-// put near the other consts
-const MAKRUK_START_FEN = 'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
-
-// ...keep isEmptyFen(fen) as-is...
-
-// ===== Public API =====
-export async function chooseAIMove(game, opts = {}){
-  resetDbg();
-  let fen = getFenFromGame(game);
-  logDbg('FEN:', fen);
-
-  // If board looks empty, use Makruk initial layout instead of bailing
-  if (isEmptyFen(fen)) {
-    logDbg('Empty FEN detected → using Makruk start FEN.');
-    fen = MAKRUK_START_FEN;
-  }
-
-  setSpinner(true);
-  // ...rest of your function stays the same...
-}
+// (Optional, currently unused) Makruk start FEN template if you want auto-start later.
+// const MAKRUK_START_FEN = 'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
 
 // ===== TEMP DEBUG PANEL =====
 const ENABLE_DEBUG = true;
 function ensureDebugPanel() {
   if (!ENABLE_DEBUG) return null;
 
-  let cardBelow; // anchor: the Chat card if available
-  // Try by id
-  cardBelow = document.getElementById('chatCard');
-  // Try a simple contains-text finder
+  let cardBelow = document.getElementById('chatCard');
   if (!cardBelow) {
-    const allCards = Array.from(document.querySelectorAll('*'));
-    cardBelow = allCards.find(el =>
+    const all = Array.from(document.querySelectorAll('*'));
+    cardBelow = all.find(el =>
       /សន្ទនា|Chat/i.test(el.textContent || '') && el.getBoundingClientRect().height > 40
     );
   }
@@ -88,22 +66,21 @@ function ensureDebugPanel() {
     panel.appendChild(pre);
     host.appendChild(panel);
 
-    // insert under chat card or at end of body
     if (cardBelow && cardBelow.parentElement) {
       cardBelow.parentElement.insertBefore(host, cardBelow.nextSibling);
     } else {
       document.body.appendChild(host);
     }
 
-    // wire buttons
     document.getElementById('aiDbgToggle').onclick = () => {
-      const hidden = pre.style.display === 'none';
-      pre.style.display = hidden ? 'block' : 'none';
+      const preEl = document.getElementById('aiDebugLog');
+      const hidden = preEl.style.display === 'none';
+      preEl.style.display = hidden ? 'block' : 'none';
       document.getElementById('aiDbgToggle').textContent = hidden ? 'Hide' : 'Show';
     };
     document.getElementById('aiDbgCopy').onclick = async () => {
       try {
-        await navigator.clipboard.writeText(pre.textContent);
+        await navigator.clipboard.writeText(document.getElementById('aiDebugLog').textContent);
         alert('AI debug log copied');
       } catch {
         alert('Copy failed');
@@ -124,7 +101,7 @@ function resetDbg() {
   const pre = ensureDebugPanel();
   if (pre) pre.textContent = `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
 }
-window.AIDebug = { log: logDbg, reset: resetDbg }; // handy from console
+window.AIDebug = { log: logDbg, reset: resetDbg };
 
 // ===== Spinner =====
 function ensureSpinner(){
@@ -185,7 +162,7 @@ function getFenFromGame(game){
   return '8/8/8/8/8/8/8/8 w - - 0 1';
 }
 
-// NEW: detect empty-board FEN (prevents pointless remote calls)
+// Detect empty-board FEN (prevents pointless remote calls)
 function isEmptyFen(fen){
   return typeof fen === 'string' && /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
 }
@@ -281,7 +258,7 @@ export async function chooseAIMove(game, opts = {}){
   const fen = getFenFromGame(game);
   logDbg('FEN:', fen);
 
-  // NEW: don’t call backend if the board is empty/uninitialized
+  // Don’t call backend if the board is empty/uninitialized
   if (isEmptyFen(fen)) {
     logDbg('Blocked remote call: empty-board FEN. Start a game first.');
     return null;

@@ -13,6 +13,28 @@ const VARIANT        = 'makruk';
 const SAFE_THREADS = 1;
 const SAFE_HASH    = 32;
 
+
+// put near the other consts
+const MAKRUK_START_FEN = 'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
+
+// ...keep isEmptyFen(fen) as-is...
+
+// ===== Public API =====
+export async function chooseAIMove(game, opts = {}){
+  resetDbg();
+  let fen = getFenFromGame(game);
+  logDbg('FEN:', fen);
+
+  // If board looks empty, use Makruk initial layout instead of bailing
+  if (isEmptyFen(fen)) {
+    logDbg('Empty FEN detected → using Makruk start FEN.');
+    fen = MAKRUK_START_FEN;
+  }
+
+  setSpinner(true);
+  // ...rest of your function stays the same...
+}
+
 // ===== TEMP DEBUG PANEL =====
 const ENABLE_DEBUG = true;
 function ensureDebugPanel() {

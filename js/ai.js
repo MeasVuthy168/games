@@ -169,13 +169,23 @@ function isEmptyFen(fen){
 }
 
 function uciToMoveObj(uci){
-  if (!uci || typeof uci !== 'string' || uci.length < 4) return null;
-  const fx = uci.charCodeAt(0) - 97;
-  const fy = 8 - (uci.charCodeAt(1) - 48);
-  const tx = uci.charCodeAt(2) - 97;
-  const ty = 8 - (uci.charCodeAt(3) - 48);
-  if (fx|fy|tx|ty & ~7) return null;
-  return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+  if (typeof uci !== 'string') return null;
+
+  // accept e2e4, b7b8q, etc.
+  const m = uci.trim().match(/^([a-h][1-8])([a-h][1-8])([qrbnQRBN])?$/);
+  if (!m) return null;
+
+  const fx = m[1].charCodeAt(0) - 97;         // file a-h -> 0..7
+  const fy = 8 - (m[1].charCodeAt(1) - 48);    // rank 1-8 -> y 7..0
+  const tx = m[2].charCodeAt(0) - 97;
+  const ty = 8 - (m[2].charCodeAt(1) - 48);
+
+  // correct bounds check: group the ORs before & ~7
+  if ( ((fx | fy | tx | ty) & ~7) !== 0 ) return null;
+
+  const move = { from:{ x:fx, y:fy }, to:{ x:tx, y:ty } };
+  // (optional) you can keep m[3] if you ever need promotion piece
+  return move;
 }
 function extractMoveFromResponse(json){
   if (!json) return null;

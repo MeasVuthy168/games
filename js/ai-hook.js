@@ -1,84 +1,183 @@
-// js/ai-hook.js
-//
-// Wires chooseAIMove() to the current game, shows spinner,
-// and blocks user input during the AI turn.
+// js/ai-hook.js — Connect UI game to backend engine + spinner + fallback local AI
+// Works with your current UI without editing ui.js (uses kc:ready event + window.game)
 
-import { chooseAIMove } from './ai.js';
+import { chooseAIMove as localMaster } from './ai.js';
 
-const LS_KEY='kc_settings_v1';
-function loadSettings(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'null')||{} }catch{ return {} } }
+// ---- Config (edit if needed) -----------------------------------------------
+// 1) Default backend endpoint (Render live)
+const DEFAULT_ENGINE_URL = 'https://ouk-ai-backend.onrender.com/api/ai/move';
 
-const qs = new URLSearchParams(location.search);
-const mode = qs.get('mode') || '';
-const s = loadSettings();
-
-// If user came from Home “Play with AI (Master)”, we have:
-//   s.aiEnabled = true
-//   s.aiColor = 'w' or 'b'  (this is the AI side color)
-const AI_ENABLED = (mode==='ai') || !!s.aiEnabled;
-const AI_COLOR   = (s.aiColor === 'w' || s.aiColor === 'b') ? s.aiColor : 'b'; // default AI=Black
-
-const shield = document.getElementById('inputShield');
-
-function lockInput(on){ try{ if(!shield) return; shield.classList.toggle('on', !!on); }catch{} }
-function showSpin(text){ try{ window.__aiShow?.(text||'AI កំពុងគិត') }catch{} }
-function hideSpin(){ try{ window.__aiHide?.() }catch{} }
-
-function getGame(){
-  // Your main.js should expose a global `kcGame` or `game`
-  return window.kcGame || window.game || null;
+// 2) Allow override from localStorage ("kc_engine_url") or window.__ENGINE_URL
+function getEngineURL() {
+  return (
+    window.__ENGINE_URL ||
+    (typeof localStorage !== 'undefined' && localStorage.getItem('kc_engine_url')) ||
+    DEFAULT_ENGINE_URL
+  );
 }
 
-function sideToMove(g){ return g?.turn || 'w'; }
+// ---- Tiny DOM helpers -------------------------------------------------------
+function $(sel, root = document) { return root.querySelector(sel); }
 
-async function aiMoveIfNeeded(trigger='auto'){
-  const g = getGame(); if (!g || !AI_ENABLED) return;
-  const stm = sideToMove(g);
-  if (stm !== AI_COLOR) { lockInput(false); return; } // human turn
-  lockInput(true);
-  showSpin('Remote AI');
-  try{
-    const mv = await chooseAIMove(g, { aiColor: AI_COLOR });
-    if (mv){
-      const res = g.move(mv.from, mv.to);
-      if (!res?.ok) console.warn('[ai-hook] engine move illegal?', mv, res);
+function ensureSpinner() {
+  if ($('#aiBusy')) return $('#aiBusy');
+  const wrap = document.createElement('div');
+  wrap.id = 'aiBusy';
+  wrap.setAttribute('aria-hidden', 'true');
+  wrap.innerHTML = `
+    <div class="ai-spinner">
+      <div class="ai-dot"></div>
+      <div class="ai-text">🤖 គិត…</div>
+    </div>`;
+  document.body.appendChild(wrap);
+  return wrap;
+}
+function showSpinner(show = true) {
+  const el = ensureSpinner();
+  el.style.display = show ? 'flex' : 'none';
+}
+
+// ---- Game helpers -----------------------------------------------------------
+function getFEN(game) {
+  try {
+    if (typeof game.fen === 'function') return game.fen();
+    if (typeof game.toFEN === 'function') return game.toFEN();
+    if (typeof game.getFEN === 'function') return game.getFEN();
+  } catch {}
+  return null;
+}
+function getTurn(game) {
+  try { return game.turn || (typeof game.getTurn === 'function' ? game.getTurn() : null); }
+  catch { return null; }
+}
+function listLegals(game) {
+  const out = [];
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
+    try {
+      const moves = game.legalMoves?.(x, y) || [];
+      for (const m of moves) out.push({ from: { x, y }, to: { x: m.x, y: m.y } });
+    } catch {}
+  }
+  return out;
+}
+function algebraToXY(fileChar, rankChar) {
+  const fx = fileChar.charCodeAt(0) - 97;       // a->0 ... h->7
+  const fy = 8 - (rankChar.charCodeAt(0) - 48); // '1'..'8' -> 7..0
+  return { x: fx, y: fy };
+}
+function uciToMove(uci, game) {
+  // e2e4, possibly e7e8q (promotion ignored here — Makruk/Khmer doesn’t need it)
+  if (!uci || uci.length < 4) return null;
+  const from = algebraToXY(uci[0], uci[1]);
+  const to   = algebraToXY(uci[2], uci[3]);
+  // Validate against legals
+  const legals = listLegals(game);
+  return legals.find(m => m.from.x === from.x && m.from.y === from.y &&
+                          m.to.x   === to.x   && m.to.y   === to.y) || null;
+}
+
+// Apply move to the board
+function applyMove(game, move) {
+  try { return game.move(move.from, move.to); } catch { return null; }
+}
+
+// ---- AI loop ----------------------------------------------------------------
+let aiBusy = false;
+let settings = null;  // from localStorage
+const LS_KEY = 'kc_settings_v1';
+
+function loadSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {}; }
+  catch { return {}; }
+}
+
+async function thinkWithBackend(fen, variant, movetime) {
+  const url = getEngineURL();
+  const body = { fen, variant, movetime };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type':'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`Engine HTTP ${res.status}`);
+  return await res.json(); // expect shape like { move: "e2e4", score: ..., nodes: ... }
+}
+
+async function runAI(game) {
+  if (aiBusy) return;
+  if (!settings?.aiEnabled) return;
+
+  const aiColor = settings.aiColor || 'b';
+  const turn = getTurn(game);
+  if (turn !== aiColor) return;
+
+  const fen = getFEN(game);
+  if (!fen) return;
+
+  aiBusy = true;
+  showSpinner(true);
+
+  try {
+    // Prefer real backend engine
+    const { move: uci } = await thinkWithBackend(fen, 'makruk', 1200);
+    let mv = uciToMove(uci, game);
+
+    // If backend returns an illegal move (rare), fall back to local AI
+    if (!mv) {
+      console.log('[ai] backend move invalid or missing, falling back to local master');
+      mv = await localMaster(game, { aiColor, countState: null });
     }
-  }catch(e){
-    console.error('[ai-hook] chooseAIMove failed', e);
-  }finally{
-    hideSpin();
-    lockInput(false);
-    // If AI moved into a state where it is still AI turn (e.g., illegal UI state), re-check:
-    setTimeout(()=> aiMoveIfNeeded('loop'), 0);
+    if (mv) applyMove(game, mv);
+  } catch (err) {
+    console.log('[ai] backend error -> fallback local:', err?.message || err);
+    // Fallback to strong local AI
+    try {
+      const mv = await localMaster(game, { aiColor, countState: null });
+      if (mv) applyMove(game, mv);
+    } catch (e2) {
+      console.log('[ai] local fallback failed:', e2?.message || e2);
+    }
+  } finally {
+    showSpinner(false);
+    aiBusy = false;
   }
 }
 
-/* ====== Attach to your existing game lifecycle ====== */
-(function waitForGame(){
-  const g = getGame();
-  if (!g){ setTimeout(waitForGame, 60); return; }
+// Trigger conditions to decide when to think:
+// 1) On kc:ready (game created)
+// 2) On every user move — we’ll poll FEN changes (minimal invasiveness)
+function startLoop(game) {
+  settings = loadSettings();
+  if (!settings.aiEnabled) return;
 
-  // Whenever your game signals a move finished, we react.
-  // If you have an event bus, hook here; otherwise poll turn changes.
-
-  let lastFen = '';
-  setInterval(()=>{
-    try{
-      const fen = (typeof g.toFEN==='function') ? g.toFEN() :
-                  (typeof g.toFen==='function') ? g.toFen() :
-                  (g.fen || '');
-      if (fen && fen !== lastFen){
-        lastFen = fen;
-        aiMoveIfNeeded('move');
+  // lightweight FEN watcher
+  let lastFen = getFEN(game);
+  setInterval(() => {
+    try {
+      const f = getFEN(game);
+      if (!f) return;
+      if (f !== lastFen) {
+        lastFen = f;
+        // if it's AI's turn now, think
+        runAI(game);
       }
-    }catch{}
-  }, 150);
+    } catch {}
+  }, 250);
 
-  // Initial check (start AI if AI plays White)
-  aiMoveIfNeeded('start');
+  // also think immediately if AI starts
+  runAI(game);
+}
 
-  // Basic UI protection: if it’s AI turn, keep shield on.
-  setInterval(()=> { if (getGame() && AI_ENABLED) lockInput(sideToMove(getGame())===AI_COLOR); }, 250);
+// Wait for the game from main.js
+window.addEventListener('kc:ready', (e) => {
+  const game = e?.detail?.game || window.game;
+  if (!game) return;
+  startLoop(game);
+});
 
-  console.log('[ai-hook] ready; AI_ENABLED=', AI_ENABLED, 'AI_COLOR=', AI_COLOR);
-})();
+// If kc:ready already fired earlier (or game existed), start anyway
+if (window.game) startLoop(window.game);
+
+// Ensure spinner node exists at load
+ensureSpinner();
+showSpinner(false);

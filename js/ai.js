@@ -13,8 +13,9 @@ const VARIANT        = 'makruk';
 const SAFE_THREADS = 1;
 const SAFE_HASH    = 32;
 
-// (Optional, currently unused) Makruk start FEN template if you want auto-start later.
-// const MAKRUK_START_FEN = 'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
+// Use Makruk start FEN when the board looks empty/uninitialized
+const MAKRUK_START_FEN =
+  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
 
 // ===== TEMP DEBUG PANEL =====
 const ENABLE_DEBUG = true;
@@ -255,13 +256,13 @@ function pickRandomLegal(game){
 // ===== Public API =====
 export async function chooseAIMove(game, opts = {}){
   resetDbg();
-  const fen = getFenFromGame(game);
+  let fen = getFenFromGame(game);
   logDbg('FEN:', fen);
 
-  // Don’t call backend if the board is empty/uninitialized
+  // If board looks empty, use Makruk initial layout instead of bailing
   if (isEmptyFen(fen)) {
-    logDbg('Blocked remote call: empty-board FEN. Start a game first.');
-    return null;
+    logDbg('Empty FEN detected → using Makruk start FEN.');
+    fen = MAKRUK_START_FEN;
   }
 
   setSpinner(true);

@@ -1,130 +1,201 @@
-// src/routes/ai.js
-import { Router } from 'express';
-import { engine } from '../enginePool.js';
+// js/ai.js — Remote-first AI with spinner + adaptive retries on "engine timeout"
 
-const router = Router();
+const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
+const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
+const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
 
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v|0));
-function withTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => {
-      const err = new Error('engine timeout');
-      err.code = 'ENGINE_TIMEOUT';
-      reject(err);
-    }, ms);
-    promise.then(
-      v => { clearTimeout(t); resolve(v); },
-      e => { clearTimeout(t); reject(e); }
-    );
+// Try these movetimes in order (strong → faster)
+const MOVETIME_STEPS = [1600, 1200, 900, 600];
+const HTTP_TIMEOUT   = 30000;    // overall network timeout (Render cold start safe)
+const VARIANT        = 'makruk';
+
+// >>> SAFE ENGINE OPTIONS FOR RENDER FREE <<<
+const SAFE_THREADS = 1;  // keep CPU usage low
+const SAFE_HASH    = 32; // small transposition table to avoid OOM
+
+// ---------- spinner ----------
+function ensureSpinner(){
+  let el = document.getElementById('aiSpinner');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'aiSpinner';
+    el.style.position = 'absolute';
+    el.style.left = '50%';
+    el.style.transform = 'translateX(-50%)';
+    el.style.top = 'calc(50% - 12px)';
+    el.style.width = '18px';
+    el.style.height = '18px';
+    el.style.borderRadius = '50%';
+    el.style.boxShadow = '0 0 0 3px rgba(13,45,92,.15) inset, 0 0 0 2px rgba(13,45,92,.15)';
+    el.style.background = 'radial-gradient(circle at 35% 35%, #a3ff8f 0 25%, #7fd95e 26% 60%, #5fb941 61% 100%)';
+    el.style.opacity = '0';
+    el.style.pointerEvents = 'none';
+    el.style.transition = 'opacity .18s ease';
+    const board = document.getElementById('board') || document.body;
+    (board.parentElement || board).appendChild(el);
+  }
+  return el;
+}
+function setSpinner(on){ ensureSpinner().style.opacity = on ? '1' : '0'; }
+
+// ---------- helpers ----------
+function withTimeout(promise, ms){
+  return new Promise((resolve, reject)=>{
+    const t = setTimeout(()=>reject(new Error('timeout')), ms);
+    promise.then(v=>{ clearTimeout(t); resolve(v); },
+                 e=>{ clearTimeout(t); reject(e); });
   });
 }
+async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-// tiny helper to run a shallow instant move (used by warmup & last resort)
-async function instantMove(fen) {
-  return await engine.bestMove({ fen, depth: 6 });
+async function pingBackend(){
+  try{
+    const r = await withTimeout(fetch(REMOTE_PING, { cache:'no-store' }), 6000);
+    if (!r.ok) return false;
+    const j = await r.json().catch(()=>({}));
+    return j && (j.ok === true || j.status === 'ok');
+  }catch{ return false; }
 }
 
-/** POST /api/ai/move
- * body: { fen, variant='makruk', movetime?, depth?, nodes?, threads?, hash? }
- */
-router.post('/move', async (req, res) => {
-  try {
-    const {
+function getFenFromGame(game){
+  try{
+    if (typeof game.toFEN === 'function') return game.toFEN();
+    if (typeof game.fen   === 'function') return game.fen();
+    if (typeof game.fen   === 'string')   return game.fen;
+    if (game.state?.fen)  return game.state.fen;
+  }catch{}
+  return '8/8/8/8/8/8/8/8 w - - 0 1';
+}
+
+function uciToMoveObj(uci){
+  if (!uci || typeof uci !== 'string' || uci.length < 4) return null;
+  const fx = uci.charCodeAt(0) - 97;
+  const fy = 8 - (uci.charCodeAt(1) - 48);
+  const tx = uci.charCodeAt(2) - 97;
+  const ty = 8 - (uci.charCodeAt(3) - 48);
+  if (fx|fy|tx|ty & ~7) return null;
+  return { from:{x:fx,y:fy}, to:{x:tx,y:ty} };
+}
+function extractMoveFromResponse(json){
+  if (!json) return null;
+  if (typeof json.uci      === 'string') return uciToMoveObj(json.uci);
+  if (typeof json.bestmove === 'string') return uciToMoveObj(json.bestmove);
+  if (typeof json.move     === 'string') return uciToMoveObj(json.move);
+  if (json.move && json.move.from && json.move.to) return json.move;
+  if (typeof json.raw === 'string'){
+    const m = json.raw.match(/bestmove\s+([a-h][1-8][a-h][1-8])/i);
+    if (m) return uciToMoveObj(m[1]);
+  }
+  return null;
+}
+
+async function callMoveAPI(fen, movetime){
+  // NOTE: include safe threads/hash so server keeps resource usage low
+  const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json' },
+    body: JSON.stringify({
       fen,
-      variant = 'makruk',
+      variant: VARIANT,
       movetime,
-      depth,
-      nodes,
-      threads,
-      hash
-    } = req.body || {};
+      threads: SAFE_THREADS,
+      hash: SAFE_HASH
+    })
+  }), HTTP_TIMEOUT);
 
-    if (!fen) return res.status(400).json({ error: 'Missing fen' });
-    if (variant !== 'makruk') {
-      return res.status(400).json({ error: 'Only makruk supported' });
+  const text = await res.text();
+  if (!res.ok){
+    const err = new Error(`HTTP ${res.status}`);
+    err.serverText = text;
+    throw err;
+  }
+  let json = {};
+  try{ json = JSON.parse(text); }catch{
+    const err = new Error('Invalid JSON from server');
+    err.serverText = text;
+    throw err;
+  }
+  const mv = extractMoveFromResponse(json);
+  if (!mv){
+    const err = new Error('No move found in response');
+    err.serverText = JSON.stringify(json);
+    throw err;
+  }
+  return mv;
+}
+
+function pickRandomLegal(game){
+  const legals=[];
+  for(let y=0;y<8;y++){
+    for(let x=0;x<8;x++){
+      const p = game.at?.(x,y);
+      if (!p || p.c !== game.turn) continue;
+      const ms = game.legalMoves?.(x,y) || [];
+      for (const m of ms) legals.push({ from:{x,y}, to:{x:m.x,y:m.y} });
     }
+  }
+  return legals.length ? legals[(Math.random()*legals.length)|0] : null;
+}
 
-    // Safe UCI options for Render free (low RAM/CPU)
-    const toSet = {};
-    if (Number.isFinite(+threads)) toSet.Threads = clamp(+threads, 1, 2);
-    else toSet.Threads = 1;
-    if (Number.isFinite(+hash)) toSet.Hash = clamp(+hash, 16, 64);
-    else toSet.Hash = 32;
-    try { engine.applyOptions(toSet); } catch {}
+// ---------- Public API ----------
+export async function chooseAIMove(game, opts = {}){
+  const fen = getFenFromGame(game);
+  setSpinner(true);
 
-    // Prefer movetime (stronger); clamp and give generous API timeout
-    const thinkMs   = clamp((+movetime || 1200), 400, 2500);
-    const timeoutMs = thinkMs + 6000; // buffer for I/O / jitter
+  try{
+    // wake the service if needed
+    const alive = await pingBackend();
+    if (!alive) await sleep(500);
 
-    // 1) Attempt movetime search
-    try {
-      const best = await withTimeout(
-        engine.bestMove({
-          fen,
-          movetime: thinkMs,
-          depth: +depth || undefined,
-          nodes: +nodes || undefined
-        }),
-        timeoutMs
-      );
-      if (!best || !best.uci) throw new Error('no move');
-      return res.json({
-        uci: best.uci,
-        raw: best.raw,
-        meta: { mode: 'movetime', movetime: thinkMs, timeoutMs, options: toSet }
-      });
-    } catch (e) {
-      if (!(e?.code === 'ENGINE_TIMEOUT' || /timeout/i.test(e?.message||''))) {
-        // non-timeout error -> try fallback anyway
-        // (continue to depth fallback below)
-      } else {
-        // signal timeout to logs but proceed to fallback
-        console.warn('[AI] movetime timeout -> depth fallback');
+    // adaptive retries on "engine timeout"
+    let lastErr = null;
+    for (let i=0; i< MOVETIME_STEPS.length; i++){
+      const mt = MOVETIME_STEPS[i];
+      try{
+        if (i>0) await sleep(350); // give the engine breath if it just failed
+        const mv = await callMoveAPI(fen, mt);
+        setSpinner(false);
+        return mv;
+      }catch(err){
+        lastErr = err;
+        const server = (err.serverText||'').toLowerCase();
+        const isTimeout = server.includes('engine timeout');
+        const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
+        if (!isTimeout && !isBusy) break; // real error → stop retry ladder
       }
     }
 
-    // 2) Depth fallback (fast & reliable)
-    const depthFallback = 10; // tune 8–12 for speed vs strength
-    const depthTimeout  = 5000;
-    const bestDepth = await withTimeout(
-      engine.bestMove({ fen, depth: depthFallback }),
-      depthTimeout
-    );
+    // all retries failed → fallback
+    setSpinner(false);
+    try{
+      if (!sessionStorage.getItem('ai_remote_warned')){
+        const msg = [
+          'Remote AI unavailable; using local fallback.',
+          lastErr?.message ? `\n\nError: ${lastErr.message}` : '',
+          lastErr?.serverText ? `\n\nServer says:\n${lastErr.serverText}` : ''
+        ].join('');
+        alert(msg);
+        sessionStorage.setItem('ai_remote_warned', '1');
+      }
+    }catch{}
+    return pickRandomLegal(game);
 
-    if (!bestDepth || !bestDepth.uci) {
-      // 3) Last resort: instant shallow move (never blocks)
-      const quick = await instantMove(fen).catch(()=>null);
-      if (!quick?.uci) return res.status(502).json({ error: 'no move from engine' });
-      return res.json({
-        uci: quick.uci, raw: quick.raw,
-        meta: { mode: 'instant', depth: 6, options: toSet }
-      });
-    }
-
-    return res.json({
-      uci: bestDepth.uci,
-      raw: bestDepth.raw,
-      meta: { mode: 'depth', depth: depthFallback, options: toSet }
-    });
-
-  } catch (e) {
-    if (e?.code === 'ENGINE_TIMEOUT') {
-      return res.status(503).json({ error: 'engine timeout' });
-    }
-    return res.status(500).json({ error: e?.message || 'AI error' });
+  }catch(e){
+    setSpinner(false);
+    console.error('[AI] unexpected error', e);
+    return pickRandomLegal(game);
   }
-});
+}
 
-/** GET /api/ai/warmup — pre-load engine & NN tables */
-router.get('/warmup', async (_req, res) => {
-  try {
-    const startFen = '8/8/8/8/8/8/8/8 w - - 0 1';
-    await engine.applyOptions?.({ Threads: 1, Hash: 32 });
-    await engine.bestMove({ fen: startFen, depth: 6 }); // quick probe
-    res.json({ ok: true });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || String(e) });
-  }
-});
-
-export default router;
+export function setAIDifficulty(){
+  return {
+    mode: 'Remote+Adaptive+Fallback',
+    server: REMOTE_AI_URL,
+    movetimes: MOVETIME_STEPS.slice(),
+    httpTimeout: HTTP_TIMEOUT,
+    variant: VARIANT,
+    threads: SAFE_THREADS,
+    hash: SAFE_HASH
+  };
+}
+export const pickAIMove = chooseAIMove;

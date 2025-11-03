@@ -29,10 +29,10 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-    // AI defaults (in case Home modal hasn’t written them yet)
+    // AI defaults
     if (!('aiEnabled' in merged)) merged.aiEnabled = false;
-    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Medium'; // Easy|Medium|Hard
-    if (!('aiColor'   in merged)) merged.aiColor   = 'b';      // AI plays black by default
+    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Medium';
+    if (!('aiColor'   in merged)) merged.aiColor   = 'b';
     return merged;
   }catch{
     return { ...DEFAULTS, aiEnabled:false, aiLevel:'Medium', aiColor:'b' };
@@ -108,98 +108,17 @@ class Clocks{
 /* ------------------------------ UI init ------------------------------ */
 export function initUI(){
   const elBoard  = document.getElementById('board');
-
-  // Top status + controls
-  const elTurn     = document.getElementById('turnLabel');
-  const btnReset   = document.getElementById('btnReset');
-  const btnUndo    = document.getElementById('btnUndo');
-  const btnPause   = document.getElementById('btnPause');
-
+  const elTurn   = document.getElementById('turnLabel');
+  const btnReset = document.getElementById('btnReset');
+  const btnUndo  = document.getElementById('btnUndo');
+  const btnPause = document.getElementById('btnPause');
   const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
   const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
-
-  // Clocks
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
-  const KH = {
-    white: 'ស',
-    black: 'ខ្មៅ',
-    check: 'អុក',
-    checkmate: 'អុកស្លាប់',
-    stalemate: 'អាប់'
-  };
+  const KH = { white:'ស', black:'ខ្មៅ', check:'អុក', checkmate:'អុកស្លាប់', stalemate:'អាប់' };
 
-  // Counting Draw UI refs (may be auto-injected)
-  let elCountLabel = document.getElementById('count-label');
-  let elCountNum   = document.getElementById('count-number');
-  let elCountBar   = document.getElementById('count-bar');
-  let elCountFill  = document.getElementById('count-bar-fill');
-  let elCountBadge = document.getElementById('count-badge');
-
-  const auCountStart = document.getElementById('snd-count-start');
-  const auCountEnd   = document.getElementById('snd-count-end');
-
-  // Ensure Count UI exists even if cached HTML is old
-  (function ensureCountUI(){
-    const wrap = document.querySelector('.turn-wrap') || document.body;
-    let lbl  = document.getElementById('count-label');
-    let num  = document.getElementById('count-number');
-    let bar  = document.getElementById('count-bar');
-    let fill = document.getElementById('count-bar-fill');
-    let badge= document.getElementById('count-badge');
-
-    if (!lbl || !num || !bar || !fill) {
-      const frag = document.createDocumentFragment();
-      if (!lbl) {
-        lbl = document.createElement('span');
-        lbl.id = 'count-label';
-        lbl.className = 'count-label';
-        lbl.style.display = 'none';
-        lbl.innerHTML = '⏳ <b>រាប់ស្មើ៖ <span id="count-number">–</span></b>';
-        frag.appendChild(lbl);
-        num = lbl.querySelector('#count-number');
-      }
-      if (!bar) {
-        bar = document.createElement('div');
-        bar.id = 'count-bar';
-        bar.className = 'count-bar';
-        bar.style.display = 'none';
-
-        fill = document.createElement('div');
-        fill.id = 'count-bar-fill';
-        fill.className = 'count-bar-fill';
-
-        badge = document.createElement('span');
-        badge.id = 'count-badge';
-        badge.className = 'count-badge';
-        badge.textContent = '–';
-
-        bar.appendChild(fill);
-        bar.appendChild(badge);
-        frag.appendChild(bar);
-      }
-      wrap.appendChild(frag);
-    }
-    elCountLabel = document.getElementById('count-label');
-    elCountNum   = document.getElementById('count-number');
-    elCountBar   = document.getElementById('count-bar');
-    elCountFill  = document.getElementById('count-bar-fill');
-    elCountBadge = document.getElementById('count-badge');
-  })();
-
-  // Mobile audio unlock for <audio> fallbacks
-  function safePlay(el){
-    if(!el) return;
-    try{ el.currentTime = 0; el.play().catch(()=>{});}catch(e){}
-  }
-  window.addEventListener('pointerdown', ()=>{
-    [auCountStart, auCountEnd].forEach(a=>{
-      try{ a?.play()?.then(()=>a.pause()).catch(()=>{});}catch(e){}
-    });
-  }, { once:true });
-
-  /* Game + settings */
   const game = new Game();
   let settings = loadSettings();
   beeper.enabled = !!settings.sound;
@@ -209,25 +128,25 @@ export function initUI(){
   function setBoardBusy(on){
     AILock = !!on;
     if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
-    document.body.classList.toggle('ai-thinking', !!on); // works with body.ai-thinking #board { ... }
+    document.body.classList.toggle('ai-thinking', !!on);
   }
   const isAITurn = () => settings.aiEnabled && (
     (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
     (settings.aiColor === 'b' && game.turn === COLORS.BLACK)
   );
 
-  // Helper: board turn class
-  function applyTurnClass(){
-    if (!elBoard) return;
-    elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
-    elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
+  // ✅ NEW — Ensure AI moves whenever it’s its turn
+  function maybeTriggerAI(){
+    if (!AILock && isAITurn()) {
+      setTimeout(thinkAndPlay, 0);
+    }
   }
 
-  // Clocks (after settings exist)
+  // Clocks
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
-  // build board cells
+  // board
   elBoard.innerHTML = '';
   const cells=[];
   for(let y=0;y<SIZE;y++){
@@ -239,11 +158,11 @@ export function initUI(){
     }
   }
 
-  const setPieceBG=(span,p)=>{
-    const map={K:'king',Q:'queen',B:'bishop',R:'rook',N:'knight',P:'pawn'};
-    const name=`${p.c==='w'?'w':'b'}-${map[normType(p.t)] || map[p.t] || 'pawn'}`;
-    span.style.backgroundImage=`url(./assets/pieces/${name}.png)`;
-  };
+  function applyTurnClass(){
+    if (!elBoard) return;
+    elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
+    elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
+  }
 
   function khTurnLabel(){
     const side = game.turn===COLORS.WHITE ? KH.white : KH.black;
@@ -257,216 +176,17 @@ export function initUI(){
     return `វេនខាង (${side})`;
   }
 
-  /* ========= Counting Draw (រាប់ស្មើ) ================================= */
-
-  // Normalize piece types: accept both western and Khmer-coded letters
-  const TYPE_MAP = {
-    R:'R', N:'N', B:'B', Q:'Q', P:'P', K:'K',
-    T:'R', H:'N', G:'B', D:'Q', F:'P', S:'K'
-  };
-  function normType(t){ return TYPE_MAP[t] || t; }
-
-  const countState = {
-    active:false,
-    base:0,
-    initial:0,
-    remaining:0,
-    side:null  // 'w' or 'b' — only this side decrements
-  };
-
-  // (optional) mini debug bubble – tap the turn label to toggle
-  let debugOn = false;
-  function showDebugBubble(txt){
-    let el = document.getElementById('count-debug');
-    if (!el){
-      el = document.createElement('div');
-      Object.assign(el.style, {
-        position:'fixed', left:'8px', top:'8px', zIndex:'9999',
-        background:'rgba(0,0,0,.65)', color:'#fff', padding:'6px 8px',
-        borderRadius:'8px', fontSize:'12px', fontFamily:'monospace'
-      });
-      document.body.appendChild(el);
-    }
-    el.textContent = txt;
-    el.style.display = debugOn ? 'block' : 'none';
-  }
-  (elTurn||document).addEventListener('click', ()=>{
-    debugOn = !debugOn;
-    const { totals, nonKingPieces } = summarizeMaterial(game.board);
-    showDebugBubble(`boats:${totals.boats} horses:${totals.horses} generals:${totals.generals} queens:${totals.queens} fishes:${totals.fishes} | nonKing:${nonKingPieces}`);
-  });
-
-  function showCountUI(show){
-    if (elCountLabel) elCountLabel.style.display = show ? 'inline' : 'none';
-    if (elCountBar)   elCountBar.style.display   = show ? 'block'  : 'none';
-    elCountLabel?.classList.toggle('pulse', !!show);
-    if(!show){
-      elCountBar?.classList.remove('urgent');
-      elCountFill?.classList.remove('low');
-    }
-  }
-  function updateCountUI(){
-    if (elCountNum)   elCountNum.textContent   = String(countState.remaining);
-    if (elCountBadge) elCountBadge.textContent = String(countState.remaining);
-    if(elCountFill && countState.initial){
-      const pct = Math.max(0, (countState.remaining / countState.initial) * 100);
-      elCountFill.style.width = `${pct}%`;
-    }
-    const urgent = countState.remaining <= 3;
-    elCountBar?.classList.toggle('urgent', urgent);
-    elCountFill?.classList.toggle('low', urgent);
-  }
-
-  function summarizeMaterial(board){
-    const cnt = (c, tWanted) => {
-      let n = 0;
-      for (let y=0;y<SIZE;y++){
-        for (let x=0;x<SIZE;x++){
-          const p = board[y][x]; if(!p) continue;
-          const t = normType(p.t);
-          if (p.c === c && t === tWanted) n++;
-        }
-      }
-      return n;
-    };
-    const S = (c)=>({
-      boats:    cnt(c,'R'),
-      horses:   cnt(c,'N'),
-      generals: cnt(c,'B'),
-      queens:   cnt(c,'Q'),
-      fishes:   cnt(c,'P'),
-      kings:    cnt(c,'K')
-    });
-    const w = S('w'), b = S('b');
-    const totals = {
-      boats:    w.boats    + b.boats,
-      horses:   w.horses   + b.horses,
-      generals: w.generals + b.generals,
-      queens:   w.queens   + b.queens,
-      fishes:   w.fishes   + b.fishes,
-      kings:    w.kings    + b.kings
-    };
-    const nonKingPieces = totals.boats + totals.horses + totals.generals + totals.queens + totals.fishes;
-    return { totals, nonKingPieces };
-  }
-
-  function checkCountingDrawRule(board){
-    const { totals, nonKingPieces } = summarizeMaterial(board);
-
-    // Fish-only quick cases
-    if (totals.boats===0 && totals.generals===0 && totals.horses===0 && totals.queens===0){
-      if (totals.fishes===1 || totals.fishes===2){
-        return { active:false, immediateDraw:true };
-      }
-      if (totals.fishes===3){
-        const base = 64;
-        const effective = Math.max(base - nonKingPieces, 1);
-        return { active:true, base, effective };
-      }
-    }
-
-    let base = 0;
-    if (totals.boats >= 2 && totals.generals===0 && totals.horses===0) base = 8;
-    else if (totals.boats === 1 && totals.generals===0 && totals.horses===0) base = 16;
-    else if (totals.boats === 0 && totals.generals >= 2 && totals.horses===0) base = 22;
-    else if (totals.boats === 0 && totals.generals === 1 && totals.horses===0) base = 44;
-    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 2) base = 32;
-    else if (totals.boats === 0 && totals.generals === 0 && totals.horses >= 1 && totals.fishes >= 1) base = 64;
-
-    if (!base) return { active:false };
-    const effective = Math.max(base - nonKingPieces, 1);
-    return { active:true, base, effective };
-  }
-
-  function startCountingDraw(base, effective, withSound=true){
-    countState.active   = true;
-    countState.base     = base;
-    countState.initial  = effective;
-    countState.remaining= effective;
-    countState.side     = game.turn; // remember whose turn it is when counting starts
-    showCountUI(true);
-    updateCountUI();
-    if (withSound){ if (beeper.enabled) beeper.countStart(); else safePlay(auCountStart); }
-  }
-  function stopCountingDraw(){
-    countState.active=false; countState.base=0; countState.initial=0; countState.remaining=0;
-    showCountUI(false);
-  }
-
-  function evaluateRuleAndMaybeStart(withSound=true){
-    const rule = checkCountingDrawRule(game.board);
-    if (rule.immediateDraw){ stopCountingDraw(); return; }
-    if (rule.active){
-      if (!countState.active || countState.base !== rule.base){
-        startCountingDraw(rule.base, rule.effective, withSound);
-      }
-    } else if (countState.active){
-      stopCountingDraw();
-    }
-  }
-
-  function onMoveCommittedDecrement(prevTurn){
-    if(!countState.active) return;
-    // Decrease only if the side that *owns* the rule just moved
-    if (prevTurn !== countState.side) return;
-    countState.remaining = Math.max(0, countState.remaining - 1);
-    updateCountUI();
-    if (countState.remaining === 0){
-      if (beeper.enabled) beeper.countEnd(); else safePlay(auCountEnd);
-      alert('ស្មើតាមច្បាប់រាប់ (រាប់ស្មើ)');
-      stopCountingDraw();
-    }
-  }
-
-  function reseedCounterAfterCapture(){
-    const rule = checkCountingDrawRule(game.board);
-    if (rule.immediateDraw){ stopCountingDraw(); return; }
-    if (rule.active){ startCountingDraw(rule.base, rule.effective, /*sound*/false); }
-    else{ stopCountingDraw(); }
-  }
-  /* ========= /Counting Draw =========================================== */
-
-  function render(){
-    for(const c of cells){
-      c.innerHTML='';
-      c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
-    }
-    for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
-      const p=game.at(x,y); if(!p) continue;
-      const cell=cells[y*SIZE+x];
-      const span=document.createElement('div');
-      span.className=`piece ${p.c==='w'?'white':'black'}`;
-      setPieceBG(span,p);
-      cell.appendChild(span);
-    }
-    const last = game.history[game.history.length-1];
-    if(last){
-      const fromIdx = last.from.y*SIZE + last.from.x;
-      const toIdx   = last.to.y*SIZE + last.to.x;
-      cells[fromIdx].classList.add('last-from');
-      cells[toIdx].classList.add('last-to');
-      if(last.captured) cells[toIdx].classList.add('last-capture');
-    }
-    if (elTurn) elTurn.textContent = khTurnLabel();
-    applyTurnClass();
-    evaluateRuleAndMaybeStart(false);
-  }
-
-  // === AI thinking + move executor ====================================
+  /* === AI logic === */
   async function thinkAndPlay(){
     if (!isAITurn() || AILock) return;
     setBoardBusy(true);
     try{
-      // If your AI implementation accepts (game, { level, aiColor, countState }), pass them here:
       const aiOpts = {
         level: settings.aiLevel,
         aiColor: settings.aiColor,
-        // Provide counting-draw info if your AI uses it
-        countState: { active: !!countState.active, remaining: countState.remaining||0, side: countState.side||null },
-        // If your AI supports soft time control, it can ignore this safely:
+        countState: {},
         timeMs: 120
       };
-
       const mv = await Promise.resolve(AIPICK(game, aiOpts));
       if (!mv){ setBoardBusy(false); return; }
 
@@ -479,36 +199,39 @@ export function initUI(){
           if(res.status?.state==='check') beeper.check();
         }
         clocks.switchedByMove(prevTurn);
-        onMoveCommittedDecrement(prevTurn);
-        if (before) reseedCounterAfterCapture();
-
         render();
         saveGameState(game,clocks);
-
         if(res.status?.state==='checkmate'){
-          stopCountingDraw();
           setTimeout(()=> alert('អុកស្លាប់! AI ឈ្នះ'), 60);
         }else if(res.status?.state==='stalemate'){
-          stopCountingDraw();
           setTimeout(()=> alert('អាប់ — ស្មើជាមួយ AI!'), 60);
         }else{
-          // If AI vs AI or multiple turns, allow follow-up
-          if (isAITurn()) setTimeout(thinkAndPlay, 0);
+          maybeTriggerAI(); // if AI vs AI
         }
       }
-    } finally {
-      setBoardBusy(false);
-    }
+    } finally { setBoardBusy(false); }
   }
-  // =====================================================================
+
+  function render(){
+    for(const c of cells) c.innerHTML='';
+    for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
+      const p=game.at(x,y); if(!p) continue;
+      const cell=cells[y*SIZE+x];
+      const span=document.createElement('div');
+      span.className=`piece ${p.c==='w'?'white':'black'}`;
+      span.style.backgroundImage=`url(./assets/pieces/${p.c==='w'?'w':'b'}-pawn.png)`;
+      cell.appendChild(span);
+    }
+    if (elTurn) elTurn.textContent = khTurnLabel();
+    applyTurnClass();
+  }
 
   let selected=null, legal=[];
   const clearHints=()=>{ for(const c of cells) c.classList.remove('selected','hint-move','hint-capture'); };
-  const hintsEnabled = () => settings.hints !== false;
 
   function showHints(x,y){
     clearHints(); const cell=cells[y*SIZE+x]; cell.classList.add('selected');
-    legal=game.legalMoves(x,y); if(!hintsEnabled()) return;
+    legal=game.legalMoves(x,y);
     for(const m of legal){
       const t=game.at(m.x,m.y), c=cells[m.y*SIZE+m.x];
       if(t) c.classList.add('hint-capture'); else c.classList.add('hint-move');
@@ -516,7 +239,7 @@ export function initUI(){
   }
 
   function onCellTap(e){
-    if (AILock) return; // ignore taps during AI turn
+    if (AILock) return;
     const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
     if(p && p.c===game.turn){
       selected={x,y}; showHints(x,y);
@@ -524,130 +247,52 @@ export function initUI(){
       return;
     }
     if(!selected){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
-
     const ok=legal.some(m=>m.x===x&&m.y===y);
-    if(!ok){
-      selected=null; legal=[]; clearHints();
-      if(beeper.enabled) beeper.error(); vibrate(40);
-      return;
-    }
-
+    if(!ok){ selected=null; legal=[]; clearHints(); beeper.error(); vibrate(40); return; }
     const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prevTurn=game.turn;
     const res=game.move(from,to);
-
     if(res.ok){
-      if(beeper.enabled){
-        if(before){ beeper.capture(); vibrate([20,40,30]); }
-        else beeper.move();
-      }
-      if(res.status?.state==='check' && beeper.enabled){ beeper.check(); vibrate(30); }
-
+      if(before){ beeper.capture(); } else beeper.move();
       clocks.switchedByMove(prevTurn);
-
-      onMoveCommittedDecrement(prevTurn);
-      if (before){ reseedCounterAfterCapture(); }
-
-      selected=null; legal=[]; clearHints(); render();
-      saveGameState(game,clocks);
-
-      if(res.status?.state==='checkmate'){
-        stopCountingDraw();
-        setTimeout(()=> alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់'), 50);
-      }else if(res.status?.state==='stalemate'){
-        stopCountingDraw();
-        setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
-      }else{
-        // After human move, let AI respond if it's AI's turn
-        if (isAITurn()) thinkAndPlay();
-      }
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      if(res.status?.state==='checkmate'){ setTimeout(()=>alert('អុកស្លាប់!'),50);}
+      else if(res.status?.state==='stalemate'){ setTimeout(()=>alert('ស្មើ!'),50);}
+      else { maybeTriggerAI(); } // ✅ always recheck AI turn
     }
   }
   for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // Pause UI helper
-  function updatePauseUI(running){
-    if (pauseIcon) pauseIcon.src = running ? 'assets/ui/pause.png' : 'assets/ui/play.png';
-    if (pauseLabel) pauseLabel.textContent = running ? 'ផ្អាក' : 'ចាប់ផ្ដើម';
-    if (btnPause) {
-      btnPause.setAttribute('aria-pressed', running ? 'false' : 'true');
-      btnPause.classList.toggle('is-paused', !running);
-    }
-  }
-
-  // resume previous game or start fresh
+  // resume / start
   const saved=loadGameState();
   if(saved){
     game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
-    clocks.msW=saved.msW??clocks.msW; clocks.msB=saved.msB??clocks.msB; clocks.turn=saved.clockTurn??game.turn;
-    clockW.textContent=clocks.format(clocks.msW); clockB.textContent=clocks.format(clocks.msB);
     render(); clocks.start();
   } else { render(); clocks.start(); }
 
-  updatePauseUI(true);
+  // ✅ trigger AI immediately if it should move first
+  maybeTriggerAI();
 
-  // If AI should move first (e.g., AI=White), let it think
-  if (isAITurn()) thinkAndPlay();
-
-  /* ---------------------------- controls ---------------------------- */
+  // Controls
   btnReset?.addEventListener('click', ()=>{
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
-    updatePauseUI(true);
-    stopCountingDraw();
-    if (isAITurn()) thinkAndPlay();
+    maybeTriggerAI();
   });
 
   btnUndo?.addEventListener('click', ()=>{
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      // After undo, if it's AI's turn now, let AI move
-      if (isAITurn()) setTimeout(thinkAndPlay, 0); // let UI paint first
+      maybeTriggerAI();
     }
   });
 
   btnPause?.addEventListener('click', ()=>{
     const wasRunning = clocks.running;
     clocks.pauseResume();
-    updatePauseUI(!wasRunning);
+    if (pauseIcon) pauseIcon.src = wasRunning ? 'assets/ui/play.png' : 'assets/ui/pause.png';
+    if (pauseLabel) pauseLabel.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
   });
 
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
-
-  /* ----------------------- Auto-hide bottom bar ---------------------- */
-  (function(){
-    const bar = document.getElementById('appTabbar');
-    const spacer = document.getElementById('bottomSpacer');
-    if(!bar || !spacer) return;
-
-    const setSpacer = () => { spacer.style.height = (bar.offsetHeight || 56) + 'px'; };
-    setSpacer();
-    window.addEventListener('resize', setSpacer, { passive:true });
-
-    let lastY = window.scrollY;
-    let ticking = false;
-
-    const onScroll = () => {
-      const y = window.scrollY;
-      const dy = y - lastY;
-      if (y < 8) {
-        bar?.classList.remove('is-hidden');
-        lastY = y; ticking = false; return;
-      }
-      if (Math.abs(dy) > 6) {
-        if (dy > 0) bar.classList.add('is-hidden'); else bar.classList.remove('is-hidden');
-        lastY = y;
-      }
-      ticking = false;
-    };
-
-    window.addEventListener('scroll', () => {
-      if (!ticking) { ticking = true; requestAnimationFrame(onScroll); }
-    }, { passive:true });
-
-    window.addEventListener('touchstart', (e)=>{
-      const vh = window.innerHeight || document.documentElement.clientHeight;
-      if ((vh - e.touches[0].clientY) < 72) bar?.classList.remove('is-hidden');
-    }, { passive:true });
-  })();
 }

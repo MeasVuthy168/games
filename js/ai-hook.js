@@ -1,13 +1,12 @@
-// js/ai-hook.js — Connect UI game to backend engine + spinner + fallback local AI
-// Works with your current UI without editing ui.js (uses kc:ready event + window.game)
+// js/ai-hook.js — Connect UI to backend engine, show spinner, block board while thinking,
+// and fall back to local Master AI if backend fails.
 
 import { chooseAIMove as localMaster } from './ai.js';
 
-// ---- Config (edit if needed) -----------------------------------------------
-// 1) Default backend endpoint (Render live)
+// ---------- Config ----------
 const DEFAULT_ENGINE_URL = 'https://ouk-ai-backend.onrender.com/api/ai/move';
+const MOVETIME_MS = 1200; // server think time
 
-// 2) Allow override from localStorage ("kc_engine_url") or window.__ENGINE_URL
 function getEngineURL() {
   return (
     window.__ENGINE_URL ||
@@ -16,168 +15,151 @@ function getEngineURL() {
   );
 }
 
-// ---- Tiny DOM helpers -------------------------------------------------------
-function $(sel, root = document) { return root.querySelector(sel); }
-
-function ensureSpinner() {
-  if ($('#aiBusy')) return $('#aiBusy');
-  const wrap = document.createElement('div');
-  wrap.id = 'aiBusy';
-  wrap.setAttribute('aria-hidden', 'true');
-  wrap.innerHTML = `
-    <div class="ai-spinner">
-      <div class="ai-dot"></div>
-      <div class="ai-text">🤖 គិត…</div>
-    </div>`;
-  document.body.appendChild(wrap);
-  return wrap;
-}
-function showSpinner(show = true) {
-  const el = ensureSpinner();
-  el.style.display = show ? 'flex' : 'none';
-}
-
-// ---- Game helpers -----------------------------------------------------------
-function getFEN(game) {
-  try {
-    if (typeof game.fen === 'function') return game.fen();
-    if (typeof game.toFEN === 'function') return game.toFEN();
-    if (typeof game.getFEN === 'function') return game.getFEN();
-  } catch {}
-  return null;
-}
-function getTurn(game) {
-  try { return game.turn || (typeof game.getTurn === 'function' ? game.getTurn() : null); }
-  catch { return null; }
-}
-function listLegals(game) {
-  const out = [];
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) {
-    try {
-      const moves = game.legalMoves?.(x, y) || [];
-      for (const m of moves) out.push({ from: { x, y }, to: { x: m.x, y: m.y } });
-    } catch {}
-  }
-  return out;
-}
-function algebraToXY(fileChar, rankChar) {
-  const fx = fileChar.charCodeAt(0) - 97;       // a->0 ... h->7
-  const fy = 8 - (rankChar.charCodeAt(0) - 48); // '1'..'8' -> 7..0
-  return { x: fx, y: fy };
-}
-function uciToMove(uci, game) {
-  // e2e4, possibly e7e8q (promotion ignored here — Makruk/Khmer doesn’t need it)
-  if (!uci || uci.length < 4) return null;
-  const from = algebraToXY(uci[0], uci[1]);
-  const to   = algebraToXY(uci[2], uci[3]);
-  // Validate against legals
-  const legals = listLegals(game);
-  return legals.find(m => m.from.x === from.x && m.from.y === from.y &&
-                          m.to.x   === to.x   && m.to.y   === to.y) || null;
-}
-
-// Apply move to the board
-function applyMove(game, move) {
-  try { return game.move(move.from, move.to); } catch { return null; }
-}
-
-// ---- AI loop ----------------------------------------------------------------
-let aiBusy = false;
-let settings = null;  // from localStorage
 const LS_KEY = 'kc_settings_v1';
-
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {}; }
   catch { return {}; }
 }
 
-async function thinkWithBackend(fen, variant, movetime) {
-  const url = getEngineURL();
-  const body = { fen, variant, movetime };
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`Engine HTTP ${res.status}`);
-  return await res.json(); // expect shape like { move: "e2e4", score: ..., nodes: ... }
+// ---------- DOM helpers ----------
+function $(s, r=document){ return r.querySelector(s); }
+
+function ensureSpinner(){
+  if ($('#aiBusy')) return $('#aiBusy');
+  const el = document.createElement('div');
+  el.id = 'aiBusy';
+  el.innerHTML = `
+    <div class="ai-spinner">
+      <div class="ai-dot"></div>
+      <div class="ai-text">🤖 គិត…</div>
+    </div>`;
+  document.body.appendChild(el);
+  return el;
+}
+function spinner(show){
+  const el = ensureSpinner();
+  el.style.display = show ? 'flex' : 'none';
+  document.body.classList.toggle('ai-thinking', !!show);
+}
+ensureSpinner(); spinner(false);
+
+// While it's AI turn (even if not thinking yet), block clicks on the board
+function setAITurnBlock(on){
+  document.body.classList.toggle('ai-turn', !!on);
 }
 
-async function runAI(game) {
-  if (aiBusy) return;
+// ---------- Generic game helpers ----------
+function getTurn(game){
+  try { return game.turn || game.getTurn?.(); } catch { return null; }
+}
+function getFEN(game){
+  try { return game.fen?.() || game.toFEN?.() || game.getFEN?.(); } catch { return null; }
+}
+function listLegals(game){
+  const out=[];
+  for(let y=0;y<8;y++)for(let x=0;x<8;x++){
+    try {
+      const ms = game.legalMoves?.(x,y) || [];
+      for(const m of ms) out.push({from:{x,y}, to:{x:m.x,y:m.y}});
+    }catch{}
+  }
+  return out;
+}
+function algebraToXY(fileChar, rankChar){
+  const fx = fileChar.charCodeAt(0) - 97;
+  const fy = 8 - (rankChar.charCodeAt(0) - 48);
+  return { x:fx, y:fy };
+}
+function uciToMove(uci, game){
+  if (!uci || uci.length<4) return null;
+  const from = algebraToXY(uci[0], uci[1]);
+  const to   = algebraToXY(uci[2], uci[3]);
+  const legals = listLegals(game);
+  return legals.find(m => m.from.x===from.x && m.from.y===from.y && m.to.x===to.x && m.to.y===to.y) || null;
+}
+function applyMove(game, m){
+  try { return game.move(m.from, m.to); } catch { return null; }
+}
+
+// ---------- Backend call ----------
+async function askBackend(fen, variant='makruk', movetime=MOVETIME_MS){
+  const res = await fetch(getEngineURL(),{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ fen, variant, movetime })
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json(); // expect { move:"e2e4", ... }
+}
+
+// ---------- AI loop ----------
+let aiBusy=false;
+let gameRef=null;
+let settings=loadSettings();
+
+async function thinkAndMove(){
+  if (!gameRef || aiBusy) return;
   if (!settings?.aiEnabled) return;
 
   const aiColor = settings.aiColor || 'b';
-  const turn = getTurn(game);
-  if (turn !== aiColor) return;
-
-  const fen = getFEN(game);
-  if (!fen) return;
+  const turn = getTurn(gameRef);
+  const fen  = getFEN(gameRef);
+  if (!fen || turn !== aiColor) return;
 
   aiBusy = true;
-  showSpinner(true);
+  spinner(true);
 
-  try {
-    // Prefer real backend engine
-    const { move: uci } = await thinkWithBackend(fen, 'makruk', 1200);
-    let mv = uciToMove(uci, game);
-
-    // If backend returns an illegal move (rare), fall back to local AI
-    if (!mv) {
-      console.log('[ai] backend move invalid or missing, falling back to local master');
-      mv = await localMaster(game, { aiColor, countState: null });
+  try{
+    // prefer backend
+    const { move:uci } = await askBackend(fen, 'makruk', MOVETIME_MS);
+    let mv = uciToMove(uci, gameRef);
+    if (!mv){
+      // fallback local
+      mv = await localMaster(gameRef, { aiColor });
     }
-    if (mv) applyMove(game, mv);
-  } catch (err) {
-    console.log('[ai] backend error -> fallback local:', err?.message || err);
-    // Fallback to strong local AI
-    try {
-      const mv = await localMaster(game, { aiColor, countState: null });
-      if (mv) applyMove(game, mv);
-    } catch (e2) {
-      console.log('[ai] local fallback failed:', e2?.message || e2);
+    if (mv) applyMove(gameRef, mv);
+  }catch(err){
+    // backend error => local master
+    try{
+      const mv = await localMaster(gameRef, { aiColor });
+      if (mv) applyMove(gameRef, mv);
+    }catch(e2){
+      console.log('[ai] both backend & local failed:', e2?.message||e2);
     }
-  } finally {
-    showSpinner(false);
-    aiBusy = false;
+  }finally{
+    spinner(false);
+    aiBusy=false;
   }
 }
 
-// Trigger conditions to decide when to think:
-// 1) On kc:ready (game created)
-// 2) On every user move — we’ll poll FEN changes (minimal invasiveness)
-function startLoop(game) {
-  settings = loadSettings();
-  if (!settings.aiEnabled) return;
-
-  // lightweight FEN watcher
-  let lastFen = getFEN(game);
-  setInterval(() => {
-    try {
-      const f = getFEN(game);
-      if (!f) return;
-      if (f !== lastFen) {
-        lastFen = f;
-        // if it's AI's turn now, think
-        runAI(game);
+// Watch FEN to know when a move happened, and also block board on AI turn
+function startWatch(){
+  if (!gameRef) return;
+  let last = getFEN(gameRef) || '';
+  setInterval(()=>{
+    try{
+      const f = getFEN(gameRef) || '';
+      const turn = getTurn(gameRef);
+      setAITurnBlock(settings?.aiEnabled && turn === (settings.aiColor||'b'));
+      if (f !== last){
+        last = f;
+        thinkAndMove();
       }
-    } catch {}
+    }catch{}
   }, 250);
 
-  // also think immediately if AI starts
-  runAI(game);
+  // If AI should start first
+  thinkAndMove();
 }
 
-// Wait for the game from main.js
-window.addEventListener('kc:ready', (e) => {
-  const game = e?.detail?.game || window.game;
-  if (!game) return;
-  startLoop(game);
+// Ready hook from main.js
+document.addEventListener('kc:ready', (e)=>{
+  gameRef = e?.detail?.game || window.game || null;
+  settings = loadSettings();
+  if (!gameRef) return;
+  startWatch();
 });
 
-// If kc:ready already fired earlier (or game existed), start anyway
-if (window.game) startLoop(window.game);
-
-// Ensure spinner node exists at load
-ensureSpinner();
-showSpinner(false);
+// If kc:ready already fired earlier
+if (window.game){ gameRef = window.game; startWatch(); }
+  

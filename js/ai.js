@@ -5,8 +5,8 @@ const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
 const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
 
 // Try these movetimes in order (strong → faster)
-const MOVETIME_STEPS = [1600, 1200, 900, 600];
-const HTTP_TIMEOUT   = 30000;    // overall network timeout (Render cold start safe)
+const MOVETIME_STEPS = [1100, 900, 700, 500];  // updated
+const HTTP_TIMEOUT   = 45000;                  // updated overall network timeout
 const VARIANT        = 'makruk';
 
 // >>> SAFE ENGINE OPTIONS FOR RENDER FREE <<<
@@ -90,7 +90,7 @@ function extractMoveFromResponse(json){
 }
 
 async function callMoveAPI(fen, movetime){
-  // NOTE: include safe threads/hash so server keeps resource usage low
+  // include safe threads/hash so server keeps resource usage low
   const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
@@ -199,3 +199,4 @@ export function setAIDifficulty(){
   };
 }
 export const pickAIMove = chooseAIMove;
+```0

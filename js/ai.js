@@ -1,12 +1,12 @@
-// js/ai.js — Remote-first AI with spinner + adaptive retries + TEMP DEBUG PANEL
+// js/ai.js — Remote-first AI with spinner + adaptive retries + TEMP DEBUG PANEL + STATUS LINE
 
 const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
 const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
 const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
 
 // Try these movetimes in order (strong → faster)
-const MOVETIME_STEPS = [1100, 900, 700, 500];  // <- your requested values
-const HTTP_TIMEOUT   = 45000;                  // <- your requested value
+const MOVETIME_STEPS = [1100, 900, 700, 500];
+const HTTP_TIMEOUT   = 45000;
 const VARIANT        = 'makruk';
 
 // Safe options for Render free tier
@@ -15,7 +15,7 @@ const SAFE_HASH    = 32;
 
 // Use Makruk start FEN when the board looks empty/uninitialized
 const MAKRUK_START_FEN =
-  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
+  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBKQBNR w - - 0 1';
 
 // ===== TEMP DEBUG PANEL =====
 const ENABLE_DEBUG = true;
@@ -63,8 +63,19 @@ function ensureDebugPanel() {
     `;
     pre.textContent = '…';
 
+    // === status line ===
+    const status = document.createElement('div');
+    status.id = 'aiStatusLine';
+    status.style.cssText = `
+      padding:6px 10px; font-size:13px; background:#fffbe7; color:#444;
+      border-top:1px solid #d9d9d9;
+      font-family:ui-sans-serif,system-ui;
+    `;
+    status.textContent = 'Initializing AI status...';
+
     panel.appendChild(bar);
     panel.appendChild(pre);
+    panel.appendChild(status);
     host.appendChild(panel);
 
     if (cardBelow && cardBelow.parentElement) {
@@ -90,6 +101,20 @@ function ensureDebugPanel() {
   }
   return document.getElementById('aiDebugLog');
 }
+
+function updateStatus(text, color) {
+  let el = document.getElementById('aiStatusLine');
+  if (!el) {
+    ensureDebugPanel();
+    el = document.getElementById('aiStatusLine');
+  }
+  if (el) {
+    el.textContent = text;
+    el.style.color = color || '#222';
+    el.style.background = color?.includes('⚠️') ? '#fff4e0' : '#f0fff0';
+  }
+}
+
 function logDbg(...args) {
   if (!ENABLE_DEBUG) return;
   const pre = ensureDebugPanel();
@@ -102,7 +127,7 @@ function resetDbg() {
   const pre = ensureDebugPanel();
   if (pre) pre.textContent = `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
 }
-window.AIDebug = { log: logDbg, reset: resetDbg };
+window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
 
 // ===== Spinner =====
 function ensureSpinner(){
@@ -146,9 +171,16 @@ async function pingBackend(){
     let j = {};
     try { j = await r.json(); } catch {}
     logDbg(`PING ${ok ? 'OK' : 'HTTP'+r.status} ->`, JSON.stringify(j));
-    return ok && (j.ok === true || j.status === 'ok');
+    if (ok && (j.ok === true || j.status === 'ok')) {
+      updateStatus('✅ Connected to AI server', 'green');
+      return true;
+    } else {
+      updateStatus('⚠️ Using offline (random) AI — ping failed', 'orange');
+      return false;
+    }
   }catch(e){
     logDbg('PING failed:', e.message || e);
+    updateStatus('⚠️ Using offline (random) AI — network error: ' + e.message, 'orange');
     return false;
   }
 }
@@ -162,30 +194,20 @@ function getFenFromGame(game){
   }catch{}
   return '8/8/8/8/8/8/8/8 w - - 0 1';
 }
-
-// Detect empty-board FEN (prevents pointless remote calls)
 function isEmptyFen(fen){
   return typeof fen === 'string' && /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
 }
 
 function uciToMoveObj(uci){
   if (typeof uci !== 'string') return null;
-
-  // accept e2e4, b7b8q, etc.
   const m = uci.trim().match(/^([a-h][1-8])([a-h][1-8])([qrbnQRBN])?$/);
   if (!m) return null;
-
-  const fx = m[1].charCodeAt(0) - 97;         // file a-h -> 0..7
-  const fy = 8 - (m[1].charCodeAt(1) - 48);    // rank 1-8 -> y 7..0
+  const fx = m[1].charCodeAt(0) - 97;
+  const fy = 8 - (m[1].charCodeAt(1) - 48);
   const tx = m[2].charCodeAt(0) - 97;
   const ty = 8 - (m[2].charCodeAt(1) - 48);
-
-  // correct bounds check: group the ORs before & ~7
-  if ( ((fx | fy | tx | ty) & ~7) !== 0 ) return null;
-
-  const move = { from:{ x:fx, y:fy }, to:{ x:tx, y:ty } };
-  // (optional) you can keep m[3] if you ever need promotion piece
-  return move;
+  if (((fx | fy | tx | ty) & ~7) !== 0) return null;
+  return { from:{ x:fx, y:fy }, to:{ x:tx, y:ty } };
 }
 function extractMoveFromResponse(json){
   if (!json) return null;
@@ -230,15 +252,12 @@ async function callMoveAPI(fen, movetime){
     err.serverText = text;
     throw err;
   }
-
-  // If backend explicitly says no move, treat as hard stop
   if (json && (json.uci === '(none)' || /bestmove\s+\(none\)/i.test(json.raw || '') || json.error === 'no_legal_move')) {
     logDbg('Engine reported no legal move:', JSON.stringify(json).slice(0, 200));
     const err = new Error('No move found in response');
     err.serverText = JSON.stringify(json);
     throw err;
   }
-
   const mv = extractMoveFromResponse(json);
   if (!mv){
     logDbg('No move in response:', JSON.stringify(json).slice(0, 200));
@@ -247,6 +266,7 @@ async function callMoveAPI(fen, movetime){
     throw err;
   }
   logDbg(`OK in ${(performance.now()-started|0)}ms →`, json.uci || json.bestmove || '');
+  updateStatus('✅ Connected to AI server', 'green');
   return mv;
 }
 
@@ -268,19 +288,14 @@ export async function chooseAIMove(game, opts = {}){
   resetDbg();
   let fen = getFenFromGame(game);
   logDbg('FEN:', fen);
-
-  // If board looks empty, use Makruk initial layout instead of bailing
   if (isEmptyFen(fen)) {
     logDbg('Empty FEN detected → using Makruk start FEN.');
     fen = MAKRUK_START_FEN;
   }
-
   setSpinner(true);
-
   try{
     const alive = await pingBackend();
     if (!alive) { logDbg('Ping not OK → warmup 500ms'); await sleep(500); }
-
     let lastErr = null;
     for (let i=0; i< MOVETIME_STEPS.length; i++){
       const mt = MOVETIME_STEPS[i];
@@ -289,39 +304,28 @@ export async function chooseAIMove(game, opts = {}){
         const mv = await callMoveAPI(fen, mt);
         setSpinner(false);
         logDbg('MOVE SELECTED:', JSON.stringify(mv));
+        updateStatus('✅ Connected to AI server', 'green');
         return mv;
       }catch(err){
         lastErr = err;
+        updateStatus('⚠️ Using offline (random) AI — ' + (err.message || 'error'), 'orange');
         const server = (err.serverText||'').toLowerCase();
         const isTimeout = server.includes('engine timeout');
         const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
         const isNone    = server.includes('bestmove (none)') || server.includes('"uci":"(none)"') || server.includes('no_legal_move');
-
         logDbg('Attempt failed:', err.message, ' | server:', (err.serverText||'').slice(0,120));
         if (isNone) { logDbg('Breaking retry ladder (no legal move).'); break; }
         if (!isTimeout && !isBusy) { logDbg('Breaking retry ladder (hard error)'); break; }
       }
     }
-
-    // all retries failed → fallback
     setSpinner(false);
     logDbg('All retries failed → local fallback');
-    try{
-      if (!sessionStorage.getItem('ai_remote_warned')){
-        const msg = [
-          'Remote AI unavailable; using local fallback.',
-          lastErr?.message ? `\n\nError: ${lastErr.message}` : '',
-          lastErr?.serverText ? `\n\nServer says:\n${lastErr.serverText}` : ''
-        ].join('');
-        alert(msg);
-        sessionStorage.setItem('ai_remote_warned', '1');
-      }
-    }catch{}
+    updateStatus('⚠️ Using offline (random) AI — server unreachable', 'orange');
     return pickRandomLegal(game);
-
   }catch(e){
     setSpinner(false);
     logDbg('Unexpected error:', e.message || e);
+    updateStatus('⚠️ Using offline (random) AI — unexpected error', 'orange');
     return pickRandomLegal(game);
   }
 }
@@ -339,7 +343,6 @@ export function setAIDifficulty(){
 }
 export const pickAIMove = chooseAIMove;
 
-
 // === periodic backend liveness probe ===
 (function aiKeepalive(){
   const PING_URL = 'https://ouk-ai-backend.onrender.com/ping';
@@ -351,8 +354,11 @@ export const pickAIMove = chooseAIMove;
       const j  = ok ? await r.json() : {};
       const dt = (performance.now() - t0) | 0;
       window.AIDebug?.log(`KEEPALIVE ${ok?'OK':'HTTP'+r.status} in ${dt}ms`, JSON.stringify(j));
+      if(ok) window.AIDebug?.status('✅ Connected to AI server', 'green');
+      else window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', 'orange');
     }catch(e){
       window.AIDebug?.log('KEEPALIVE FAIL:', e?.message || e);
+      window.AIDebug?.status('⚠️ Using offline (random) AI — network error: ' + e?.message, 'orange');
     }
   }
   setInterval(pingOnce, 20000);

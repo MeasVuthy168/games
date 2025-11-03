@@ -163,6 +163,11 @@ function getFenFromGame(game){
   return '8/8/8/8/8/8/8/8 w - - 0 1';
 }
 
+// NEW: detect empty-board FEN (prevents pointless remote calls)
+function isEmptyFen(fen){
+  return typeof fen === 'string' && /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
+}
+
 function uciToMoveObj(uci){
   if (!uci || typeof uci !== 'string' || uci.length < 4) return null;
   const fx = uci.charCodeAt(0) - 97;
@@ -215,6 +220,15 @@ async function callMoveAPI(fen, movetime){
     err.serverText = text;
     throw err;
   }
+
+  // If backend explicitly says no move, treat as hard stop
+  if (json && (json.uci === '(none)' || /bestmove\s+\(none\)/i.test(json.raw || '') || json.error === 'no_legal_move')) {
+    logDbg('Engine reported no legal move:', JSON.stringify(json).slice(0, 200));
+    const err = new Error('No move found in response');
+    err.serverText = JSON.stringify(json);
+    throw err;
+  }
+
   const mv = extractMoveFromResponse(json);
   if (!mv){
     logDbg('No move in response:', JSON.stringify(json).slice(0, 200));
@@ -244,6 +258,13 @@ export async function chooseAIMove(game, opts = {}){
   resetDbg();
   const fen = getFenFromGame(game);
   logDbg('FEN:', fen);
+
+  // NEW: don’t call backend if the board is empty/uninitialized
+  if (isEmptyFen(fen)) {
+    logDbg('Blocked remote call: empty-board FEN. Start a game first.');
+    return null;
+  }
+
   setSpinner(true);
 
   try{
@@ -264,7 +285,10 @@ export async function chooseAIMove(game, opts = {}){
         const server = (err.serverText||'').toLowerCase();
         const isTimeout = server.includes('engine timeout');
         const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
+        const isNone    = server.includes('bestmove (none)') || server.includes('"uci":"(none)"') || server.includes('no_legal_move');
+
         logDbg('Attempt failed:', err.message, ' | server:', (err.serverText||'').slice(0,120));
+        if (isNone) { logDbg('Breaking retry ladder (no legal move).'); break; }
         if (!isTimeout && !isBusy) { logDbg('Breaking retry ladder (hard error)'); break; }
       }
     }

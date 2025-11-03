@@ -11,55 +11,15 @@
   <!-- PWA -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#0d2d5c" />
-  <meta name="screen-orientation" content="portrait">
-  <meta name="x5-orientation" content="portrait">
-  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes" />
   <script src="js/pwa.js" defer></script>
 
+  <!-- Board textures -->
   <style>
     :root{
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
-      --ui-font: "Krasar","Noto Sans Khmer",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-      --blue:#0d2d5c;
     }
-    html,body,.app,.app *{ font-family:var(--ui-font); }
-
-    /* Spinner mask */
-    .ai-mask{
-      position:fixed; inset:0;
-      background:rgba(13,45,92,.07);
-      backdrop-filter:saturate(140%) blur(1.5px);
-      display:none; align-items:center; justify-content:center;
-      z-index: 9999;
-    }
-    .ai-mask.on{ display:flex }
-    .ai-card{
-      min-width: 240px;
-      background:#fff; color:#222;
-      border-radius:16px; padding:18px 16px;
-      box-shadow:0 10px 24px rgba(0,0,0,.18);
-      text-align:center;
-    }
-    .ai-row{ display:flex; align-items:center; gap:8px; justify-content:center; margin-bottom:6px }
-    .ai-dot{
-      width:8px; height:8px; border-radius:50%; background:#0d2d5c; opacity:.25;
-      animation: ad 1s infinite ease-in-out;
-    }
-    .ai-dot:nth-child(1){ animation-delay:0s }
-    .ai-dot:nth-child(2){ animation-delay:.15s }
-    .ai-dot:nth-child(3){ animation-delay:.3s }
-    @keyframes ad { 0%,80%,100%{ transform:scale(.6); opacity:.25 } 40%{ transform:scale(1); opacity:1 } }
-    .ai-sub{ font-size:.92rem; color:#555; margin-top:4px }
-
-    /* Input shield (blocks user moves during AI turn) */
-    .input-shield{
-      position:absolute; inset:0; z-index: 1500; display:none;
-    }
-    .input-shield.on{ display:block }
-
-    /* Place shield above the board only */
-    .board-wrap{ position: relative; }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -69,7 +29,7 @@
     <main class="layout layout-single">
       <section class="panel board-panel">
 
-        <!-- Turn + counting -->
+        <!-- Turn + counting draw -->
         <div class="turn-wrap">
           <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
@@ -112,11 +72,7 @@
         </div>
 
         <!-- Board -->
-        <div class="board-wrap">
-          <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
-          <!-- Input shield (prevents moving when AI turn or while thinking) -->
-          <div id="inputShield" class="input-shield" aria-hidden="true"></div>
-        </div>
+        <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
 
         <!-- Bottom clock -->
         <div class="timers">
@@ -156,58 +112,9 @@
     </div>
   </div>
 
-  <!-- Spinner overlay (AI thinking) -->
-  <div id="aiMask" class="ai-mask" aria-hidden="true">
-    <div class="ai-card" role="status" aria-live="polite">
-      <div class="ai-row">
-        <div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div>
-        <b id="aiTitle">🤖 AI កំពុងគិត…</b>
-      </div>
-      <div class="ai-sub" id="aiSub">កំពុងគិត • 0.0s</div>
-    </div>
-  </div>
-
-  <!-- JS (keep your existing main.js), then our AI hook -->
+  <!-- JS -->
   <script type="module" src="./js/main.js"></script>
+  <!-- Hook that connects to backend AI + spinner + fallback -->
   <script type="module" src="./js/ai-hook.js"></script>
-
-  <!-- Spinner controller + engine events -->
-  <script>
-    (function(){
-      const mask = document.getElementById('aiMask');
-      const title = document.getElementById('aiTitle');
-      const sub   = document.getElementById('aiSub');
-      let tick, t0;
-
-      window.__aiShow = (modeText='AI កំពុងគិត')=>{
-        if (title && modeText) title.textContent = `🤖 ${modeText}…`;
-        t0 = Date.now();
-        if (sub){
-          sub.textContent = 'កំពុងគិត • 0.0s';
-          clearInterval(tick);
-          tick = setInterval(()=>{
-            const s = ((Date.now()-t0)/1000).toFixed(1);
-            sub.textContent = `កំពុងគិត • ${s}s`;
-          }, 120);
-        }
-        mask?.classList.add('on');
-      };
-      window.__aiHide = ()=>{
-        clearInterval(tick);
-        mask?.classList.remove('on');
-      };
-
-      // These events are fired by ai.js
-      window.addEventListener('ai:phase', (e)=>{
-        const mode = (e.detail?.phase==='remote') ? 'Remote AI' : 'Local AI';
-        window.__aiShow?.(mode);
-      });
-      window.addEventListener('ai:elapsed', (e)=>{
-        const ms = e.detail?.ms|0;
-        if (sub) sub.textContent = `បានគិតរួច • ${(ms/1000).toFixed(1)}s`;
-        setTimeout(()=> window.__aiHide?.(), 350);
-      });
-    })();
-  </script>
 </body>
 </html>

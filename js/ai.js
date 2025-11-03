@@ -338,3 +338,23 @@ export function setAIDifficulty(){
   };
 }
 export const pickAIMove = chooseAIMove;
+
+
+// === periodic backend liveness probe ===
+(function aiKeepalive(){
+  const PING_URL = 'https://ouk-ai-backend.onrender.com/ping';
+  async function pingOnce(){
+    const t0 = performance.now();
+    try{
+      const r = await fetch(PING_URL, { cache:'no-store' });
+      const ok = r.ok;
+      const j  = ok ? await r.json() : {};
+      const dt = (performance.now() - t0) | 0;
+      window.AIDebug?.log(`KEEPALIVE ${ok?'OK':'HTTP'+r.status} in ${dt}ms`, JSON.stringify(j));
+    }catch(e){
+      window.AIDebug?.log('KEEPALIVE FAIL:', e?.message || e);
+    }
+  }
+  setInterval(pingOnce, 20000);
+  pingOnce();
+})();

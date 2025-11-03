@@ -1,4 +1,4 @@
-// ui.js — Khmer Chess (Play page) + AI turn integration (remote-safe)
+// ui.js — Khmer Chess (Play page) + AI turn integration (remote-safe, fixed)
 import { Game, SIZE, COLORS } from './game.js';
 import * as AI from './ai.js';
 const AIPICK = AI.pickAIMove || AI.chooseAIMove;
@@ -7,6 +7,7 @@ const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
+/* ---------------- storage ---------------- */
 function saveGameState(game, clocks){
   const s = {
     board: game.board,
@@ -28,15 +29,15 @@ function loadSettings(){
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
     if (!('aiEnabled' in merged)) merged.aiEnabled = false;
-    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Master';
-    if (!('aiColor'   in merged)) merged.aiColor   = 'b';
+    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Master'; // single level
+    if (!('aiColor'   in merged)) merged.aiColor   = 'b';      // AI = Black
     return merged;
   }catch{
     return { ...DEFAULTS, aiEnabled:false, aiLevel:'Master', aiColor:'b' };
   }
 }
 
-/* ---------------- Audio ---------------- */
+/* ---------------- audio ---------------- */
 class AudioBeeper{
   constructor(){
     this.enabled = true;
@@ -65,7 +66,7 @@ class AudioBeeper{
 const beeper = new AudioBeeper();
 function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
-/* ---------------- Clocks ---------------- */
+/* ---------------- clocks ---------------- */
 class Clocks{
   constructor(update){
     this.msW=0; this.msB=0; this.running=false; this.turn=COLORS.WHITE;
@@ -100,7 +101,7 @@ class Clocks{
   }
 }
 
-/* ---------------- Main UI ---------------- */
+/* ---------------- main UI ---------------- */
 export function initUI(){
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
@@ -127,7 +128,7 @@ export function initUI(){
     ((settings.aiColor==='w' && game.turn===COLORS.WHITE) ||
      (settings.aiColor==='b' && game.turn===COLORS.BLACK));
 
-  // ✅ helper for reliable AI follow-up
+  // ✅ reliable AI follow-up
   function maybeTriggerAI(){
     if (!AILock && isAITurn()) setTimeout(thinkAndPlay, 0);
   }
@@ -135,6 +136,7 @@ export function initUI(){
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
+  // build board cells
   elBoard.innerHTML='';
   const cells=[];
   for(let y=0;y<SIZE;y++){
@@ -150,26 +152,45 @@ export function initUI(){
     elBoard.classList.toggle('turn-black', game.turn===COLORS.BLACK);
   }
 
+  // 🔧 correct sprite mapping (fixes “no pieces showing”)
+  function setPieceBG(span, p){
+    const map = { K:'king', Q:'queen', B:'bishop', R:'rook', N:'knight', P:'pawn' };
+    const key = map[p.t] || 'pawn';
+    const name = `${p.c==='w' ? 'w' : 'b'}-${key}.png`;
+    span.style.backgroundImage = `url(./assets/pieces/${name})`;
+  }
+
   function khTurnLabel(){
     const side=game.turn===COLORS.WHITE?KH.white:KH.black;
     const st=game.status();
-    if(st.state==='checkmate'){const w=side==='ស'?'ខ្មៅ':'ស';return`វេនខាង(${side})·${KH.checkmate}·${w}ឈ្នះ`;}
+    if(st.state==='checkmate'){const w=side==='ស'?'ខ្មៅ':'ស';return`វេនខាង (${side}) · ${KH.checkmate} · ${w} ឈ្នះ`;}
     if(st.state==='stalemate')return KH.stalemate;
-    if(st.state==='check')return`វេនខាង(${side})·${KH.check}`;
-    return`វេនខាង(${side})`;
+    if(st.state==='check')return`វេនខាង (${side}) · ${KH.check}`;
+    return`វេនខាង (${side})`;
   }
 
   function render(){
-    for(const c of cells)c.innerHTML='';
+    for(const c of cells){
+      c.innerHTML='';
+      c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
+    }
     for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
       const p=game.at(x,y); if(!p)continue;
       const cell=cells[y*SIZE+x];
       const s=document.createElement('div');
       s.className=`piece ${p.c==='w'?'white':'black'}`;
-      s.style.backgroundImage=`url(./assets/pieces/${p.c==='w'?'w':'b'}-${p.t.toLowerCase()}.png)`;
+      setPieceBG(s,p);
       cell.appendChild(s);
     }
-    elTurn.textContent=khTurnLabel();
+    const last = game.history[game.history.length-1];
+    if(last){
+      const fromIdx = last.from.y*SIZE + last.from.x;
+      const toIdx   = last.to.y*SIZE + last.to.x;
+      cells[fromIdx].classList.add('last-from');
+      cells[toIdx].classList.add('last-to');
+      if(last.captured) cells[toIdx].classList.add('last-capture');
+    }
+    elTurn && (elTurn.textContent=khTurnLabel());
     applyTurnClass();
   }
 
@@ -177,96 +198,132 @@ export function initUI(){
     if(!isAITurn()||AILock)return;
     setBoardBusy(true);
     try{
-      const aiOpts={level:settings.aiLevel,aiColor:settings.aiColor,timeMs:120};
+      const aiOpts={ level:settings.aiLevel, aiColor:settings.aiColor, timeMs:120 };
       const mv=await Promise.resolve(AIPICK(game,aiOpts));
-      if(!mv){setBoardBusy(false);return;}
+      if(!mv){ setBoardBusy(false); return; }
+
       const prev=game.turn;
       const before=game.at(mv.to.x,mv.to.y);
       const res=game.move(mv.from,mv.to);
       if(res?.ok){
         if(beeper.enabled){
-          if(before)beeper.capture();else beeper.move();
-          if(res.status?.state==='check')beeper.check();
+          if(before){ beeper.capture(); vibrate([20,40,30]); } else beeper.move();
+          if(res.status?.state==='check') beeper.check();
         }
         clocks.switchedByMove(prev);
         render(); saveGameState(game,clocks);
-        if(res.status?.state==='checkmate')setTimeout(()=>alert('អុកស្លាប់! AI ឈ្នះ'),60);
-        else if(res.status?.state==='stalemate')setTimeout(()=>alert('អាប់ — ស្មើជាមួយ AI!'),60);
-        else maybeTriggerAI();
+
+        if(res.status?.state==='checkmate'){
+          setTimeout(()=>alert('អុកស្លាប់! AI ឈ្នះ'),60);
+        }else if(res.status?.state==='stalemate'){
+          setTimeout(()=>alert('អាប់ — ស្មើជាមួយ AI!'),60);
+        }else{
+          // keep rolling if AI vs AI or multi-move scenarios
+          maybeTriggerAI();
+        }
       }
-    }finally{setBoardBusy(false);}
+    } finally {
+      setBoardBusy(false);
+    }
   }
 
   let selected=null,legal=[];
-  const clearHints=()=>{for(const c of cells)c.classList.remove('selected','hint-move','hint-capture');};
+  const clearHints=()=>{ for(const c of cells)c.classList.remove('selected','hint-move','hint-capture'); };
   const hintsEnabled=()=>settings.hints!==false;
 
   function showHints(x,y){
-    clearHints();const cell=cells[y*SIZE+x];cell.classList.add('selected');
-    legal=game.legalMoves(x,y);if(!hintsEnabled())return;
-    for(const m of legal){const t=game.at(m.x,m.y),c=cells[m.y*SIZE+m.x];
-      c.classList.add(t?'hint-capture':'hint-move');}
+    clearHints(); const cell=cells[y*SIZE+x]; cell.classList.add('selected');
+    legal=game.legalMoves(x,y); if(!hintsEnabled()) return;
+    for(const m of legal){
+      const t=game.at(m.x,m.y), c=cells[m.y*SIZE+m.x];
+      c.classList.add(t?'hint-capture':'hint-move');
+    }
   }
 
-  // ✅ updated tap handler
+  // ✅ block user during AI turn & block selecting AI pieces
   function onCellTap(e){
-    // 1) block if AI turn
-    if(isAITurn()){ if(beeper.enabled)beeper.error(); vibrate(40); return; }
-    // 2) block if engine busy
-    if(AILock)return;
+    if (isAITurn()){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
+    if (AILock) return;
 
-    const x=+e.currentTarget.dataset.x,y=+e.currentTarget.dataset.y;
+    const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y;
     const p=game.at(x,y);
 
-    // 3) block selecting AI’s pieces
-    if(settings.aiEnabled && p && p.c===settings.aiColor){
-      if(beeper.enabled)beeper.error(); vibrate(40); return;
+    if (settings.aiEnabled && p && p.c===settings.aiColor){
+      if (beeper.enabled) beeper.error(); vibrate(40); return;
     }
 
-    if(p && p.c===game.turn){selected={x,y}; showHints(x,y);
-      if(beeper.enabled)beeper.select(); return;}
-
-    if(!selected){if(beeper.enabled)beeper.error(); vibrate(40); return;}
+    if (p && p.c===game.turn){
+      selected={x,y}; showHints(x,y);
+      if (beeper.enabled) beeper.select();
+      return;
+    }
+    if (!selected){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
 
     const ok=legal.some(m=>m.x===x&&m.y===y);
-    if(!ok){selected=null;legal=[];clearHints();beeper.error();vibrate(40);return;}
+    if (!ok){
+      selected=null; legal=[]; clearHints();
+      if (beeper.enabled) beeper.error(); vibrate(40);
+      return;
+    }
 
-    const from={...selected},to={x,y},before=game.at(to.x,to.y),prev=game.turn;
+    const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prev=game.turn;
     const res=game.move(from,to);
+
     if(res.ok){
-      if(before)beeper.capture();else beeper.move();
-      if(res.status?.state==='check')beeper.check();
+      if (beeper.enabled){ before ? beeper.capture() : beeper.move(); }
+      if (res.status?.state==='check' && beeper.enabled){ beeper.check(); vibrate(30); }
+
       clocks.switchedByMove(prev);
-      selected=null;legal=[];clearHints();render();saveGameState(game,clocks);
-      if(res.status?.state==='checkmate')setTimeout(()=>alert('អុកស្លាប់!'),50);
-      else if(res.status?.state==='stalemate')setTimeout(()=>alert('ស្មើ!'),50);
-      else maybeTriggerAI();
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+
+      if(res.status?.state==='checkmate'){
+        setTimeout(()=> alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់'), 50);
+      }else if(res.status?.state==='stalemate'){
+        setTimeout(()=> alert('អាប់ — ការប្រកួតស្មើគ្នា!'), 50);
+      }else{
+        maybeTriggerAI(); // let AI reply
+      }
     }
   }
-  for(const c of cells)c.addEventListener('click',onCellTap,{passive:true});
+  for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
 
-  // resume/start
+  // resume or fresh start
   const saved=loadGameState();
-  if(saved){game.board=saved.board;game.turn=saved.turn;game.history=saved.history||[];
-    render();clocks.start();}
-  else{render();clocks.start();}
+  if(saved){
+    game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
+    clockW.textContent=''; clockB.textContent='';
+    render(); clocks.start();
+  } else {
+    render(); clocks.start();
+  }
+
+  // if AI should move first (e.g., AI=White), or after load
   maybeTriggerAI();
 
-  // buttons
-  btnReset?.addEventListener('click',()=>{
-    game.reset();selected=null;legal=[];clearHints();
-    clearGameState();clocks.init(settings.minutes,settings.increment,COLORS.WHITE);
-    render();clocks.start();maybeTriggerAI();
-  });
-  btnUndo?.addEventListener('click',()=>{
-    if(game.undo()){selected=null;legal=[];clearHints();render();saveGameState(game,clocks);maybeTriggerAI();}
-  });
-  btnPause?.addEventListener('click',()=>{
-    const r=clocks.running;clocks.pauseResume();
-    const i=btnPause.querySelector('img'),s=btnPause.querySelector('span');
-    if(i)i.src=r?'assets/ui/play.png':'assets/ui/pause.png';
-    if(s)s.textContent=r?'ចាប់ផ្ដើម':'ផ្អាក';
+  /* -------------- controls -------------- */
+  btnReset?.addEventListener('click', ()=>{
+    game.reset(); selected=null; legal=[]; clearHints();
+    clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+    render(); clocks.start();
+    maybeTriggerAI();
   });
 
-  window.addEventListener('beforeunload',()=>saveGameState(game,clocks));
+  btnUndo?.addEventListener('click', ()=>{
+    if(game.undo()){
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      maybeTriggerAI();
+    }
+  });
+
+  btnPause?.addEventListener('click', ()=>{
+    const wasRunning = clocks.running;
+    clocks.pauseResume();
+    const i=btnPause?.querySelector('img'); const s=btnPause?.querySelector('span');
+    if(i) i.src = wasRunning ? 'assets/ui/play.png' : 'assets/ui/pause.png';
+    if(s) s.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
+  });
+
+  window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
+
+  /* ---- (optional) auto-hide bottom bar code unchanged ---- */
 }

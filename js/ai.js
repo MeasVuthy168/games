@@ -1,19 +1,110 @@
-// js/ai.js — Remote-first AI with spinner + adaptive retries on "engine timeout"
+// js/ai.js — Remote-first AI with spinner + adaptive retries + TEMP DEBUG PANEL
 
 const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
 const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
 const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
 
 // Try these movetimes in order (strong → faster)
-const MOVETIME_STEPS = [1100, 900, 700, 500];  // updated
-const HTTP_TIMEOUT   = 45000;                  // updated overall network timeout
+const MOVETIME_STEPS = [1100, 900, 700, 500];  // <- your requested values
+const HTTP_TIMEOUT   = 45000;                  // <- your requested value
 const VARIANT        = 'makruk';
 
-// >>> SAFE ENGINE OPTIONS FOR RENDER FREE <<<
-const SAFE_THREADS = 1;  // keep CPU usage low
-const SAFE_HASH    = 32; // small transposition table to avoid OOM
+// Safe options for Render free tier
+const SAFE_THREADS = 1;
+const SAFE_HASH    = 32;
 
-// ---------- spinner ----------
+// ===== TEMP DEBUG PANEL =====
+const ENABLE_DEBUG = true;
+function ensureDebugPanel() {
+  if (!ENABLE_DEBUG) return null;
+
+  let cardBelow; // anchor: the Chat card if available
+  // Try by id
+  cardBelow = document.getElementById('chatCard');
+  // Try a simple contains-text finder
+  if (!cardBelow) {
+    const allCards = Array.from(document.querySelectorAll('*'));
+    cardBelow = allCards.find(el =>
+      /សន្ទនា|Chat/i.test(el.textContent || '') && el.getBoundingClientRect().height > 40
+    );
+  }
+
+  let host = document.getElementById('aiDebugPanelHost');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'aiDebugPanelHost';
+
+    const panel = document.createElement('div');
+    panel.id = 'aiDebugPanel';
+    panel.style.cssText = `
+      margin:10px 12px 14px; border:1px dashed #b7c3d7; border-radius:10px;
+      background:#f7faff; overflow:hidden; font-family:ui-sans-serif,system-ui;
+    `;
+
+    const bar = document.createElement('div');
+    bar.style.cssText = `
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 10px; background:#e9f1ff;
+    `;
+    bar.innerHTML =
+      `<strong style="font-weight:700;color:#17355d">AI Debug (temp)</strong>
+       <div>
+         <button id="aiDbgCopy" style="margin-right:6px;padding:4px 8px;border:1px solid #a9bfd9;border-radius:6px;background:#fff">Copy</button>
+         <button id="aiDbgToggle" style="padding:4px 8px;border:1px solid #a9bfd9;border-radius:6px;background:#fff">Hide</button>
+       </div>`;
+
+    const pre = document.createElement('pre');
+    pre.id = 'aiDebugLog';
+    pre.style.cssText = `
+      margin:0; padding:10px; max-height:220px; overflow:auto; white-space:pre-wrap;
+      font-size:12px; line-height:1.35; color:#243b5a;
+      background:#fbfdff;
+    `;
+    pre.textContent = '…';
+
+    panel.appendChild(bar);
+    panel.appendChild(pre);
+    host.appendChild(panel);
+
+    // insert under chat card or at end of body
+    if (cardBelow && cardBelow.parentElement) {
+      cardBelow.parentElement.insertBefore(host, cardBelow.nextSibling);
+    } else {
+      document.body.appendChild(host);
+    }
+
+    // wire buttons
+    document.getElementById('aiDbgToggle').onclick = () => {
+      const hidden = pre.style.display === 'none';
+      pre.style.display = hidden ? 'block' : 'none';
+      document.getElementById('aiDbgToggle').textContent = hidden ? 'Hide' : 'Show';
+    };
+    document.getElementById('aiDbgCopy').onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(pre.textContent);
+        alert('AI debug log copied');
+      } catch {
+        alert('Copy failed');
+      }
+    };
+  }
+  return document.getElementById('aiDebugLog');
+}
+function logDbg(...args) {
+  if (!ENABLE_DEBUG) return;
+  const pre = ensureDebugPanel();
+  if (!pre) return;
+  const ts = new Date().toLocaleTimeString();
+  pre.textContent += `\n[${ts}] ${args.join(' ')}`;
+  pre.scrollTop = pre.scrollHeight;
+}
+function resetDbg() {
+  const pre = ensureDebugPanel();
+  if (pre) pre.textContent = `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
+}
+window.AIDebug = { log: logDbg, reset: resetDbg }; // handy from console
+
+// ===== Spinner =====
 function ensureSpinner(){
   let el = document.getElementById('aiSpinner');
   if (!el){
@@ -38,7 +129,7 @@ function ensureSpinner(){
 }
 function setSpinner(on){ ensureSpinner().style.opacity = on ? '1' : '0'; }
 
-// ---------- helpers ----------
+// ===== Helpers =====
 function withTimeout(promise, ms){
   return new Promise((resolve, reject)=>{
     const t = setTimeout(()=>reject(new Error('timeout')), ms);
@@ -51,10 +142,15 @@ async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 async function pingBackend(){
   try{
     const r = await withTimeout(fetch(REMOTE_PING, { cache:'no-store' }), 6000);
-    if (!r.ok) return false;
-    const j = await r.json().catch(()=>({}));
-    return j && (j.ok === true || j.status === 'ok');
-  }catch{ return false; }
+    const ok = r.ok;
+    let j = {};
+    try { j = await r.json(); } catch {}
+    logDbg(`PING ${ok ? 'OK' : 'HTTP'+r.status} ->`, JSON.stringify(j));
+    return ok && (j.ok === true || j.status === 'ok');
+  }catch(e){
+    logDbg('PING failed:', e.message || e);
+    return false;
+  }
 }
 
 function getFenFromGame(game){
@@ -90,7 +186,8 @@ function extractMoveFromResponse(json){
 }
 
 async function callMoveAPI(fen, movetime){
-  // include safe threads/hash so server keeps resource usage low
+  const started = performance.now();
+  logDbg(`POST /api/ai/move mt=${movetime} thr=${SAFE_THREADS} hash=${SAFE_HASH}`);
   const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
     method:'POST',
     headers:{ 'Content-Type':'application/json' },
@@ -105,22 +202,27 @@ async function callMoveAPI(fen, movetime){
 
   const text = await res.text();
   if (!res.ok){
+    logDbg(`HTTP ${res.status}`, text.slice(0, 200));
     const err = new Error(`HTTP ${res.status}`);
     err.serverText = text;
     throw err;
   }
   let json = {};
-  try{ json = JSON.parse(text); }catch{
+  try{ json = JSON.parse(text); }
+  catch{
+    logDbg('Invalid JSON:', text.slice(0, 200));
     const err = new Error('Invalid JSON from server');
     err.serverText = text;
     throw err;
   }
   const mv = extractMoveFromResponse(json);
   if (!mv){
+    logDbg('No move in response:', JSON.stringify(json).slice(0, 200));
     const err = new Error('No move found in response');
     err.serverText = JSON.stringify(json);
     throw err;
   }
+  logDbg(`OK in ${(performance.now()-started|0)}ms →`, json.uci || json.bestmove || '');
   return mv;
 }
 
@@ -137,36 +239,39 @@ function pickRandomLegal(game){
   return legals.length ? legals[(Math.random()*legals.length)|0] : null;
 }
 
-// ---------- Public API ----------
+// ===== Public API =====
 export async function chooseAIMove(game, opts = {}){
+  resetDbg();
   const fen = getFenFromGame(game);
+  logDbg('FEN:', fen);
   setSpinner(true);
 
   try{
-    // wake the service if needed
     const alive = await pingBackend();
-    if (!alive) await sleep(500);
+    if (!alive) { logDbg('Ping not OK → warmup 500ms'); await sleep(500); }
 
-    // adaptive retries on "engine timeout"
     let lastErr = null;
     for (let i=0; i< MOVETIME_STEPS.length; i++){
       const mt = MOVETIME_STEPS[i];
       try{
-        if (i>0) await sleep(350); // give the engine breath if it just failed
+        if (i>0) { logDbg('Retry ladder — short pause'); await sleep(350); }
         const mv = await callMoveAPI(fen, mt);
         setSpinner(false);
+        logDbg('MOVE SELECTED:', JSON.stringify(mv));
         return mv;
       }catch(err){
         lastErr = err;
         const server = (err.serverText||'').toLowerCase();
         const isTimeout = server.includes('engine timeout');
         const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
-        if (!isTimeout && !isBusy) break; // real error → stop retry ladder
+        logDbg('Attempt failed:', err.message, ' | server:', (err.serverText||'').slice(0,120));
+        if (!isTimeout && !isBusy) { logDbg('Breaking retry ladder (hard error)'); break; }
       }
     }
 
     // all retries failed → fallback
     setSpinner(false);
+    logDbg('All retries failed → local fallback');
     try{
       if (!sessionStorage.getItem('ai_remote_warned')){
         const msg = [
@@ -182,7 +287,7 @@ export async function chooseAIMove(game, opts = {}){
 
   }catch(e){
     setSpinner(false);
-    console.error('[AI] unexpected error', e);
+    logDbg('Unexpected error:', e.message || e);
     return pickRandomLegal(game);
   }
 }
@@ -199,4 +304,3 @@ export function setAIDifficulty(){
   };
 }
 export const pickAIMove = chooseAIMove;
-```0

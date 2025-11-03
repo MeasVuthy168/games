@@ -1,6 +1,5 @@
-// ui.js — Khmer Chess (Play page) + AI turn integration (fixed & enhanced)
+// ui.js — Khmer Chess (Play page) + AI turn integration (remote-safe)
 import { Game, SIZE, COLORS } from './game.js';
-// Safe AI import: supports either pickAIMove or chooseAIMove from ai.js
 import * as AI from './ai.js';
 const AIPICK = AI.pickAIMove || AI.chooseAIMove;
 
@@ -8,7 +7,6 @@ const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_v2';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
-/* ------------------------------ storage ------------------------------ */
 function saveGameState(game, clocks){
   const s = {
     board: game.board,
@@ -29,17 +27,16 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-    // AI defaults
     if (!('aiEnabled' in merged)) merged.aiEnabled = false;
-    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Medium';
+    if (!('aiLevel'   in merged)) merged.aiLevel   = 'Master';
     if (!('aiColor'   in merged)) merged.aiColor   = 'b';
     return merged;
   }catch{
-    return { ...DEFAULTS, aiEnabled:false, aiLevel:'Medium', aiColor:'b' };
+    return { ...DEFAULTS, aiEnabled:false, aiLevel:'Master', aiColor:'b' };
   }
 }
 
-/* ------------------------------ audio ------------------------------ */
+/* ---------------- Audio ---------------- */
 class AudioBeeper{
   constructor(){
     this.enabled = true;
@@ -64,13 +61,11 @@ class AudioBeeper{
   move(){this.play('move', .9);} capture(){this.play('capture', 1);}
   select(){this.play('select', .85);} error(){this.play('error', .9);}
   check(){this.play('check', 1);}
-  countStart(){this.play('countStart', 1);}
-  countEnd(){this.play('countEnd', 1);}
 }
 const beeper = new AudioBeeper();
 function vibrate(x){ if (navigator.vibrate) navigator.vibrate(x); }
 
-/* ------------------------------ clocks ------------------------------ */
+/* ---------------- Clocks ---------------- */
 class Clocks{
   constructor(update){
     this.msW=0; this.msB=0; this.running=false; this.turn=COLORS.WHITE;
@@ -105,194 +100,173 @@ class Clocks{
   }
 }
 
-/* ------------------------------ UI init ------------------------------ */
+/* ---------------- Main UI ---------------- */
 export function initUI(){
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
   const btnReset = document.getElementById('btnReset');
   const btnUndo  = document.getElementById('btnUndo');
   const btnPause = document.getElementById('btnPause');
-  const pauseIcon  = btnPause ? btnPause.querySelector('img')  : null;
-  const pauseLabel = btnPause ? btnPause.querySelector('span') : null;
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
   const KH = { white:'ស', black:'ខ្មៅ', check:'អុក', checkmate:'អុកស្លាប់', stalemate:'អាប់' };
 
   const game = new Game();
-  let settings = loadSettings();
+  const settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
-  // ===== AI helpers =====
   let AILock = false;
   function setBoardBusy(on){
     AILock = !!on;
     if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
     document.body.classList.toggle('ai-thinking', !!on);
   }
-  const isAITurn = () => settings.aiEnabled && (
-    (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
-    (settings.aiColor === 'b' && game.turn === COLORS.BLACK)
-  );
 
-  // ✅ NEW — Ensure AI moves whenever it’s its turn
+  const isAITurn = () => settings.aiEnabled &&
+    ((settings.aiColor==='w' && game.turn===COLORS.WHITE) ||
+     (settings.aiColor==='b' && game.turn===COLORS.BLACK));
+
+  // ✅ helper for reliable AI follow-up
   function maybeTriggerAI(){
-    if (!AILock && isAITurn()) {
-      setTimeout(thinkAndPlay, 0);
-    }
+    if (!AILock && isAITurn()) setTimeout(thinkAndPlay, 0);
   }
 
-  // Clocks
   const clocks = new Clocks((w,b)=>{ clockW.textContent=clocks.format(w); clockB.textContent=clocks.format(b); });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
-  // board
-  elBoard.innerHTML = '';
+  elBoard.innerHTML='';
   const cells=[];
   for(let y=0;y<SIZE;y++){
     for(let x=0;x<SIZE;x++){
-      const cell=document.createElement('div');
-      cell.className='cell '+((x+y)%2?'dark':'light');
-      cell.dataset.x=x; cell.dataset.y=y; cell.dataset.ax=(String.fromCharCode(97+x)+(8-y));
-      elBoard.appendChild(cell); cells.push(cell);
+      const c=document.createElement('div');
+      c.className='cell '+((x+y)%2?'dark':'light');
+      c.dataset.x=x; c.dataset.y=y; elBoard.appendChild(c); cells.push(c);
     }
   }
 
   function applyTurnClass(){
-    if (!elBoard) return;
-    elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
-    elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
+    elBoard.classList.toggle('turn-white', game.turn===COLORS.WHITE);
+    elBoard.classList.toggle('turn-black', game.turn===COLORS.BLACK);
   }
 
   function khTurnLabel(){
-    const side = game.turn===COLORS.WHITE ? KH.white : KH.black;
-    const st = game.status();
-    if(st.state==='checkmate'){
-      const winner = side==='ស' ? 'ខ្មៅ' : 'ស';
-      return `វេនខាង (${side}) · ${KH.checkmate} · ${winner} ឈ្នះ`;
-    }
-    if(st.state==='stalemate') return `${KH.stalemate}`;
-    if(st.state==='check')     return `វេនខាង (${side}) · ${KH.check}`;
-    return `វេនខាង (${side})`;
-  }
-
-  /* === AI logic === */
-  async function thinkAndPlay(){
-    if (!isAITurn() || AILock) return;
-    setBoardBusy(true);
-    try{
-      const aiOpts = {
-        level: settings.aiLevel,
-        aiColor: settings.aiColor,
-        countState: {},
-        timeMs: 120
-      };
-      const mv = await Promise.resolve(AIPICK(game, aiOpts));
-      if (!mv){ setBoardBusy(false); return; }
-
-      const prevTurn = game.turn;
-      const before   = game.at(mv.to.x, mv.to.y);
-      const res      = game.move(mv.from, mv.to);
-      if(res?.ok){
-        if(beeper.enabled){
-          if(before){ beeper.capture(); vibrate([20,40,30]); } else beeper.move();
-          if(res.status?.state==='check') beeper.check();
-        }
-        clocks.switchedByMove(prevTurn);
-        render();
-        saveGameState(game,clocks);
-        if(res.status?.state==='checkmate'){
-          setTimeout(()=> alert('អុកស្លាប់! AI ឈ្នះ'), 60);
-        }else if(res.status?.state==='stalemate'){
-          setTimeout(()=> alert('អាប់ — ស្មើជាមួយ AI!'), 60);
-        }else{
-          maybeTriggerAI(); // if AI vs AI
-        }
-      }
-    } finally { setBoardBusy(false); }
+    const side=game.turn===COLORS.WHITE?KH.white:KH.black;
+    const st=game.status();
+    if(st.state==='checkmate'){const w=side==='ស'?'ខ្មៅ':'ស';return`វេនខាង(${side})·${KH.checkmate}·${w}ឈ្នះ`;}
+    if(st.state==='stalemate')return KH.stalemate;
+    if(st.state==='check')return`វេនខាង(${side})·${KH.check}`;
+    return`វេនខាង(${side})`;
   }
 
   function render(){
-    for(const c of cells) c.innerHTML='';
-    for(let y=0;y<SIZE;y++) for(let x=0;x<SIZE;x++){
-      const p=game.at(x,y); if(!p) continue;
+    for(const c of cells)c.innerHTML='';
+    for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+      const p=game.at(x,y); if(!p)continue;
       const cell=cells[y*SIZE+x];
-      const span=document.createElement('div');
-      span.className=`piece ${p.c==='w'?'white':'black'}`;
-      span.style.backgroundImage=`url(./assets/pieces/${p.c==='w'?'w':'b'}-pawn.png)`;
-      cell.appendChild(span);
+      const s=document.createElement('div');
+      s.className=`piece ${p.c==='w'?'white':'black'}`;
+      s.style.backgroundImage=`url(./assets/pieces/${p.c==='w'?'w':'b'}-${p.t.toLowerCase()}.png)`;
+      cell.appendChild(s);
     }
-    if (elTurn) elTurn.textContent = khTurnLabel();
+    elTurn.textContent=khTurnLabel();
     applyTurnClass();
   }
 
-  let selected=null, legal=[];
-  const clearHints=()=>{ for(const c of cells) c.classList.remove('selected','hint-move','hint-capture'); };
+  async function thinkAndPlay(){
+    if(!isAITurn()||AILock)return;
+    setBoardBusy(true);
+    try{
+      const aiOpts={level:settings.aiLevel,aiColor:settings.aiColor,timeMs:120};
+      const mv=await Promise.resolve(AIPICK(game,aiOpts));
+      if(!mv){setBoardBusy(false);return;}
+      const prev=game.turn;
+      const before=game.at(mv.to.x,mv.to.y);
+      const res=game.move(mv.from,mv.to);
+      if(res?.ok){
+        if(beeper.enabled){
+          if(before)beeper.capture();else beeper.move();
+          if(res.status?.state==='check')beeper.check();
+        }
+        clocks.switchedByMove(prev);
+        render(); saveGameState(game,clocks);
+        if(res.status?.state==='checkmate')setTimeout(()=>alert('អុកស្លាប់! AI ឈ្នះ'),60);
+        else if(res.status?.state==='stalemate')setTimeout(()=>alert('អាប់ — ស្មើជាមួយ AI!'),60);
+        else maybeTriggerAI();
+      }
+    }finally{setBoardBusy(false);}
+  }
+
+  let selected=null,legal=[];
+  const clearHints=()=>{for(const c of cells)c.classList.remove('selected','hint-move','hint-capture');};
+  const hintsEnabled=()=>settings.hints!==false;
 
   function showHints(x,y){
-    clearHints(); const cell=cells[y*SIZE+x]; cell.classList.add('selected');
-    legal=game.legalMoves(x,y);
-    for(const m of legal){
-      const t=game.at(m.x,m.y), c=cells[m.y*SIZE+m.x];
-      if(t) c.classList.add('hint-capture'); else c.classList.add('hint-move');
-    }
+    clearHints();const cell=cells[y*SIZE+x];cell.classList.add('selected');
+    legal=game.legalMoves(x,y);if(!hintsEnabled())return;
+    for(const m of legal){const t=game.at(m.x,m.y),c=cells[m.y*SIZE+m.x];
+      c.classList.add(t?'hint-capture':'hint-move');}
   }
 
+  // ✅ updated tap handler
   function onCellTap(e){
-    if (AILock) return;
-    const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
-    if(p && p.c===game.turn){
-      selected={x,y}; showHints(x,y);
-      if(beeper.enabled) beeper.select();
-      return;
+    // 1) block if AI turn
+    if(isAITurn()){ if(beeper.enabled)beeper.error(); vibrate(40); return; }
+    // 2) block if engine busy
+    if(AILock)return;
+
+    const x=+e.currentTarget.dataset.x,y=+e.currentTarget.dataset.y;
+    const p=game.at(x,y);
+
+    // 3) block selecting AI’s pieces
+    if(settings.aiEnabled && p && p.c===settings.aiColor){
+      if(beeper.enabled)beeper.error(); vibrate(40); return;
     }
-    if(!selected){ if(beeper.enabled) beeper.error(); vibrate(40); return; }
+
+    if(p && p.c===game.turn){selected={x,y}; showHints(x,y);
+      if(beeper.enabled)beeper.select(); return;}
+
+    if(!selected){if(beeper.enabled)beeper.error(); vibrate(40); return;}
+
     const ok=legal.some(m=>m.x===x&&m.y===y);
-    if(!ok){ selected=null; legal=[]; clearHints(); beeper.error(); vibrate(40); return; }
-    const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prevTurn=game.turn;
+    if(!ok){selected=null;legal=[];clearHints();beeper.error();vibrate(40);return;}
+
+    const from={...selected},to={x,y},before=game.at(to.x,to.y),prev=game.turn;
     const res=game.move(from,to);
     if(res.ok){
-      if(before){ beeper.capture(); } else beeper.move();
-      clocks.switchedByMove(prevTurn);
-      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      if(res.status?.state==='checkmate'){ setTimeout(()=>alert('អុកស្លាប់!'),50);}
-      else if(res.status?.state==='stalemate'){ setTimeout(()=>alert('ស្មើ!'),50);}
-      else { maybeTriggerAI(); } // ✅ always recheck AI turn
+      if(before)beeper.capture();else beeper.move();
+      if(res.status?.state==='check')beeper.check();
+      clocks.switchedByMove(prev);
+      selected=null;legal=[];clearHints();render();saveGameState(game,clocks);
+      if(res.status?.state==='checkmate')setTimeout(()=>alert('អុកស្លាប់!'),50);
+      else if(res.status?.state==='stalemate')setTimeout(()=>alert('ស្មើ!'),50);
+      else maybeTriggerAI();
     }
   }
-  for(const c of cells) c.addEventListener('click', onCellTap, {passive:true});
+  for(const c of cells)c.addEventListener('click',onCellTap,{passive:true});
 
-  // resume / start
+  // resume/start
   const saved=loadGameState();
-  if(saved){
-    game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
-    render(); clocks.start();
-  } else { render(); clocks.start(); }
-
-  // ✅ trigger AI immediately if it should move first
+  if(saved){game.board=saved.board;game.turn=saved.turn;game.history=saved.history||[];
+    render();clocks.start();}
+  else{render();clocks.start();}
   maybeTriggerAI();
 
-  // Controls
-  btnReset?.addEventListener('click', ()=>{
-    game.reset(); selected=null; legal=[]; clearHints();
-    clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-    render(); clocks.start();
-    maybeTriggerAI();
+  // buttons
+  btnReset?.addEventListener('click',()=>{
+    game.reset();selected=null;legal=[];clearHints();
+    clearGameState();clocks.init(settings.minutes,settings.increment,COLORS.WHITE);
+    render();clocks.start();maybeTriggerAI();
+  });
+  btnUndo?.addEventListener('click',()=>{
+    if(game.undo()){selected=null;legal=[];clearHints();render();saveGameState(game,clocks);maybeTriggerAI();}
+  });
+  btnPause?.addEventListener('click',()=>{
+    const r=clocks.running;clocks.pauseResume();
+    const i=btnPause.querySelector('img'),s=btnPause.querySelector('span');
+    if(i)i.src=r?'assets/ui/play.png':'assets/ui/pause.png';
+    if(s)s.textContent=r?'ចាប់ផ្ដើម':'ផ្អាក';
   });
 
-  btnUndo?.addEventListener('click', ()=>{
-    if(game.undo()){
-      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      maybeTriggerAI();
-    }
-  });
-
-  btnPause?.addEventListener('click', ()=>{
-    const wasRunning = clocks.running;
-    clocks.pauseResume();
-    if (pauseIcon) pauseIcon.src = wasRunning ? 'assets/ui/play.png' : 'assets/ui/pause.png';
-    if (pauseLabel) pauseLabel.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
-  });
-
-  window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
+  window.addEventListener('beforeunload',()=>saveGameState(game,clocks));
 }

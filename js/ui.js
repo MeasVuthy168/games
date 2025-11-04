@@ -251,6 +251,49 @@ export function initUI(){
         return;
       }
 
+      // === 🧩 SAFETY: resync local board from FEN before applying AI move ===
+      try {
+        if (typeof game.toFEN === 'function') {
+          const fen = game.toFEN();
+          window.AIDebug?.log('[UI] thinkAndPlay: syncing board from FEN', fen);
+
+          const parts = fen.split(' ');
+          const boardPart = parts[0] || '';
+          const stm = parts[1] || 'w';
+          const ranks = boardPart.split('/');
+
+          const fresh = new Game();
+          // clear board
+          fresh.board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+
+          for (let y = 0; y < 8; y++) {
+            let x = 0;
+            const row = ranks[y] || '';
+            for (const ch of row) {
+              if (/\d/.test(ch)) {
+                x += parseInt(ch, 10);
+              } else {
+                const color = ch === ch.toUpperCase() ? 'w' : 'b';
+                const type = ch.toUpperCase();
+                fresh.set(x, y, { t: type, c: color, moved: true });
+                x++;
+              }
+            }
+          }
+
+          fresh.turn = (stm === 'b') ? COLORS.BLACK : COLORS.WHITE;
+
+          game.board = fresh.board;
+          game.turn  = fresh.turn;
+
+          window.AIDebug?.log('[UI] thinkAndPlay: FEN sync done, game.turn=', game.turn);
+        }
+      } catch (syncErr) {
+        console.warn('[UI] FEN sync failed', syncErr);
+        window.AIDebug?.log('[UI] FEN sync failed:', syncErr?.message || String(syncErr));
+      }
+      // ==================================================================
+
       const prevTurn = game.turn;
       const before   = game.at(mv.to.x, mv.to.y);
       const res      = game.move(mv.from, mv.to);
@@ -282,6 +325,8 @@ export function initUI(){
           // allow continuous AI if ever needed
           maybeTriggerAI();
         }
+      } else {
+        window.AIDebug?.log('[UI] thinkAndPlay: game.move returned not ok for mv=', JSON.stringify(mv));
       }
     } catch (e) {
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));

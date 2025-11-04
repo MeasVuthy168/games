@@ -1,4 +1,4 @@
-// ui.js — Khmer Chess (Play page) + Continuous AI turns (fixed)
+// ui.js — Khmer Chess (Play page) + Continuous AI turns (debugged)
 import { Game, SIZE, COLORS } from './game.js';
 import * as AI from './ai.js';
 const AIPICK = AI.pickAIMove || AI.chooseAIMove;
@@ -28,9 +28,9 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-    // force single-mode AI for now
+    // Force single AI mode for now
     merged.aiEnabled = true;     // AI always on
-    merged.aiLevel   = 'Master'; // only one level
+    merged.aiLevel   = 'Master'; // single level
     merged.aiColor   = 'b';      // AI plays Black
     return merged;
   }catch{
@@ -116,24 +116,43 @@ export function initUI(){
   const settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
+  // Log basic settings into AI debug panel
+  window.AIDebug?.log(
+    '[UI] init — aiEnabled=', String(settings.aiEnabled),
+    'aiColor=', settings.aiColor,
+    'aiLevel=', settings.aiLevel
+  );
+
   let AILock = false;
   function setBoardBusy(on){
     AILock = !!on;
     if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
     document.body.classList.toggle('ai-thinking', !!on);
+    window.AIDebug?.log('[UI] setBoardBusy:', on ? 'ON' : 'OFF');
   }
 
   function isAITurn() {
-    return settings.aiEnabled && (
+    const result = settings.aiEnabled && (
       (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
       (settings.aiColor === 'b' && game.turn === COLORS.BLACK)
     );
+    return result;
   }
 
   function maybeTriggerAI(){
-    if (!AILock && isAITurn()) {
+    const isTurn = isAITurn();
+    window.AIDebug?.log(
+      '[UI] maybeTriggerAI — AILock=', String(AILock),
+      'game.turn=', game.turn,
+      'aiColor=', settings.aiColor,
+      'isAITurn=', String(isTurn)
+    );
+
+    if (!AILock && isTurn) {
       setTimeout(() => {
-        if (!AILock && isAITurn()) thinkAndPlay();
+        const stillAITurn = isAITurn();
+        window.AIDebug?.log('[UI] maybeTriggerAI timeout — stillAITurn=', String(stillAITurn), 'AILock=', String(AILock));
+        if (!AILock && stillAITurn) thinkAndPlay();
       }, 400);
     }
   }
@@ -204,9 +223,18 @@ export function initUI(){
 
   // === AI thinking + move executor ====================================
   async function thinkAndPlay(){
-    // prevent re-entry and only run on AI turn
-    if (AILock || !isAITurn()) return;
+    if (AILock || !isAITurn()) {
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay: skipped — AILock=',
+        String(AILock),
+        'game.turn=', game.turn,
+        'aiColor=', settings.aiColor,
+        'isAITurn=', String(isAITurn())
+      );
+      return;
+    }
 
+    window.AIDebug?.log('[UI] thinkAndPlay: START for side', game.turn);
     setBoardBusy(true);
     try{
       const aiOpts = {
@@ -216,8 +244,10 @@ export function initUI(){
       };
 
       const mv = await Promise.resolve(AIPICK(game, aiOpts));
+      window.AIDebug?.log('[UI] thinkAndPlay: move from AI =', JSON.stringify(mv));
+
       if (!mv) {
-        console.warn('[AI] No move returned');
+        window.AIDebug?.log('[UI] thinkAndPlay: AI returned null move');
         return;
       }
 
@@ -225,9 +255,15 @@ export function initUI(){
       const before   = game.at(mv.to.x, mv.to.y);
       const res      = game.move(mv.from, mv.to);
 
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay: game.move result ok=',
+        String(!!res?.ok),
+        'newTurn=', game.turn
+      );
+
       if (res?.ok) {
         if (beeper.enabled) {
-          if (before) { beeper.capture(); vibrate([20,40,30]); }
+          if (before){ beeper.capture(); vibrate([20,40,30]); }
           else beeper.move();
           if (res.status?.state === 'check') beeper.check();
         }
@@ -237,18 +273,22 @@ export function initUI(){
         saveGameState(game, clocks);
 
         if (res.status?.state === 'checkmate') {
+          window.AIDebug?.log('[UI] thinkAndPlay: checkmate');
           setTimeout(() => alert('អុកស្លាប់! AI ឈ្នះ'), 60);
         } else if (res.status?.state === 'stalemate') {
+          window.AIDebug?.log('[UI] thinkAndPlay: stalemate');
           setTimeout(() => alert('អាប់ — ស្មើជាមួយ AI!'), 60);
         } else {
-          // if later you support AI vs AI, this allows continuous play
+          // allow continuous AI if ever needed
           maybeTriggerAI();
         }
       }
     } catch (e) {
+      window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
       console.error('[AI] thinkAndPlay failed', e);
     } finally {
       setBoardBusy(false);
+      window.AIDebug?.log('[UI] thinkAndPlay: END, game.turn=', game.turn);
     }
   }
   // =====================================================================
@@ -266,10 +306,24 @@ export function initUI(){
     }
   }
 
-  // === UPDATED onCellTap ===============================================
+  // === UPDATED onCellTap with debug ===================================
   function onCellTap(e){
+    const x = +e.currentTarget.dataset.x;
+    const y = +e.currentTarget.dataset.y;
+    const p = game.at(x,y);
+
+    window.AIDebug?.log(
+      '[UI] tap @', x, y,
+      'piece=', p ? (p.c + p.t) : 'empty',
+      'game.turn=', game.turn,
+      'aiColor=', settings.aiColor,
+      'isAITurn=', String(isAITurn()),
+      'AILock=', String(AILock)
+    );
+
     // 1) Never allow user moves while it's AI's turn
     if (isAITurn()) {
+      window.AIDebug?.log('[UI] tap blocked: it is AI turn');
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
@@ -277,17 +331,15 @@ export function initUI(){
 
     // 2) Also block while engine is busy
     if (AILock) {
+      window.AIDebug?.log('[UI] tap blocked: AILock true');
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
     }
 
-    const x = +e.currentTarget.dataset.x;
-    const y = +e.currentTarget.dataset.y;
-    const p = game.at(x,y);
-
     // 3) Disallow selecting AI-colored pieces when AI is enabled
     if (settings.aiEnabled && p && p.c === settings.aiColor){
+      window.AIDebug?.log('[UI] tap blocked: tried to select AI piece');
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
@@ -301,6 +353,7 @@ export function initUI(){
     }
 
     if (!selected){
+      window.AIDebug?.log('[UI] tap: no piece selected and tap not own piece');
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
@@ -308,6 +361,7 @@ export function initUI(){
 
     const ok = legal.some(m => m.x === x && m.y === y);
     if (!ok){
+      window.AIDebug?.log('[UI] tap: target not in legal[] — clearing selection');
       selected = null;
       legal = [];
       clearHints();
@@ -320,6 +374,8 @@ export function initUI(){
     const to     = { x, y };
     const before = game.at(to.x,to.y);
     const prev   = game.turn;
+
+    window.AIDebug?.log('[UI] human move from', JSON.stringify(from), 'to', JSON.stringify(to));
 
     const res = game.move(from,to);
     if (res.ok){
@@ -336,14 +392,20 @@ export function initUI(){
       render();
       saveGameState(game,clocks);
 
+      window.AIDebug?.log('[UI] human move applied, new turn=', game.turn);
+
       if (res.status?.state === 'checkmate'){
+        window.AIDebug?.log('[UI] human caused checkmate');
         alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
       } else if (res.status?.state === 'stalemate'){
+        window.AIDebug?.log('[UI] human caused stalemate');
         alert('អាប់ — ស្មើគ្នា!');
       } else {
         // Let AI respond if it’s now AI’s turn
         maybeTriggerAI();
       }
+    } else {
+      window.AIDebug?.log('[UI] game.move from tap returned not ok');
     }
   }
   // =====================================================================
@@ -354,16 +416,19 @@ export function initUI(){
   const saved=loadGameState();
   if(saved){
     game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
+    window.AIDebug?.log('[UI] loaded saved game — turn=', game.turn);
     render(); clocks.start();
   } else {
+    window.AIDebug?.log('[UI] new game — turn=', game.turn);
     render(); clocks.start();
   }
 
-  // if AI should move first
+  // if AI should move first (in future when AI can be White)
   maybeTriggerAI();
 
   /* -------- controls -------- */
   btnReset?.addEventListener('click', ()=>{
+    window.AIDebug?.log('[UI] RESET pressed');
     game.reset(); selected=null; legal=[]; clearHints();
     clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
@@ -371,9 +436,13 @@ export function initUI(){
   });
 
   btnUndo?.addEventListener('click', ()=>{
+    window.AIDebug?.log('[UI] UNDO pressed');
     if(game.undo()){
       selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      window.AIDebug?.log('[UI] undo ok, new turn=', game.turn);
       maybeTriggerAI();
+    } else {
+      window.AIDebug?.log('[UI] undo failed (no history)');
     }
   });
 

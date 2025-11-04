@@ -1,15 +1,14 @@
-
-// game.js — Khmer Chess (Makruk-style) core engine
+// game.js — Khmer Chess / Ouk (Makruk-style) core engine
 // Exports: SIZE, COLORS, PT, Game, initialPosition, piece, toFen
-// Movement rules implemented:
-// - King (ស្តេច): 1-step any direction; FIRST MOVE ONLY: (±2 files, +1 rank forward), non-capturing, no jump
-// - Neang / Queen (នាង): 1-step diagonals; FIRST MOVE ONLY: straight forward 2, non-capturing, no jump
+// Movement rules implemented (Cambodian rules):
+// - King (ស្តេច): 1-step any direction;
+//   FIRST MOVE ONLY: knight-style leap (±2 files, +1 rank forward), leaping over pieces, can capture.
+// - Neang / Queen (នាង): 1-step diagonals;
+//   FIRST MOVE ONLY: leap straight forward 2 squares (ignores intermediate square), can capture.
 // - Khun / Bishop (ខុន): 1-step diagonals + 1-step straight forward
 // - Rook / Boat (ទូក): sliders orthogonal
 // - Knight / Horse (សេះ): L-jump
-// - Fish / Pawn (ត្រី):
-//      * 1-step forward if empty
-//      * 1-step diagonally forward EVEN IF EMPTY (plus capture diagonally forward)
+// - Fish / Pawn (ត្រី): 1-step forward (no double); capture 1-step diagonally forward
 // Promotion: Fish promotes to Neang when entering last three ranks (White y<=2, Black y>=5)
 
 export const SIZE   = 8;
@@ -100,7 +99,7 @@ export class Game{
     this.winner = null;
   }
 
-  // expose FEN for AI
+  // Expose FEN for AI
   toFEN(){ return toFen(this); }
 
   inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
@@ -130,44 +129,57 @@ export class Game{
     const ray = (dx,dy)=>{
       let nx=x+dx, ny=y+dy;
       while(this.inBounds(nx,ny)){
-        const go = tryAdd(nx,ny,'both');
-        if (!go) break;
+        const t = this.at(nx,ny);
+        if (!t){
+          out.push({x:nx,y:ny});
+        } else {
+          if (t.c !== p.c) out.push({x:nx,y:ny});
+          break;
+        }
         nx+=dx; ny+=dy;
       }
     };
 
     switch(p.t){
-      // KING: 1-step any + special non-capturing first move (±2, +1 forward)
+      // KING: 1-step any + special first-move knight-style leap (±2, +1 forward)
       case PT.KING: {
+        // normal king moves
         for (const dx of [-1,0,1])
           for (const dy of [-1,0,1])
             if (dx||dy) tryAdd(x+dx,y+dy,'both');
 
+        // Cambodian rule: first-move knight leap (forward 1, sideways 2), leaping over pieces, can capture
         if (!p.moved){
           const d = this.pawnDir(p.c);
-          // forward-left 2 files
-          const mx1 = x-1, my1 = y+d;
-          const nx1 = x-2, ny1 = y+d;
-          if (this.inBounds(nx1,ny1) && !this.at(mx1,my1) && !this.at(nx1,ny1))
-            out.push({x:nx1,y:ny1});
-          // forward-right 2 files
-          const mx2 = x+1, my2 = y+d;
-          const nx2 = x+2, ny2 = y+d;
-          if (this.inBounds(nx2,ny2) && !this.at(mx2,my2) && !this.at(nx2,ny2))
-            out.push({x:nx2,y:ny2});
+          const ny = y + d;
+          const leapers = [x - 2, x + 2];
+          for (const nx of leapers){
+            if (!this.inBounds(nx,ny)) continue;
+            const t = this.at(nx,ny);
+            if (!t || t.c !== p.c){
+              out.push({x:nx,y:ny});
+            }
+          }
         }
         break;
       }
 
-      // NEANG (Queen): 1-step diagonals; first move forward 2 non-capturing
+      // NEANG (Queen): 1-step diagonals; first move leap 2 forward (ignore middle, can capture)
       case PT.QUEEN: {
+        // ferz moves
         tryAdd(x-1,y-1,'both'); tryAdd(x+1,y-1,'both');
         tryAdd(x-1,y+1,'both'); tryAdd(x+1,y+1,'both');
+
+        // Cambodian rule: first-move 2-step forward leap
         if (!p.moved){
-          const d=this.pawnDir(p.c);
-          const y1=y+d, y2=y+2*d;
-          if (this.inBounds(x,y2) && !this.at(x,y1) && !this.at(x,y2))
-            out.push({x,y:y2});
+          const d  = this.pawnDir(p.c);
+          const ny = y + 2*d;
+          if (this.inBounds(x,ny)){
+            const t = this.at(x,ny);
+            if (!t || t.c !== p.c){
+              out.push({x, y:ny});
+            }
+          }
         }
         break;
       }
@@ -181,7 +193,9 @@ export class Game{
         break;
       }
 
-      case PT.ROOK:  ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1); break;
+      case PT.ROOK:
+        ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1);
+        break;
 
       case PT.KNIGHT: {
         for (const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]])
@@ -189,30 +203,17 @@ export class Game{
         break;
       }
 
-      // FISH (Pawn) — tuned to align with engine Makruk behaviour:
-      //  - 1 forward if empty
-      //  - 1 diagonally forward even if empty (plus normal capture)
+      // FISH (Pawn): 1 forward (non-capture), diagonals forward capture
       case PT.PAWN: {
         const d = this.pawnDir(p.c);
-
-        // 1) straight forward if empty
-        if (this.inBounds(x, y + d) && !this.at(x, y + d)) {
-          out.push({ x, y: y + d });
-        }
-
-        // 2) diagonal forward:
-        //    - if enemy piece → capture
-        //    - if empty      → quiet diagonal move
-        for (const dx of [-1, 1]) {
-          const nx = x + dx;
-          const ny = y + d;
-          if (!this.inBounds(nx, ny)) continue;
-          const t = this.at(nx, ny);
-
-          // cannot land on own piece
-          if (t && t.c === p.c) continue;
-
-          out.push({ x: nx, y: ny });
+        // forward move if empty
+        if (this.inBounds(x,y+d) && !this.at(x,y+d)) out.push({x,y:y+d});
+        // diagonal captures
+        for (const dx of [-1,1]){
+          const nx=x+dx, ny=y+d;
+          if (!this.inBounds(nx,ny)) continue;
+          const t=this.at(nx,ny);
+          if (t && t.c!==p.c) out.push({x:nx,y:ny});
         }
         break;
       }
@@ -225,63 +226,75 @@ export class Game{
     const p=this.at(x,y); if(!p) return [];
     const A=[];
 
-    const addIfEnemyOrEmpty = (nx,ny,capOnly=false)=>{
+    const add = (nx,ny)=>{
       if(!this.inBounds(nx,ny)) return false;
-      const t=this.at(nx,ny);
-      if (capOnly){
-        // for pawns’ diagonal “threat” squares, we record regardless of occupancy
-        A.push({x:nx,y:ny});
-        return false; // attack square is only that cell; not a ray
-      }
-      if (!t){ A.push({x:nx,y:ny}); return true; }
-      if (t.c!==p.c){ A.push({x:nx,y:ny}); }
-      return false;
+      A.push({x:nx,y:ny});
+      return true;
     };
 
     const ray = (dx,dy)=>{
       let nx=x+dx, ny=y+dy;
       while(this.inBounds(nx,ny)){
-        const t=this.at(nx,ny);
         A.push({x:nx,y:ny});
+        const t=this.at(nx,ny);
         if (t) break;
         nx+=dx; ny+=dy;
       }
     };
 
     switch(p.t){
-      case PT.KING:
+      case PT.KING: {
+        // normal king adjacency
         for (const dx of [-1,0,1])
           for (const dy of [-1,0,1])
-            if (dx||dy) addIfEnemyOrEmpty(x+dx,y+dy);
+            if (dx||dy) add(x+dx,y+dy);
+
+        // include first-move knight-style leap squares as potential attacks
+        if (!p.moved){
+          const d = this.pawnDir(p.c);
+          const ny = y + d;
+          for (const nx of [x-2,x+2]){
+            if (this.inBounds(nx,ny)) A.push({x:nx,y:ny});
+          }
+        }
         break;
+      }
 
       case PT.QUEEN:
-        addIfEnemyOrEmpty(x-1,y-1); addIfEnemyOrEmpty(x+1,y-1);
-        addIfEnemyOrEmpty(x-1,y+1); addIfEnemyOrEmpty(x+1,y+1);
+        // ferz diagonals
+        add(x-1,y-1); add(x+1,y-1);
+        add(x-1,y+1); add(x+1,y+1);
+
+        // include first-move 2-step forward square
+        if (!p.moved){
+          const d  = this.pawnDir(p.c);
+          const ny = y + 2*d;
+          if (this.inBounds(x,ny)) A.push({x, y:ny});
+        }
         break;
 
       case PT.BISHOP: {
         const d=this.pawnDir(p.c);
-        addIfEnemyOrEmpty(x-1,y-1);
-        addIfEnemyOrEmpty(x+1,y-1);
-        addIfEnemyOrEmpty(x-1,y+1);
-        addIfEnemyOrEmpty(x+1,y+1);
-        addIfEnemyOrEmpty(x,  y+d);
+        add(x-1,y-1); add(x+1,y-1);
+        add(x-1,y+1); add(x+1,y+1);
+        add(x,  y+d);
         break;
       }
 
-      case PT.ROOK:  ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1); break;
+      case PT.ROOK:
+        ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1);
+        break;
 
       case PT.KNIGHT:
         for (const [dx,dy] of [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]])
-          addIfEnemyOrEmpty(x+dx,y+dy);
+          add(x+dx,y+dy);
         break;
 
       case PT.PAWN: {
         const d=this.pawnDir(p.c);
-        // attacks (threat) squares: diagonals forward
-        addIfEnemyOrEmpty(x-1, y+d, /*capOnly*/true);
-        addIfEnemyOrEmpty(x+1, y+d, /*capOnly*/true);
+        // pawn attacks: diagonals forward, regardless of occupancy
+        add(x-1, y+d);
+        add(x+1, y+d);
         break;
       }
     }

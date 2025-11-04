@@ -28,9 +28,10 @@ function loadSettings(){
   try{
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-    merged.aiEnabled = true;
-    merged.aiLevel   = 'Master';
-    merged.aiColor   = 'b';
+    // Force single AI mode for now
+    merged.aiEnabled = true;     // AI always on
+    merged.aiLevel   = 'Master'; // single level
+    merged.aiColor   = 'b';      // AI plays Black
     return merged;
   }catch{
     return { ...DEFAULTS, aiEnabled:true, aiLevel:'Master', aiColor:'b' };
@@ -115,6 +116,13 @@ export function initUI(){
   const settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
+  // Log basic settings into AI debug panel
+  window.AIDebug?.log(
+    '[UI] init — aiEnabled=', String(settings.aiEnabled),
+    'aiColor=', settings.aiColor,
+    'aiLevel=', settings.aiLevel
+  );
+
   let AILock = false;
   function setBoardBusy(on){
     AILock = !!on;
@@ -124,18 +132,27 @@ export function initUI(){
   }
 
   function isAITurn() {
-    return settings.aiEnabled && (
+    const result = settings.aiEnabled && (
       (settings.aiColor === 'w' && game.turn === COLORS.WHITE) ||
       (settings.aiColor === 'b' && game.turn === COLORS.BLACK)
     );
+    return result;
   }
 
   function maybeTriggerAI(){
     const isTurn = isAITurn();
-    window.AIDebug?.log('[UI] maybeTriggerAI — AILock=', String(AILock),'game.turn=', game.turn,'aiColor=', settings.aiColor,'isAITurn=', String(isTurn));
+    window.AIDebug?.log(
+      '[UI] maybeTriggerAI — AILock=', String(AILock),
+      'game.turn=', game.turn,
+      'aiColor=', settings.aiColor,
+      'isAITurn=', String(isTurn)
+    );
+
     if (!AILock && isTurn) {
       setTimeout(() => {
-        if (!AILock && isAITurn()) thinkAndPlay();
+        const stillAITurn = isAITurn();
+        window.AIDebug?.log('[UI] maybeTriggerAI timeout — stillAITurn=', String(stillAITurn), 'AILock=', String(AILock));
+        if (!AILock && stillAITurn) thinkAndPlay();
       }, 400);
     }
   }
@@ -229,63 +246,111 @@ export function initUI(){
       return null;
     }
 
-    if (hint && hint.from && hint.to){
-      let fx = hint.from.x, fy = hint.from.y;
-      let tx = hint.to.x, ty = hint.to.y;
+    const tryMatch = (move, label) => {
+      if (!move) return null;
+      window.AIDebug?.log('[UI] adaptAIMove: trying', label, 'candidate =', JSON.stringify(move));
 
-      // --- 🔄 Coordinate translation for Makruk-to-Khmer-Chess board ---
-      const flipY = (y) => 7 - y;
-      fy = flipY(fy);
-      ty = flipY(ty);
-      // ---------------------------------------------------------------
-
-      const translated = { from: {x:fx, y:fy}, to: {x:tx, y:ty} };
-      window.AIDebug?.log('[UI] adaptAIMove: translated AI move =', JSON.stringify(translated));
-
+      // 1) exact
       const exact = legals.find(m =>
-        m.from.x === translated.from.x &&
-        m.from.y === translated.from.y &&
-        m.to.x   === translated.to.x &&
-        m.to.y   === translated.to.y
+        m.from.x === move.from.x &&
+        m.from.y === move.from.y &&
+        m.to.x   === move.to.x   &&
+        m.to.y   === move.to.y
       );
       if (exact){
-        window.AIDebug?.log('[UI] adaptAIMove: exact translated AI move is legal');
+        window.AIDebug?.log('[UI] adaptAIMove:', label, 'exact match is legal');
         return exact;
       }
 
+      // 2) same destination
       const sameTo = legals.filter(m =>
-        m.to.x === translated.to.x && m.to.y === translated.to.y
+        m.to.x === move.to.x && m.to.y === move.to.y
       );
       if (sameTo.length){
-        window.AIDebug?.log('[UI] adaptAIMove: using move with same target square as translated AI move');
+        window.AIDebug?.log('[UI] adaptAIMove:', label, 'using move with same target square');
         return sameTo[0];
       }
 
-      window.AIDebug?.log('[UI] adaptAIMove: translated move not legal, fallback random');
+      window.AIDebug?.log('[UI] adaptAIMove:', label, 'no match');
+      return null;
+    };
+
+    if (hint && hint.from && hint.to){
+      // 🔹 First: try the AI move as-is (no translation)
+      const raw = {
+        from: { x: hint.from.x, y: hint.from.y },
+        to:   { x: hint.to.x,   y: hint.to.y }
+      };
+      const rawMatch = tryMatch(raw, 'raw');
+      if (rawMatch) return rawMatch;
+
+      // 🔹 Second: try a Makruk→Khmer flip on Y as backup
+      const flipY = (y) => 7 - y;
+      const translated = {
+        from: { x: hint.from.x, y: flipY(hint.from.y) },
+        to:   { x: hint.to.x,   y: flipY(hint.to.y) }
+      };
+      window.AIDebug?.log('[UI] adaptAIMove: translated AI move =', JSON.stringify(translated));
+      const transMatch = tryMatch(translated, 'translated');
+      if (transMatch) return transMatch;
+
+      window.AIDebug?.log('[UI] adaptAIMove: neither raw nor translated hint was legal, fallback random');
     } else {
       window.AIDebug?.log('[UI] adaptAIMove: no hint move, picking random legal');
     }
 
+    // random legal fallback
     const mv = legals[(Math.random() * legals.length) | 0];
     return mv;
   }
 
   // === AI thinking + move executor ====================================
   async function thinkAndPlay(){
-    if (AILock || !isAITurn()) return;
+    if (AILock || !isAITurn()) {
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay: skipped — AILock=',
+        String(AILock),
+        'game.turn=', game.turn,
+        'aiColor=', settings.aiColor,
+        'isAITurn=', String(isAITurn())
+      );
+      return;
+    }
 
+    window.AIDebug?.log('[UI] thinkAndPlay: START for side', game.turn);
     setBoardBusy(true);
     try{
-      const aiOpts = { level:settings.aiLevel, aiColor:settings.aiColor, timeMs:120 };
+      const aiOpts = {
+        level:  settings.aiLevel,
+        aiColor: settings.aiColor,
+        timeMs: 120
+      };
+
       const aiHint = await Promise.resolve(AIPICK(game, aiOpts));
       window.AIDebug?.log('[UI] thinkAndPlay: move from AI (hint) =', JSON.stringify(aiHint));
 
+      if (!aiHint) {
+        window.AIDebug?.log('[UI] thinkAndPlay: AI returned null move');
+        return;
+      }
+
+      // ensure we only play a move that is legal for the local rules
       const mv = adaptAIMoveToLegal(aiHint);
-      if (!mv) return;
+      if (!mv){
+        window.AIDebug?.log('[UI] thinkAndPlay: no legal move could be adapted from AI hint');
+        return;
+      }
+      window.AIDebug?.log('[UI] thinkAndPlay: applying move =', JSON.stringify(mv));
 
       const prevTurn = game.turn;
       const before   = game.at(mv.to.x, mv.to.y);
       const res      = game.move(mv.from, mv.to);
+
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay: game.move result ok=',
+        String(!!res?.ok),
+        'newTurn=', game.turn
+      );
 
       if (res?.ok) {
         if (beeper.enabled) {
@@ -293,15 +358,32 @@ export function initUI(){
           else beeper.move();
           if (res.status?.state === 'check') beeper.check();
         }
+
         clocks.switchedByMove(prevTurn);
-        render(); saveGameState(game, clocks);
-        if (res.status?.state==='checkmate') setTimeout(()=>alert('អុកស្លាប់! AI ឈ្នះ'),60);
-        else if (res.status?.state==='stalemate') setTimeout(()=>alert('អាប់ — ស្មើជាមួយ AI!'),60);
-        else maybeTriggerAI();
+        render();
+        saveGameState(game, clocks);
+
+        if (res.status?.state === 'checkmate') {
+          window.AIDebug?.log('[UI] thinkAndPlay: checkmate');
+          setTimeout(() => alert('អុកស្លាប់! AI ឈ្នះ'), 60);
+        } else if (res.status?.state === 'stalemate') {
+          window.AIDebug?.log('[UI] thinkAndPlay: stalemate');
+          setTimeout(() => alert('អាប់ — ស្មើជាមួយ AI!'), 60);
+        } else {
+          maybeTriggerAI();
+        }
+      } else {
+        window.AIDebug?.log('[UI] thinkAndPlay: game.move returned not ok even after adapting mv=', JSON.stringify(mv));
       }
-    } catch(e){ console.error('[AI] thinkAndPlay failed', e); }
-    finally{ setBoardBusy(false); }
+    } catch (e) {
+      window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
+      console.error('[AI] thinkAndPlay failed', e);
+    } finally {
+      setBoardBusy(false);
+      window.AIDebug?.log('[UI] thinkAndPlay: END, game.turn=', game.turn);
+    }
   }
+  // =====================================================================
 
   let selected=null,legal=[];
   const clearHints=()=>{ for(const c of cells)c.classList.remove('selected','hint-move','hint-capture'); };
@@ -316,37 +398,147 @@ export function initUI(){
     }
   }
 
+  // === UPDATED onCellTap with debug (and AI-piece capture allowed) ====
   function onCellTap(e){
-    const x=+e.currentTarget.dataset.x, y=+e.currentTarget.dataset.y, p=game.at(x,y);
-    if (isAITurn()||AILock){ beeper.error(); vibrate(40); return; }
+    const x = +e.currentTarget.dataset.x;
+    const y = +e.currentTarget.dataset.y;
+    const p = game.at(x,y);
 
-    if (p && p.c===game.turn){ selected={x,y}; showHints(x,y); beeper.select(); return; }
-    if (!selected){ beeper.error(); vibrate(40); return; }
+    window.AIDebug?.log(
+      '[UI] tap @', x, y,
+      'piece=', p ? (p.c + p.t) : 'empty',
+      'game.turn=', game.turn,
+      'aiColor=', settings.aiColor,
+      'isAITurn=', String(isAITurn()),
+      'AILock=', String(AILock)
+    );
 
-    const ok=legal.some(m=>m.x===x&&m.y===y);
-    if(!ok){ selected=null; legal=[]; clearHints(); beeper.error(); vibrate(40); return; }
+    // 1) Never allow user moves while it's AI's turn
+    if (isAITurn()) {
+      window.AIDebug?.log('[UI] tap blocked: it is AI turn');
+      if (beeper.enabled) beeper.error();
+      vibrate(40);
+      return;
+    }
 
-    const from={...selected}, to={x,y}, before=game.at(to.x,to.y), prev=game.turn;
-    const res=game.move(from,to);
-    if(res.ok){
-      if(before){beeper.capture();vibrate([20,40,30]);}else beeper.move();
-      if(res.status?.state==='check') beeper.check();
-      clocks.switchedByMove(prev); selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
-      if(res.status?.state==='checkmate') alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
-      else if(res.status?.state==='stalemate') alert('អាប់ — ស្មើគ្នា!');
-      else maybeTriggerAI();
+    // 2) Also block while engine is busy
+    if (AILock) {
+      window.AIDebug?.log('[UI] tap blocked: AILock true');
+      if (beeper.enabled) beeper.error();
+      vibrate(40);
+      return;
+    }
+
+    // ⚠️ We DO NOT block selecting AI-colored squares anymore,
+    // so you can capture AI pieces.
+
+    if (p && p.c === game.turn){
+      selected = {x,y};
+      showHints(x,y);
+      if (beeper.enabled) beeper.select();
+      return;
+    }
+
+    if (!selected){
+      window.AIDebug?.log('[UI] tap: no piece selected and tap not own piece');
+      if (beeper.enabled) beeper.error();
+      vibrate(40);
+      return;
+    }
+
+    const ok = legal.some(m => m.x === x && m.y === y);
+    if (!ok){
+      window.AIDebug?.log('[UI] tap: target not in legal[] — clearing selection');
+      selected = null;
+      legal = [];
+      clearHints();
+      if (beeper.enabled) beeper.error();
+      vibrate(40);
+      return;
+    }
+
+    const from   = { ...selected };
+    const to     = { x, y };
+    const before = game.at(to.x,to.y);
+    const prev   = game.turn;
+
+    window.AIDebug?.log('[UI] human move from', JSON.stringify(from), 'to', JSON.stringify(to));
+
+    const res = game.move(from,to);
+    if (res.ok){
+      if (beeper.enabled){
+        if (before){ beeper.capture(); vibrate([20,40,30]); }
+        else beeper.move();
+        if (res.status?.state === 'check') beeper.check();
+      }
+
+      clocks.switchedByMove(prev);
+      selected = null;
+      legal = [];
+      clearHints();
+      render();
+      saveGameState(game,clocks);
+
+      window.AIDebug?.log('[UI] human move applied, new turn=', game.turn);
+
+      if (res.status?.state === 'checkmate'){
+        window.AIDebug?.log('[UI] human caused checkmate');
+        alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
+      } else if (res.status?.state === 'stalemate'){
+        window.AIDebug?.log('[UI] human caused stalemate');
+        alert('អាប់ — ស្មើគ្នា!');
+      } else {
+        maybeTriggerAI();
+      }
+    } else {
+      window.AIDebug?.log('[UI] game.move from tap returned not ok');
     }
   }
+  // =====================================================================
 
-  for(const c of cells)c.addEventListener('click',onCellTap,{passive:true});
+  for(const c of cells) c.addEventListener('click',onCellTap,{passive:true});
 
+  // resume or fresh start
   const saved=loadGameState();
-  if(saved){ game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[]; render(); clocks.start(); }
-  else { render(); clocks.start(); }
+  if(saved){
+    game.board=saved.board; game.turn=saved.turn; game.history=saved.history||[];
+    window.AIDebug?.log('[UI] loaded saved game — turn=', game.turn);
+    render(); clocks.start();
+  } else {
+    window.AIDebug?.log('[UI] new game — turn=', game.turn);
+    render(); clocks.start();
+  }
+
+  // if AI should move first (in future when AI can be White)
   maybeTriggerAI();
 
-  btnReset?.addEventListener('click', ()=>{ game.reset(); selected=null; legal=[]; clearHints(); clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE); render(); clocks.start(); maybeTriggerAI(); });
-  btnUndo?.addEventListener('click', ()=>{ if(game.undo()){ selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks); maybeTriggerAI(); }});
-  btnPause?.addEventListener('click', ()=>{ const was=clocks.running; clocks.pauseResume(); const i=btnPause?.querySelector('img'), s=btnPause?.querySelector('span'); if(i)i.src=was?'assets/ui/play.png':'assets/ui/pause.png'; if(s)s.textContent=was?'ចាប់ផ្ដើម':'ផ្អាក'; });
-  window.addEventListener('beforeunload', ()=>saveGameState(game,clocks));
+  /* -------- controls -------- */
+  btnReset?.addEventListener('click', ()=>{
+    window.AIDebug?.log('[UI] RESET pressed');
+    game.reset(); selected=null; legal=[]; clearHints();
+    clearGameState(); clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+    render(); clocks.start();
+    maybeTriggerAI();
+  });
+
+  btnUndo?.addEventListener('click', ()=>{
+    window.AIDebug?.log('[UI] UNDO pressed');
+    if(game.undo()){
+      selected=null; legal=[]; clearHints(); render(); saveGameState(game,clocks);
+      window.AIDebug?.log('[UI] undo ok, new turn=', game.turn);
+      maybeTriggerAI();
+    } else {
+      window.AIDebug?.log('[UI] undo failed (no history)');
+    }
+  });
+
+  btnPause?.addEventListener('click', ()=>{
+    const wasRunning = clocks.running;
+    clocks.pauseResume();
+    const i=btnPause?.querySelector('img'); const s=btnPause?.querySelector('span');
+    if(i) i.src = wasRunning ? 'assets/ui/play.png' : 'assets/ui/pause.png';
+    if(s) s.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
+  });
+
+  window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }

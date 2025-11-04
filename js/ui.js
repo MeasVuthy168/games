@@ -373,7 +373,7 @@ export function initUI(){
     }
   }
 
-  // === UPDATED onCellTap with debug ===================================
+  // === UPDATED onCellTap with debug (fixed AI-piece capture) ===========
   function onCellTap(e){
     const x = +e.currentTarget.dataset.x;
     const y = +e.currentTarget.dataset.y;
@@ -404,13 +404,8 @@ export function initUI(){
       return;
     }
 
-    // 3) Disallow selecting AI-colored pieces when AI is enabled
-    if (settings.aiEnabled && p && p.c === settings.aiColor){
-      window.AIDebug?.log('[UI] tap blocked: tried to select AI piece');
-      if (beeper.enabled) beeper.error();
-      vibrate(40);
-      return;
-    }
+    // 💡 IMPORTANT: we NO LONGER block clicks on AI pieces here,
+    // so you can capture them as a destination square.
 
     if (p && p.c === game.turn){
       selected = {x,y};

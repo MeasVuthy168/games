@@ -14,8 +14,9 @@ const SAFE_THREADS = 1;
 const SAFE_HASH    = 32;
 
 // Use Makruk start FEN when the board looks empty/uninitialized
+// This should match your front-end Makruk starting layout.
 const MAKRUK_START_FEN =
-  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBKQBNR w - - 0 1';
+  'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w - - 0 1';
 
 // ===== TEMP DEBUG PANEL =====
 const ENABLE_DEBUG = true;
@@ -102,7 +103,9 @@ function ensureDebugPanel() {
   return document.getElementById('aiDebugLog');
 }
 
-function updateStatus(text, color) {
+// text: status text
+// isWarning: true => orange-ish; false => green-ish
+function updateStatus(text, isWarning = false) {
   let el = document.getElementById('aiStatusLine');
   if (!el) {
     ensureDebugPanel();
@@ -110,8 +113,13 @@ function updateStatus(text, color) {
   }
   if (el) {
     el.textContent = text;
-    el.style.color = color || '#222';
-    el.style.background = color?.includes('⚠️') ? '#fff4e0' : '#f0fff0';
+    if (isWarning) {
+      el.style.color = '#b25900';
+      el.style.background = '#fff4e0';
+    } else {
+      el.style.color = '#0a7a2a';
+      el.style.background = '#f0fff0';
+    }
   }
 }
 
@@ -172,15 +180,15 @@ async function pingBackend(){
     try { j = await r.json(); } catch {}
     logDbg(`PING ${ok ? 'OK' : 'HTTP'+r.status} ->`, JSON.stringify(j));
     if (ok && (j.ok === true || j.status === 'ok')) {
-      updateStatus('✅ Connected to AI server', 'green');
+      updateStatus('✅ Connected to AI server', false);
       return true;
     } else {
-      updateStatus('⚠️ Using offline (random) AI — ping failed', 'orange');
+      updateStatus('⚠️ Using offline (random) AI — ping failed', true);
       return false;
     }
   }catch(e){
     logDbg('PING failed:', e.message || e);
-    updateStatus('⚠️ Using offline (random) AI — network error: ' + e.message, 'orange');
+    updateStatus('⚠️ Using offline (random) AI — network error: ' + e.message, true);
     return false;
   }
 }
@@ -266,7 +274,7 @@ async function callMoveAPI(fen, movetime){
     throw err;
   }
   logDbg(`OK in ${(performance.now()-started|0)}ms →`, json.uci || json.bestmove || '');
-  updateStatus('✅ Connected to AI server', 'green');
+  updateStatus('✅ Connected to AI server', false);
   return mv;
 }
 
@@ -304,11 +312,12 @@ export async function chooseAIMove(game, opts = {}){
         const mv = await callMoveAPI(fen, mt);
         setSpinner(false);
         logDbg('MOVE SELECTED:', JSON.stringify(mv));
-        updateStatus('✅ Connected to AI server', 'green');
+        updateStatus('✅ Connected to AI server', false);
         return mv;
       }catch(err){
         lastErr = err;
-        updateStatus('⚠️ Using offline (random) AI — ' + (err.message || 'error'), 'orange');
+        const msg = err.message || 'error';
+        updateStatus('⚠️ Using offline (random) AI — ' + msg, true);
         const server = (err.serverText||'').toLowerCase();
         const isTimeout = server.includes('engine timeout');
         const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
@@ -320,12 +329,12 @@ export async function chooseAIMove(game, opts = {}){
     }
     setSpinner(false);
     logDbg('All retries failed → local fallback');
-    updateStatus('⚠️ Using offline (random) AI — server unreachable', 'orange');
+    updateStatus('⚠️ Using offline (random) AI — server unreachable', true);
     return pickRandomLegal(game);
   }catch(e){
     setSpinner(false);
     logDbg('Unexpected error:', e.message || e);
-    updateStatus('⚠️ Using offline (random) AI — unexpected error', 'orange');
+    updateStatus('⚠️ Using offline (random) AI — unexpected error', true);
     return pickRandomLegal(game);
   }
 }
@@ -354,11 +363,11 @@ export const pickAIMove = chooseAIMove;
       const j  = ok ? await r.json() : {};
       const dt = (performance.now() - t0) | 0;
       window.AIDebug?.log(`KEEPALIVE ${ok?'OK':'HTTP'+r.status} in ${dt}ms`, JSON.stringify(j));
-      if(ok) window.AIDebug?.status('✅ Connected to AI server', 'green');
-      else window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', 'orange');
+      if(ok) window.AIDebug?.status('✅ Connected to AI server', false);
+      else window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', true);
     }catch(e){
       window.AIDebug?.log('KEEPALIVE FAIL:', e?.message || e);
-      window.AIDebug?.status('⚠️ Using offline (random) AI — network error: ' + e?.message, 'orange');
+      window.AIDebug?.status('⚠️ Using offline (random) AI — network error: ' + (e?.message || 'error'), true);
     }
   }
   setInterval(pingOnce, 20000);

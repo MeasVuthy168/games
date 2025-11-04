@@ -6,7 +6,7 @@
 // - Khun / Bishop (ខុន): 1-step diagonals + 1-step straight forward
 // - Rook / Boat (ទូក): sliders orthogonal
 // - Knight / Horse (សេះ): L-jump
-// - Fish / Pawn (ត្រី): 1-step forward (no double); capture 1-step diagonally forward
+// - Fish / Pawn (ត្រី): 1-step to any forward neighbor (straight or diagonal), capture or non-capture
 // Promotion: Fish promotes to Neang when entering last three ranks (White y<=2, Black y>=5)
 
 export const SIZE   = 8;
@@ -186,15 +186,25 @@ export class Game{
         break;
       }
 
-      // FISH (Pawn): 1 forward (non-capture), diagonals forward capture
+      // FISH (Pawn): 1-step to any forward neighbor (straight or diagonal),
+      // capture or non-capture. This matches backend moves like d6c5 into empty c5.
       case PT.PAWN: {
         const d = this.pawnDir(p.c);
-        if (this.inBounds(x,y+d) && !this.at(x,y+d)) out.push({x,y:y+d});
-        for (const dx of [-1,1]){
-          const nx=x+dx, ny=y+d;
-          if (!this.inBounds(nx,ny)) continue;
-          const t=this.at(nx,ny);
-          if (t && t.c!==p.c) out.push({x:nx,y:ny});
+        const dirs = [
+          { dx:  0, dy: d },  // straight forward
+          { dx: -1, dy: d },  // forward-left
+          { dx:  1, dy: d },  // forward-right
+        ];
+
+        for (const {dx, dy} of dirs) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (!this.inBounds(nx, ny)) continue;
+          const t = this.at(nx, ny);
+          // can move into empty or capture enemy, but never own piece
+          if (!t || t.c !== p.c) {
+            out.push({ x: nx, y: ny });
+          }
         }
         break;
       }
@@ -211,7 +221,7 @@ export class Game{
       if(!this.inBounds(nx,ny)) return false;
       const t=this.at(nx,ny);
       if (capOnly){
-        // for pawns’ diagonal “threat” squares, we record regardless of occupancy
+        // For pawns' "threat" squares we record regardless of occupancy
         A.push({x:nx,y:ny});
         return false; // attack square is only that cell; not a ray
       }
@@ -259,10 +269,13 @@ export class Game{
           addIfEnemyOrEmpty(x+dx,y+dy);
         break;
 
+      // Pawn attacks: treat all three forward neighbors as "attack" squares
+      // (straight + diagonal), to be consistent with pseudoMoves and check detection.
       case PT.PAWN: {
-        const d=this.pawnDir(p.c);
-        addIfEnemyOrEmpty(x-1, y+d, /*capOnly*/true);
-        addIfEnemyOrEmpty(x+1, y+d, /*capOnly*/true);
+        const d = this.pawnDir(p.c);
+        addIfEnemyOrEmpty(x,   y + d, /*capOnly*/true);
+        addIfEnemyOrEmpty(x-1, y + d, /*capOnly*/true);
+        addIfEnemyOrEmpty(x+1, y + d, /*capOnly*/true);
         break;
       }
     }

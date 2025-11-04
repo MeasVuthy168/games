@@ -1,4 +1,4 @@
-// ui.js — Khmer Chess (Play page) + Continuous AI turns (debugged)
+// ui.js — Khmer Chess (Play page) + Continuous AI turns (debugged & AI-move-adapted)
 import { Game, SIZE, COLORS } from './game.js';
 import * as AI from './ai.js';
 const AIPICK = AI.pickAIMove || AI.chooseAIMove;
@@ -221,6 +221,63 @@ export function initUI(){
     applyTurnClass();
   }
 
+  /* ------------ helpers to adapt AI move to local legal moves -------- */
+
+  function collectAllLegalMovesForTurn(){
+    const legals = [];
+    for (let y = 0; y < SIZE; y++){
+      for (let x = 0; x < SIZE; x++){
+        const p = game.at(x,y);
+        if (!p || p.c !== game.turn) continue;
+        const moves = game.legalMoves(x,y);
+        for (const m of moves){
+          legals.push({ from:{x,y}, to:{x:m.x,y:m.y} });
+        }
+      }
+    }
+    window.AIDebug?.log('[UI] collectAllLegalMovesForTurn: count =', String(legals.length));
+    return legals;
+  }
+
+  function adaptAIMoveToLegal(hint){
+    const legals = collectAllLegalMovesForTurn();
+    if (!legals.length){
+      window.AIDebug?.log('[UI] adaptAIMove: no legal moves available');
+      return null;
+    }
+
+    if (hint && hint.from && hint.to){
+      // exact match
+      const exact = legals.find(m =>
+        m.from.x === hint.from.x &&
+        m.from.y === hint.from.y &&
+        m.to.x   === hint.to.x &&
+        m.to.y   === hint.to.y
+      );
+      if (exact){
+        window.AIDebug?.log('[UI] adaptAIMove: exact AI move is legal');
+        return exact;
+      }
+
+      // same target square
+      const sameTo = legals.filter(m =>
+        m.to.x === hint.to.x && m.to.y === hint.to.y
+      );
+      if (sameTo.length){
+        window.AIDebug?.log('[UI] adaptAIMove: using move with same target square as AI hint');
+        return sameTo[0];
+      }
+
+      window.AIDebug?.log('[UI] adaptAIMove: AI hint not legal, falling back to random legal');
+    } else {
+      window.AIDebug?.log('[UI] adaptAIMove: no hint move, picking random legal');
+    }
+
+    // random legal fallback
+    const mv = legals[(Math.random() * legals.length) | 0];
+    return mv;
+  }
+
   // === AI thinking + move executor ====================================
   async function thinkAndPlay(){
     if (AILock || !isAITurn()) {
@@ -243,56 +300,21 @@ export function initUI(){
         timeMs: 120
       };
 
-      const mv = await Promise.resolve(AIPICK(game, aiOpts));
-      window.AIDebug?.log('[UI] thinkAndPlay: move from AI =', JSON.stringify(mv));
+      const aiHint = await Promise.resolve(AIPICK(game, aiOpts));
+      window.AIDebug?.log('[UI] thinkAndPlay: move from AI (hint) =', JSON.stringify(aiHint));
 
-      if (!mv) {
+      if (!aiHint) {
         window.AIDebug?.log('[UI] thinkAndPlay: AI returned null move');
         return;
       }
 
-      // === 🧩 SAFETY: resync local board from FEN before applying AI move ===
-      try {
-        if (typeof game.toFEN === 'function') {
-          const fen = game.toFEN();
-          window.AIDebug?.log('[UI] thinkAndPlay: syncing board from FEN', fen);
-
-          const parts = fen.split(' ');
-          const boardPart = parts[0] || '';
-          const stm = parts[1] || 'w';
-          const ranks = boardPart.split('/');
-
-          const fresh = new Game();
-          // clear board
-          fresh.board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-
-          for (let y = 0; y < 8; y++) {
-            let x = 0;
-            const row = ranks[y] || '';
-            for (const ch of row) {
-              if (/\d/.test(ch)) {
-                x += parseInt(ch, 10);
-              } else {
-                const color = ch === ch.toUpperCase() ? 'w' : 'b';
-                const type = ch.toUpperCase();
-                fresh.set(x, y, { t: type, c: color, moved: true });
-                x++;
-              }
-            }
-          }
-
-          fresh.turn = (stm === 'b') ? COLORS.BLACK : COLORS.WHITE;
-
-          game.board = fresh.board;
-          game.turn  = fresh.turn;
-
-          window.AIDebug?.log('[UI] thinkAndPlay: FEN sync done, game.turn=', game.turn);
-        }
-      } catch (syncErr) {
-        console.warn('[UI] FEN sync failed', syncErr);
-        window.AIDebug?.log('[UI] FEN sync failed:', syncErr?.message || String(syncErr));
+      // 🔧 make sure we only play a move that is legal for the local rules
+      const mv = adaptAIMoveToLegal(aiHint);
+      if (!mv){
+        window.AIDebug?.log('[UI] thinkAndPlay: no legal move could be adapted from AI hint');
+        return;
       }
-      // ==================================================================
+      window.AIDebug?.log('[UI] thinkAndPlay: applying move =', JSON.stringify(mv));
 
       const prevTurn = game.turn;
       const before   = game.at(mv.to.x, mv.to.y);
@@ -326,7 +348,7 @@ export function initUI(){
           maybeTriggerAI();
         }
       } else {
-        window.AIDebug?.log('[UI] thinkAndPlay: game.move returned not ok for mv=', JSON.stringify(mv));
+        window.AIDebug?.log('[UI] thinkAndPlay: game.move returned not ok even after adapting mv=', JSON.stringify(mv));
       }
     } catch (e) {
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));

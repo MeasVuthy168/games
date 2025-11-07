@@ -1,4 +1,4 @@
-// js/ai.js — Remote-first AI with spinner + adaptive retries + TEMP DEBUG PANEL + STATUS LINE
+// js/ai.js — Remote-first AI with spinner + adaptive retries + DEBUG PANEL + STATUS LINE
 
 const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
 const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
@@ -18,7 +18,9 @@ const MAKRUK_START_FEN =
   'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
 
 // ===== TEMP DEBUG PANEL =====
+
 const ENABLE_DEBUG = true;
+
 function ensureDebugPanel() {
   if (!ENABLE_DEBUG) return null;
 
@@ -26,7 +28,8 @@ function ensureDebugPanel() {
   if (!cardBelow) {
     const all = Array.from(document.querySelectorAll('*'));
     cardBelow = all.find(el =>
-      /សន្ទនា|Chat/i.test(el.textContent || '') && el.getBoundingClientRect().height > 40
+      /សន្ទនា|Chat/i.test(el.textContent || '') &&
+      el.getBoundingClientRect().height > 40
     );
   }
 
@@ -90,15 +93,19 @@ function ensureDebugPanel() {
       preEl.style.display = hidden ? 'block' : 'none';
       document.getElementById('aiDbgToggle').textContent = hidden ? 'Hide' : 'Show';
     };
+
     document.getElementById('aiDbgCopy').onclick = async () => {
       try {
-        await navigator.clipboard.writeText(document.getElementById('aiDebugLog').textContent);
+        await navigator.clipboard.writeText(
+          document.getElementById('aiDebugLog').textContent
+        );
         alert('AI debug log copied');
       } catch {
         alert('Copy failed');
       }
     };
   }
+
   return document.getElementById('aiDebugLog');
 }
 
@@ -111,7 +118,9 @@ function updateStatus(text, color) {
   if (el) {
     el.textContent = text;
     el.style.color = color || '#222';
-    el.style.background = color?.includes('⚠️') ? '#fff4e0' : '#f0fff0';
+    el.style.background = (color && color.includes('⚠️'))
+      ? '#fff4e0'
+      : '#f0fff0';
   }
 }
 
@@ -123,16 +132,26 @@ function logDbg(...args) {
   pre.textContent += `\n[${ts}] ${args.join(' ')}`;
   pre.scrollTop = pre.scrollHeight;
 }
+
 function resetDbg() {
   const pre = ensureDebugPanel();
-  if (pre) pre.textContent = `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
+  if (pre) {
+    pre.textContent =
+      `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
+  }
 }
-window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
+
+window.AIDebug = {
+  log: logDbg,
+  reset: resetDbg,
+  status: updateStatus
+};
 
 // ===== Spinner =====
-function ensureSpinner(){
+
+function ensureSpinner() {
   let el = document.getElementById('aiSpinner');
-  if (!el){
+  if (!el) {
     el = document.createElement('div');
     el.id = 'aiSpinner';
     el.style.position = 'absolute';
@@ -142,8 +161,10 @@ function ensureSpinner(){
     el.style.width = '18px';
     el.style.height = '18px';
     el.style.borderRadius = '50%';
-    el.style.boxShadow = '0 0 0 3px rgba(13,45,92,.15) inset, 0 0 0 2px rgba(13,45,92,.15)';
-    el.style.background = 'radial-gradient(circle at 35% 35%, #a3ff8f 0 25%, #7fd95e 26% 60%, #5fb941 61% 100%)';
+    el.style.boxShadow =
+      '0 0 0 3px rgba(13,45,92,.15) inset, 0 0 0 2px rgba(13,45,92,.15)';
+    el.style.background =
+      'radial-gradient(circle at 35% 35%, #a3ff8f 0 25%, #7fd95e 26% 60%, #5fb941 61% 100%)';
     el.style.opacity = '0';
     el.style.pointerEvents = 'none';
     el.style.transition = 'opacity .18s ease';
@@ -152,25 +173,36 @@ function ensureSpinner(){
   }
   return el;
 }
-function setSpinner(on){ ensureSpinner().style.opacity = on ? '1' : '0'; }
+
+function setSpinner(on) {
+  ensureSpinner().style.opacity = on ? '1' : '0';
+}
 
 // ===== Helpers =====
-function withTimeout(promise, ms){
-  return new Promise((resolve, reject)=>{
-    const t = setTimeout(()=>reject(new Error('timeout')), ms);
-    promise.then(v=>{ clearTimeout(t); resolve(v); },
-                 e=>{ clearTimeout(t); reject(e); });
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      v => { clearTimeout(t); resolve(v); },
+      e => { clearTimeout(t); reject(e); }
+    );
   });
 }
-async function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
-async function pingBackend(){
-  try{
-    const r = await withTimeout(fetch(REMOTE_PING, { cache:'no-store' }), 6000);
+async function sleep(ms) {
+  return new Promise(r => setTimeout(r, ms));
+}
+
+async function pingBackend() {
+  try {
+    const r = await withTimeout(fetch(REMOTE_PING, { cache: 'no-store' }), 6000);
     const ok = r.ok;
     let j = {};
-    try { j = await r.json(); } catch {}
-    logDbg(`PING ${ok ? 'OK' : 'HTTP'+r.status} ->`, JSON.stringify(j));
+    try {
+      j = await r.json();
+    } catch {}
+    logDbg(`PING ${ok ? 'OK' : 'HTTP' + r.status} ->`, JSON.stringify(j));
     if (ok && (j.ok === true || j.status === 'ok')) {
       updateStatus('✅ Connected to AI server', 'green');
       return true;
@@ -178,56 +210,68 @@ async function pingBackend(){
       updateStatus('⚠️ Using offline (random) AI — ping failed', 'orange');
       return false;
     }
-  }catch(e){
+  } catch (e) {
     logDbg('PING failed:', e.message || e);
-    updateStatus('⚠️ Using offline (random) AI — network error: ' + e.message, 'orange');
+    updateStatus(
+      '⚠️ Using offline (random) AI — network error: ' + e.message,
+      'orange'
+    );
     return false;
   }
 }
 
-function getFenFromGame(game){
-  try{
+function getFenFromGame(game) {
+  try {
     if (typeof game.toFEN === 'function') return game.toFEN();
     if (typeof game.fen   === 'function') return game.fen();
     if (typeof game.fen   === 'string')   return game.fen;
     if (game.state?.fen)  return game.state.fen;
-  }catch{}
+  } catch {}
   return '8/8/8/8/8/8/8/8 w - - 0 1';
 }
-function isEmptyFen(fen){
-  return typeof fen === 'string' && /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
+
+function isEmptyFen(fen) {
+  return typeof fen === 'string' &&
+    /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
 }
 
-function uciToMoveObj(uci){
+function uciToMoveObj(uci) {
   if (typeof uci !== 'string') return null;
   const m = uci.trim().match(/^([a-h][1-8])([a-h][1-8])([qrbnQRBN])?$/);
   if (!m) return null;
+
   const fx = m[1].charCodeAt(0) - 97;
-  const fy = 8 - (m[1].charCodeAt(1) - 48);
+  const fy = 8 - (m[1].charCodeAt(1) - 48); // '1' -> 7, '8' -> 0
   const tx = m[2].charCodeAt(0) - 97;
   const ty = 8 - (m[2].charCodeAt(1) - 48);
+
   if (((fx | fy | tx | ty) & ~7) !== 0) return null;
-  return { from:{ x:fx, y:fy }, to:{ x:tx, y:ty } };
+
+  return { from: { x: fx, y: fy }, to: { x: tx, y: ty } };
 }
-function extractMoveFromResponse(json){
+
+function extractMoveFromResponse(json) {
   if (!json) return null;
   if (typeof json.uci      === 'string') return uciToMoveObj(json.uci);
   if (typeof json.bestmove === 'string') return uciToMoveObj(json.bestmove);
   if (typeof json.move     === 'string') return uciToMoveObj(json.move);
   if (json.move && json.move.from && json.move.to) return json.move;
-  if (typeof json.raw === 'string'){
+
+  if (typeof json.raw === 'string') {
     const m = json.raw.match(/bestmove\s+([a-h][1-8][a-h][1-8])/i);
     if (m) return uciToMoveObj(m[1]);
   }
+
   return null;
 }
 
-async function callMoveAPI(fen, movetime){
+async function callMoveAPI(fen, movetime) {
   const started = performance.now();
   logDbg(`POST /api/ai/move mt=${movetime} thr=${SAFE_THREADS} hash=${SAFE_HASH}`);
+
   const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
-    method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       fen,
       variant: VARIANT,
@@ -239,53 +283,69 @@ async function callMoveAPI(fen, movetime){
   }), HTTP_TIMEOUT);
 
   const text = await res.text();
-  if (!res.ok){
+  if (!res.ok) {
     logDbg(`HTTP ${res.status}`, text.slice(0, 200));
     const err = new Error(`HTTP ${res.status}`);
     err.serverText = text;
     throw err;
   }
+
   let json = {};
-  try{ json = JSON.parse(text); }
-  catch{
+  try {
+    json = JSON.parse(text);
+  } catch {
     logDbg('Invalid JSON:', text.slice(0, 200));
     const err = new Error('Invalid JSON from server');
     err.serverText = text;
     throw err;
   }
-  if (json && (json.uci === '(none)' || /bestmove\s+\(none\)/i.test(json.raw || '') || json.error === 'no_legal_move')) {
+
+  // --- FIXED: only treat "(none)" / no_legal_move as "no move" ---
+  const raw = json.raw || '';
+  const noMove =
+    raw.includes('bestmove (none)') ||
+    json.uci === '(none)' ||
+    json.error === 'no_legal_move';
+
+  if (noMove) {
     logDbg('Engine reported no legal move:', JSON.stringify(json).slice(0, 200));
     const err = new Error('No move found in response');
     err.serverText = JSON.stringify(json);
     throw err;
   }
+  // ---------------------------------------------------------------
+
   const mv = extractMoveFromResponse(json);
-  if (!mv){
+  if (!mv) {
     logDbg('No move in response:', JSON.stringify(json).slice(0, 200));
     const err = new Error('No move found in response');
     err.serverText = JSON.stringify(json);
     throw err;
   }
-  logDbg(`OK in ${(performance.now()-started|0)}ms →`, json.uci || json.bestmove || '');
+
+  logDbg(`OK in ${(performance.now() - started | 0)}ms →`, json.uci || json.bestmove || '');
   updateStatus('✅ Connected to AI server', 'green');
   return mv;
 }
 
-function pickRandomLegal(game){
-  const legals=[];
-  for(let y=0;y<8;y++){
-    for(let x=0;x<8;x++){
-      const p = game.at?.(x,y);
+function pickRandomLegal(game) {
+  const legals = [];
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const p = game.at?.(x, y);
       if (!p || p.c !== game.turn) continue;
-      const ms = game.legalMoves?.(x,y) || [];
-      for (const m of ms) legals.push({ from:{x,y}, to:{x:m.x,y:m.y} });
+      const ms = game.legalMoves?.(x, y) || [];
+      for (const m of ms) {
+        legals.push({ from: { x, y }, to: { x: m.x, y: m.y } });
+      }
     }
   }
-  return legals.length ? legals[(Math.random()*legals.length)|0] : null;
+  return legals.length ? legals[(Math.random() * legals.length) | 0] : null;
 }
 
 // ===== Public API =====
-export async function chooseAIMove(game, opts = {}){
+
+export async function chooseAIMove(game, opts = {}) {
   resetDbg();
 
   let fen = getFenFromGame(game);
@@ -296,37 +356,68 @@ export async function chooseAIMove(game, opts = {}){
   }
 
   setSpinner(true);
-  try{
+  try {
     const alive = await pingBackend();
-    if (!alive) { logDbg('Ping not OK → warmup 500ms'); await sleep(500); }
+    if (!alive) {
+      logDbg('Ping not OK → warmup 500ms');
+      await sleep(500);
+    }
 
     let lastErr = null;
-    for (let i=0; i< MOVETIME_STEPS.length; i++){
+
+    for (let i = 0; i < MOVETIME_STEPS.length; i++) {
       const mt = MOVETIME_STEPS[i];
-      try{
-        if (i>0) { logDbg('Retry ladder — short pause'); await sleep(350); }
+      try {
+        if (i > 0) {
+          logDbg('Retry ladder — short pause');
+          await sleep(350);
+        }
         const mv = await callMoveAPI(fen, mt);
         setSpinner(false);
         logDbg('MOVE SELECTED:', JSON.stringify(mv));
         updateStatus('✅ Connected to AI server', 'green');
         return mv;
-      }catch(err){
+      } catch (err) {
         lastErr = err;
-        updateStatus('⚠️ Using offline (random) AI — ' + (err.message || 'error'), 'orange');
-        const server = (err.serverText||'').toLowerCase();
+        updateStatus(
+          '⚠️ Using offline (random) AI — ' + (err.message || 'error'),
+          'orange'
+        );
+
+        const server   = (err.serverText || '').toLowerCase();
         const isTimeout = server.includes('engine timeout');
-        const isBusy    = server.includes('noengine') || server.includes('pool') || /503|429/.test(err.message||'');
-        const isNone    = server.includes('bestmove (none)') || server.includes('"uci":"(none)"') || server.includes('no_legal_move');
-        logDbg('Attempt failed:', err.message, ' | server:', (err.serverText||'').slice(0,120));
-        if (isNone) { logDbg('Breaking retry ladder (no legal move).'); break; }
-        if (!isTimeout && !isBusy) { logDbg('Breaking retry ladder (hard error)'); break; }
+        const isBusy    =
+          server.includes('noengine') ||
+          server.includes('pool') ||
+          /503|429/.test(err.message || '');
+        const isNone    =
+          server.includes('bestmove (none)') ||
+          server.includes('"uci":"(none)"') ||
+          server.includes('no_legal_move');
+
+        logDbg(
+          'Attempt failed:',
+          err.message,
+          '| server:',
+          (err.serverText || '').slice(0, 120)
+        );
+
+        if (isNone) {
+          logDbg('Breaking retry ladder (no legal move).');
+          break;
+        }
+        if (!isTimeout && !isBusy) {
+          logDbg('Breaking retry ladder (hard error)');
+          break;
+        }
       }
     }
+
     setSpinner(false);
     logDbg('All retries failed → local fallback');
     updateStatus('⚠️ Using offline (random) AI — server unreachable', 'orange');
     return pickRandomLegal(game);
-  }catch(e){
+  } catch (e) {
     setSpinner(false);
     logDbg('Unexpected error:', e.message || e);
     updateStatus('⚠️ Using offline (random) AI — unexpected error', 'orange');
@@ -334,7 +425,7 @@ export async function chooseAIMove(game, opts = {}){
   }
 }
 
-export function setAIDifficulty(){
+export function setAIDifficulty() {
   return {
     mode: 'Remote+Adaptive+Fallback',
     server: REMOTE_AI_URL,
@@ -345,26 +436,39 @@ export function setAIDifficulty(){
     hash: SAFE_HASH
   };
 }
+
 export const pickAIMove = chooseAIMove;
 
 // === periodic backend liveness probe ===
-(function aiKeepalive(){
+
+(function aiKeepalive() {
   const PING_URL = 'https://ouk-ai-backend.onrender.com/ping';
-  async function pingOnce(){
+
+  async function pingOnce() {
     const t0 = performance.now();
-    try{
-      const r = await fetch(PING_URL, { cache:'no-store' });
+    try {
+      const r = await fetch(PING_URL, { cache: 'no-store' });
       const ok = r.ok;
       const j  = ok ? await r.json() : {};
       const dt = (performance.now() - t0) | 0;
-      window.AIDebug?.log(`KEEPALIVE ${ok?'OK':'HTTP'+r.status} in ${dt}ms`, JSON.stringify(j));
-      if(ok) window.AIDebug?.status('✅ Connected to AI server', 'green');
-      else window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', 'orange');
-    }catch(e){
+      window.AIDebug?.log(
+        `KEEPALIVE ${ok ? 'OK' : 'HTTP' + r.status} in ${dt}ms`,
+        JSON.stringify(j)
+      );
+      if (ok) {
+        window.AIDebug?.status('✅ Connected to AI server', 'green');
+      } else {
+        window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', 'orange');
+      }
+    } catch (e) {
       window.AIDebug?.log('KEEPALIVE FAIL:', e?.message || e);
-      window.AIDebug?.status('⚠️ Using offline (random) AI — network error: ' + e?.message, 'orange');
+      window.AIDebug?.status(
+        '⚠️ Using offline (random) AI — network error: ' + (e?.message || e),
+        'orange'
+      );
     }
   }
+
   setInterval(pingOnce, 20000);
   pingOnce();
 })();

@@ -43,10 +43,9 @@ function emptyRow() {
 // Parse only the board part of a FEN into our board array
 function boardFromFen(fen) {
   const boardPart = fen.trim().split(/\s+/)[0]; // first token
-  const rows = boardPart.split('/');
-  if (rows.length !== 8) {
-    throw new Error('Invalid FEN rows for Makruk');
-  }
+  // 🔄 FIX 1: reverse rows so engine↔UI orientation matches
+  const rows = boardPart.split('/').reverse();
+  if (rows.length !== 8) throw new Error('Invalid FEN rows for Makruk');
 
   const board = Array.from({ length: SIZE }, emptyRow);
 
@@ -74,9 +73,7 @@ function boardFromFen(fen) {
         x++;
       }
     }
-    if (x !== 8) {
-      throw new Error('Invalid FEN row length for Makruk');
-    }
+    if (x !== 8) throw new Error('Invalid FEN row length for Makruk');
   }
   return board;
 }
@@ -84,7 +81,7 @@ function boardFromFen(fen) {
 function pieceLetter(p) {
   switch (p.t) {
     case PT.KING:   return 'K';
-    case PT.QUEEN:  return 'Q'; // Met
+    case PT.QUEEN:  return 'Q';
     case PT.BISHOP: return 'B';
     case PT.ROOK:   return 'R';
     case PT.KNIGHT: return 'N';
@@ -94,7 +91,6 @@ function pieceLetter(p) {
 }
 
 // Convert current position to a Fairy-Stockfish compatible FEN.
-// We ignore castling / en passant / halfmove / fullmove and just use "- - 0 1".
 export function toFen(game) {
   const rows = [];
   for (let y = 0; y < 8; y++) {
@@ -102,21 +98,16 @@ export function toFen(game) {
     let empties = 0;
     for (let x = 0; x < 8; x++) {
       const p = game.at(x, y);
-      if (!p) {
-        empties++;
-        continue;
-      }
-      if (empties) {
-        row += String(empties);
-        empties = 0;
-      }
+      if (!p) { empties++; continue; }
+      if (empties) { row += String(empties); empties = 0; }
       const letter = pieceLetter(p);
       row += (p.c === COLORS.WHITE) ? letter : letter.toLowerCase();
     }
     if (empties) row += String(empties);
     rows.push(row);
   }
-  const boardPart = rows.join('/');
+  // 🔄 FIX 2: reverse rows before join (mirror back for engine)
+  const boardPart = rows.reverse().join('/');
   const stm = game.turn === COLORS.WHITE ? 'w' : 'b';
   return `${boardPart} ${stm} - - 0 1`;
 }
@@ -137,16 +128,15 @@ export class Game {
     this.winner  = null;
   }
 
-  // Expose FEN for the AI
   toFEN() { return toFen(this); }
 
   inBounds(x, y) { return x >= 0 && x < SIZE && y >= 0 && y < SIZE; }
   at(x, y)       { return this.board[y][x]; }
   set(x, y, v)   { this.board[y][x] = v; }
   enemyColor(c)  { return c === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE; }
-  pawnDir(c)     { return c === COLORS.WHITE ? -1 : +1; } // white moves up (toward y=0)
+  pawnDir(c)     { return c === COLORS.WHITE ? -1 : +1; }
 
-  // ---------- Move generators (pseudo-legal) ----------
+  // ---------- Move generators ----------
   pseudoMoves(x, y) {
     const p = this.at(x, y);
     if (!p) return [];
@@ -157,11 +147,11 @@ export class Game {
       const t = this.at(nx, ny);
       if (!t) {
         if (mode !== 'capture') out.push({ x: nx, y: ny });
-        return true; // sliding ray can continue
+        return true;
       } else if (t.c !== p.c) {
         if (mode !== 'move') out.push({ x: nx, y: ny });
       }
-      return false; // blocked
+      return false;
     };
 
     const ray = (dx, dy) => {
@@ -174,57 +164,37 @@ export class Game {
     };
 
     switch (p.t) {
-      case PT.KING: {
-        // 1-step any direction
-        for (const dx of [-1, 0, 1]) {
-          for (const dy of [-1, 0, 1]) {
-            if (dx || dy) tryAdd(x + dx, y + dy, 'both');
-          }
-        }
+      case PT.KING:
+        for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1])
+          if (dx || dy) tryAdd(x + dx, y + dy);
         break;
-      }
 
-      case PT.QUEEN: {
-        // Met: 1-step diagonally
-        tryAdd(x - 1, y - 1, 'both');
-        tryAdd(x + 1, y - 1, 'both');
-        tryAdd(x - 1, y + 1, 'both');
-        tryAdd(x + 1, y + 1, 'both');
+      case PT.QUEEN: // Met
+        for (const dx of [-1, 1]) for (const dy of [-1, 1])
+          tryAdd(x + dx, y + dy);
         break;
-      }
 
-      case PT.BISHOP: {
-        // Khon: 1-step diagonals + 1-step straight forward
+      case PT.BISHOP: { // Khon
         const d = this.pawnDir(p.c);
-        tryAdd(x - 1, y - 1, 'both');
-        tryAdd(x + 1, y - 1, 'both');
-        tryAdd(x - 1, y + 1, 'both');
-        tryAdd(x + 1, y + 1, 'both');
-        tryAdd(x, y + d, 'both');
+        for (const dx of [-1, 1]) for (const dy of [-1, 1])
+          tryAdd(x + dx, y + dy);
+        tryAdd(x, y + d);
         break;
       }
 
-      case PT.ROOK: {
+      case PT.ROOK:
         ray(+1, 0); ray(-1, 0); ray(0, +1); ray(0, -1);
         break;
-      }
 
-      case PT.KNIGHT: {
-        const jumps = [
-          [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2]
-        ];
-        for (const [dx, dy] of jumps) tryAdd(x + dx, y + dy, 'both');
+      case PT.KNIGHT:
+        const jumps = [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]];
+        for (const [dx, dy] of jumps) tryAdd(x + dx, y + dy);
         break;
-      }
 
       case PT.PAWN: {
         const d = this.pawnDir(p.c);
-        // quiet forward move (no double step in Makruk)
-        if (this.inBounds(x, y + d) && !this.at(x, y + d)) {
+        if (this.inBounds(x, y + d) && !this.at(x, y + d))
           out.push({ x, y: y + d });
-        }
-        // captures diagonally forward
         for (const dx of [-1, 1]) {
           const nx = x + dx, ny = y + d;
           if (!this.inBounds(nx, ny)) continue;
@@ -234,12 +204,9 @@ export class Game {
         break;
       }
     }
-
     return out;
   }
 
-  // ATTACK map for checking check / checkmate.
-  // Attack patterns reflect capture squares only.
   attacksFrom(x, y) {
     const p = this.at(x, y);
     if (!p) return [];
@@ -254,197 +221,102 @@ export class Game {
       }
     };
 
-    const addStep = (nx, ny) => {
-      if (this.inBounds(nx, ny)) A.push({ x: nx, y: ny });
-    };
+    const addStep = (nx, ny) => { if (this.inBounds(nx, ny)) A.push({ x: nx, y: ny }); };
 
     switch (p.t) {
       case PT.KING:
-        for (const dx of [-1, 0, 1]) {
-          for (const dy of [-1, 0, 1]) {
-            if (dx || dy) addStep(x + dx, y + dy);
-          }
-        }
+        for (const dx of [-1,0,1]) for (const dy of [-1,0,1])
+          if (dx || dy) addStep(x + dx, y + dy);
         break;
 
       case PT.QUEEN:
-        addStep(x - 1, y - 1); addStep(x + 1, y - 1);
-        addStep(x - 1, y + 1); addStep(x + 1, y + 1);
+        addStep(x-1,y-1); addStep(x+1,y-1); addStep(x-1,y+1); addStep(x+1,y+1);
         break;
 
       case PT.BISHOP: {
         const d = this.pawnDir(p.c);
-        addStep(x - 1, y - 1);
-        addStep(x + 1, y - 1);
-        addStep(x - 1, y + 1);
-        addStep(x + 1, y + 1);
+        addStep(x-1,y-1); addStep(x+1,y-1);
+        addStep(x-1,y+1); addStep(x+1,y+1);
         addStep(x, y + d);
         break;
       }
 
       case PT.ROOK:
-        addRay(+1, 0); addRay(-1, 0); addRay(0, +1); addRay(0, -1);
+        addRay(+1,0); addRay(-1,0); addRay(0,+1); addRay(0,-1);
         break;
 
-      case PT.KNIGHT: {
-        const jumps = [
-          [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2]
-        ];
-        for (const [dx, dy] of jumps) addStep(x + dx, y + dy);
+      case PT.KNIGHT:
+        const jumps = [[1,-2],[2,-1],[2,1],[1,2],[-1,2],[-2,1],[-2,-1],[-1,-2]];
+        for (const [dx,dy] of jumps) addStep(x+dx,y+dy);
         break;
-      }
 
-      case PT.PAWN: {
+      case PT.PAWN:
         const d = this.pawnDir(p.c);
-        addStep(x - 1, y + d);
-        addStep(x + 1, y + d);
+        addStep(x-1,y+d); addStep(x+1,y+d);
         break;
-      }
     }
     return A;
   }
 
-  // ---------- Check / status ----------
-  findKing(color) {
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const p = this.at(x, y);
-        if (p && p.c === color && p.t === PT.KING) return { x, y };
-      }
+  // ---------- Checks, moves, etc ----------
+  findKing(color){for(let y=0;y<8;y++)for(let x=0;x<8;x++){const p=this.at(x,y);if(p&&p.c===color&&p.t===PT.KING)return{x,y}}return null;}
+  squareAttacked(x,y,by){for(let j=0;j<8;j++)for(let i=0;i<8;i++){const p=this.at(i,j);if(!p||p.c!==by)continue;const a=this.attacksFrom(i,j);if(a.some(m=>m.x===x&&m.y===y))return true}return false}
+  inCheck(c){const k=this.findKing(c);if(!k)return false;return this.squareAttacked(k.x,k.y,this.enemyColor(c));}
+
+  _do(from,to){
+    const p=this.at(from.x,from.y);
+    const prevMoved=p.moved, prevType=p.t;
+    const captured=this.at(to.x,to.y)||null;
+    this.set(to.x,to.y,{...p,moved:true});
+    this.set(from.x,from.y,null);
+
+    const now=this.at(to.x,to.y);
+    let promo=false;
+    if(now.t===PT.PAWN){
+      if(now.c===COLORS.WHITE&&to.y<=2){now.t=PT.QUEEN;promo=true;}
+      if(now.c===COLORS.BLACK&&to.y>=5){now.t=PT.QUEEN;promo=true;}
     }
-    return null;
+    return{captured,promo,prevMoved,prevType};
   }
 
-  squareAttacked(x, y, byColor) {
-    for (let j = 0; j < SIZE; j++) {
-      for (let i = 0; i < SIZE; i++) {
-        const p = this.at(i, j);
-        if (!p || p.c !== byColor) continue;
-        const att = this.attacksFrom(i, j);
-        if (att.some(m => m.x === x && m.y === y)) return true;
-      }
-    }
-    return false;
+  _undo(from,to,s){const p=this.at(to.x,to.y);if(s.promo)p.t=s.prevType;this.set(from.x,from.y,{...p,moved:s.prevMoved});this.set(to.x,to.y,s.captured);}
+
+  legalMoves(x,y){
+    const p=this.at(x,y);if(!p)return[];
+    const raw=this.pseudoMoves(x,y);const keep=[];
+    for(const mv of raw){
+      const snap=this._do({x,y},mv);
+      const ok=!this.inCheck(p.c);
+      this._undo({x,y},mv,snap);
+      if(ok)keep.push(mv);
+    }return keep;
   }
 
-  inCheck(color) {
-    const k = this.findKing(color);
-    if (!k) return false;
-    return this.squareAttacked(k.x, k.y, this.enemyColor(color));
+  hasAnyLegalMove(c){for(let y=0;y<8;y++)for(let x=0;x<8;x++){const p=this.at(x,y);if(p&&p.c===c&&this.legalMoves(x,y).length)return true}return false;}
+  status(){const to=this.turn,chk=this.inCheck(to),any=this.hasAnyLegalMove(to);if(any)return{state:chk?'check':'ongoing',inCheck:chk,toMove:to};return{state:chk?'checkmate':'stalemate',inCheck:chk,toMove:to};}
+
+  move(from,to){
+    const p=this.at(from.x,from.y);
+    if(!p)return{ok:false};
+    const isLegal=this.legalMoves(from.x,from.y).some(m=>m.x===to.x&&m.y===to.y);
+    if(!isLegal)return{ok:false};
+    const snap=this._do(from,to);
+    const{captured,promo}=snap;
+    this.history.push({...snap,from,to});
+    this.turn=this.enemyColor(this.turn);
+    const st=this.status();
+    if(st.state==='checkmate')this.winner=this.enemyColor(st.toMove);
+    else if(st.state==='stalemate')this.winner='draw';
+    else this.winner=null;
+    return{ok:true,promo,captured,status:st};
   }
 
-  // ---------- Legal moves (filter out self-check) ----------
-  _do(from, to) {
-    const p = this.at(from.x, from.y);
-    const prevMoved = p.moved;
-    const prevType  = p.t;
-    const captured  = this.at(to.x, to.y) || null;
-
-    // move piece
-    this.set(to.x, to.y, { ...p, moved: true });
-    this.set(from.x, from.y, null);
-
-    // promotion to Met (Queen) in last 3 ranks
-    let promo = false;
-    const now = this.at(to.x, to.y);
-    if (now.t === PT.PAWN) {
-      if (now.c === COLORS.WHITE && to.y <= 2) {
-        now.t = PT.QUEEN; promo = true;
-      }
-      if (now.c === COLORS.BLACK && to.y >= 5) {
-        now.t = PT.QUEEN; promo = true;
-      }
-    }
-
-    return { captured, promo, prevMoved, prevType };
-  }
-
-  _undo(from, to, snap) {
-    const p = this.at(to.x, to.y);
-    if (snap.promo) p.t = snap.prevType;
-    this.set(from.x, from.y, { ...p, moved: snap.prevMoved });
-    this.set(to.x, to.y, snap.captured);
-  }
-
-  legalMoves(x, y) {
-    const p = this.at(x, y);
-    if (!p) return [];
-    const raw = this.pseudoMoves(x, y);
-    const keep = [];
-    for (const mv of raw) {
-      const snap = this._do({ x, y }, mv);
-      const ok = !this.inCheck(p.c);
-      this._undo({ x, y }, mv, snap);
-      if (ok) keep.push(mv);
-    }
-    return keep;
-  }
-
-  hasAnyLegalMove(color) {
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const p = this.at(x, y);
-        if (!p || p.c !== color) continue;
-        if (this.legalMoves(x, y).length) return true;
-      }
-    }
-    return false;
-  }
-
-  status() {
-    const toMove = this.turn;
-    const check  = this.inCheck(toMove);
-    const any    = this.hasAnyLegalMove(toMove);
-    if (any) return { state: check ? 'check' : 'ongoing', inCheck: check, toMove };
-    return { state: check ? 'checkmate' : 'stalemate', inCheck: check, toMove };
-  }
-
-  // ---------- Public make/undo ----------
-  move(from, to) {
-    const p = this.at(from.x, from.y);
-    if (!p) return { ok: false };
-    const isLegal = this.legalMoves(from.x, from.y)
-      .some(m => m.x === to.x && m.y === to.y);
-    if (!isLegal) return { ok: false };
-
-    const snap = this._do(from, to);
-    const { captured, promo } = snap;
-
-    this.history.push({
-      from,
-      to,
-      captured,
-      promo,
-      prevType: snap.prevType,
-      prevMoved: snap.prevMoved
-    });
-
-    this.turn = this.enemyColor(this.turn);
-
-    const st = this.status();
-    if (st.state === 'checkmate') {
-      this.winner = this.enemyColor(st.toMove);
-    } else if (st.state === 'stalemate') {
-      this.winner = 'draw';
-    } else {
-      this.winner = null;
-    }
-
-    return { ok: true, promo, captured, status: st };
-  }
-
-  undo() {
-    const last = this.history.pop();
-    if (!last) return false;
-    this.turn = this.enemyColor(this.turn);
-    this._undo(last.from, last.to, {
-      captured:  last.captured,
-      promo:     last.promo,
-      prevType:  last.prevType,
-      prevMoved: last.prevMoved,
-    });
-    this.winner = null;
+  undo(){
+    const last=this.history.pop();
+    if(!last)return false;
+    this.turn=this.enemyColor(this.turn);
+    this._undo(last.from,last.to,last);
+    this.winner=null;
     return true;
   }
 }

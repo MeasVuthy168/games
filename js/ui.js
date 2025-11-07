@@ -242,7 +242,6 @@ export function initUI() {
     elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
   }
 
-  function setPieceBG(span, p) {
   function setPieceBG(span, p){
   const map = {
     K: 'king',

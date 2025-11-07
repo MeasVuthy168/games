@@ -1,11 +1,12 @@
-// ui.js — Khmer Chess (Play page) — Makruk AI with robust fallback
+// ui.js — Khmer Chess (Play page) — Makruk AI with remote engine + fallback
 
 import { Game, SIZE, COLORS } from './game.js';
 import * as AI from './ai.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
-const LS_KEY   = 'kc_settings_v1';          // settings key
-const SAVE_KEY = 'kc_game_state_makruk_v1'; // game state key
+
+const LS_KEY   = 'kc_settings_v1';          // NEW save key so old buggy states are ignored
+const SAVE_KEY = 'kc_game_state_makruk_v1';
 
 const DEFAULTS = {
   minutes: 10,
@@ -48,12 +49,10 @@ function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-
     // Force Makruk AI vs human
     merged.aiEnabled = true;
     merged.aiLevel   = 'Master';
-    merged.aiColor   = 'b'; // AI = Black
-
+    merged.aiColor   = 'b';    // AI = Black
     return merged;
   } catch {
     return { ...DEFAULTS, aiEnabled: true, aiLevel: 'Master', aiColor: 'b' };
@@ -307,7 +306,7 @@ export function initUI() {
     applyTurnClass();
   }
 
-  /* ====== AI helpers & logic (with fallback) ====== */
+  /* ====== AI helpers & logic (with fallback + debug) ====== */
 
   // Pick a random *legal* move for the given side (for fallback)
   function pickRandomLegalFor(color) {
@@ -341,11 +340,16 @@ export function initUI() {
       };
 
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
-      window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay: AI move (raw) =',
+        JSON.stringify(aiMove)
+      );
 
       // If AI failed to produce any move → disable AI, let human continue both sides
       if (!aiMove || !aiMove.from || !aiMove.to) {
-        window.AIDebug?.log('[UI] AI returned null/invalid move → disabling AI (no fallback)');
+        window.AIDebug?.log(
+          '[UI] AI returned null/invalid move → disabling AI (no fallback)'
+        );
         alert(
           'AI engine could not find a move.\n' +
           'AI play has been stopped. You can continue playing both sides or press Reset.'
@@ -384,7 +388,7 @@ export function initUI() {
 
         const fallback = pickRandomLegalFor(settings.aiColor);
         if (!fallback) {
-          window.AIDebug?.log('[UI] no fallback move available → disabling AI');
+          window.AIDebug?.log('[UI] no fallback move available');
           alert(
             'AI engine suggested an illegal move and no fallback move was found.\n' +
             'AI play has been stopped. You can continue playing both sides or press Reset.'
@@ -392,6 +396,12 @@ export function initUI() {
           settings.aiEnabled = false;
           return;
         }
+
+        // log which fallback move we use
+        window.AIDebug?.log(
+          '[UI] fallback move used:',
+          JSON.stringify(fallback)
+        );
 
         const before2   = game.at(fallback.to.x, fallback.to.y);
         const prevTurn2 = game.turn;
@@ -423,7 +433,7 @@ export function initUI() {
         saveGameState(game, clocks);
 
         if (res2.status?.state === 'checkmate') {
-          alert('អុកស்லាប់! AI ឈ្នះ');
+          alert('អុកស្លាប់! AI ឈ្នះ');
         } else if (res2.status?.state === 'stalemate') {
           alert('អាប់ — ស្មើជាមួយ AI!');
         }
@@ -454,7 +464,10 @@ export function initUI() {
 
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
-      window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
+      window.AIDebug?.log(
+        '[UI] thinkAndPlay ERROR:',
+        e?.message || String(e)
+      );
       alert('AI error occurred. AI play has been stopped.');
       settings.aiEnabled = false;
     } finally {
@@ -577,7 +590,7 @@ export function initUI() {
     clocks.start();
   }
 
-  // AI first move (if AI ever becomes white later)
+  // AI first move (if ever AI=White later)
   if (isAITurn()) thinkAndPlay();
 
   /* -------- controls -------- */
@@ -615,8 +628,6 @@ export function initUI() {
 
   window.addEventListener('beforeunload', () => saveGameState(game, clocks));
 
-  // Expose to main.js / ai-hook.js
-  window.game = game;
   return game;
 }
 

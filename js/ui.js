@@ -410,4 +410,3 @@ export function initUI(){
 
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }
-```0

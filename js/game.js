@@ -1,207 +1,457 @@
-// game.js — True Makruk (Thai Chess) engine compatible with Fairy-Stockfish variant
+// game.js — Makruk engine (front-end) aligned with Fairy-Stockfish “makruk”
+// - Board: 8x8
+// - Start FEN: rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1
+// - Pieces (type letters):
+//     K = King
+//     Q = Met (Makruk queen)      → 1 step diagonally
+//     B = Khon (Makruk bishop)    → 1 step diagonally OR 1 step straight forward
+//     N = Knight
+//     R = Rook
+//     P = Pawn/Fish               → 1 step forward, diagonal capture, no double
+//
+// No castling, no en-passant, promotion when pawn reaches last 3 ranks
+// (this file exposes the same public API as your previous Game class).
 
-export const SIZE = 8;
-export const COLORS = { WHITE: 'w', BLACK: 'b' };
+export const SIZE   = 8;
+export const COLORS = { WHITE:'w', BLACK:'b' };
 
-/*
-Makruk starting layout (top to bottom, black side on top):
+// Canonical Makruk start position used by Fairy-Stockfish (variant=makruk)
+export const START_FEN =
+  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
 
-8 | r n b m k b n r
-7 | p p p p p p p p
-6 | . . . . . . . .
-5 | . . . . . . . .
-4 | . . . . . . . .
-3 | . . . . . . . .
-2 | P P P P P P P P
-1 | R N B M K B N R
+// ---- piece helper ----
+function piece(t, c){
+  return { t, c, moved:false };
+}
 
-Legend:
-K = King
-M = Met (moves 1 step diagonally or forward 1 step)
-B = Bishop (Khon) – moves 1 step diagonally or straight forward/backward
-N = Knight
-R = Rook
-P = Pawn
-*/
+// ---- initial setup from START_FEN (but we also build directly) ----
+export function initialPosition(){
+  const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
 
-const START_FEN = 'rnbmkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBMKBNR w - - 0 1';
+  // Black back rank (top): r n b q k b n r  at y=0
+  board[0][0] = piece('R','b');
+  board[0][1] = piece('N','b');
+  board[0][2] = piece('B','b');
+  board[0][3] = piece('Q','b');   // Met
+  board[0][4] = piece('K','b');
+  board[0][5] = piece('B','b');   // Khon
+  board[0][6] = piece('N','b');
+  board[0][7] = piece('R','b');
 
-export class Game {
-  constructor() {
+  // Rank 1 (y=1) empty for Makruk
+  // Black pawns (Fish) on rank 3 (y=2)
+  for (let x=0; x<SIZE; x++){
+    board[2][x] = piece('P','b');
+  }
+
+  // Ranks 3 & 4 (y=3,4) empty
+  // White pawns on rank 6 (y=5)
+  for (let x=0; x<SIZE; x++){
+    board[5][x] = piece('P','w');
+  }
+
+  // Rank 7 (y=6) empty
+  // White back rank (bottom, y=7): R N B Q K B N R
+  board[7][0] = piece('R','w');
+  board[7][1] = piece('N','w');
+  board[7][2] = piece('B','w');
+  board[7][3] = piece('Q','w');   // Met
+  board[7][4] = piece('K','w');
+  board[7][5] = piece('B','w');   // Khon
+  board[7][6] = piece('N','w');
+  board[7][7] = piece('R','w');
+
+  return board;
+}
+
+/* ---------------------- FEN helpers ---------------------- */
+
+function pieceLetter(p){
+  switch (p.t){
+    case 'K': return 'K';
+    case 'Q': return 'Q';
+    case 'B': return 'B';
+    case 'R': return 'R';
+    case 'N': return 'N';
+    case 'P': return 'P';
+    default:  return 'P';
+  }
+}
+
+// Convert current position to a chess-like FEN string.
+// (castling/en-passant not used in Makruk; we keep “- - 0 1” tail.)
+export function toFEN(game){
+  const rows = [];
+  for (let y = 0; y < 8; y++){
+    let row = '';
+    let empties = 0;
+    for (let x = 0; x < 8; x++){
+      const p = game.at(x,y);
+      if (!p){
+        empties++;
+        continue;
+      }
+      if (empties){
+        row += String(empties);
+        empties = 0;
+      }
+      const letter = pieceLetter(p);
+      row += (p.c === 'w') ? letter : letter.toLowerCase();
+    }
+    if (empties) row += String(empties);
+    rows.push(row);
+  }
+  const boardPart = rows.join('/');
+  const stm = (game.turn === COLORS.WHITE) ? 'w' : 'b';
+  return `${boardPart} ${stm} - - 0 1`;
+}
+
+/* ---------------------- Core engine ---------------------- */
+
+export class Game{
+  constructor(){
     this.reset();
   }
 
-  reset() {
-    this.board = this._fromFEN(START_FEN);
-    this.turn = COLORS.WHITE;
+  reset(){
+    this.board   = initialPosition();
+    this.turn    = COLORS.WHITE;
     this.history = [];
+    this.winner  = null;
   }
 
-  /* ===== FEN Handling ===== */
-  _fromFEN(fen) {
-    const parts = fen.split(/\s+/);
-    const rows = parts[0].split('/');
-    const board = Array(SIZE).fill(null).map(() => Array(SIZE).fill(null));
-
-    for (let y = 0; y < SIZE; y++) {
-      let x = 0;
-      for (const ch of rows[y]) {
-        if (/\d/.test(ch)) {
-          x += parseInt(ch);
-        } else {
-          const color = ch === ch.toLowerCase() ? COLORS.BLACK : COLORS.WHITE;
-          const type = ch.toUpperCase();
-          board[y][x++] = { c: color, t: type, moved: false };
-        }
-      }
-    }
-    return board;
+  // expose FEN for AI
+  toFEN(){
+    return toFEN(this);
   }
 
-  toFEN() {
-    let fen = '';
-    for (let y = 0; y < SIZE; y++) {
-      let empty = 0;
-      for (let x = 0; x < SIZE; x++) {
-        const p = this.board[y][x];
-        if (!p) empty++;
-        else {
-          if (empty) { fen += empty; empty = 0; }
-          fen += p.c === COLORS.WHITE ? p.t : p.t.toLowerCase();
-        }
-      }
-      if (empty) fen += empty;
-      if (y < SIZE - 1) fen += '/';
-    }
-    return `${fen} ${this.turn} - - 0 1`;
-  }
+  inBounds(x,y){ return x>=0 && x<SIZE && y>=0 && y<SIZE; }
+  at(x,y){ return this.board[y][x]; }
+  set(x,y,v){ this.board[y][x] = v; }
 
-  /* ===== Basic accessors ===== */
-  at(x, y) {
-    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return null;
-    return this.board[y][x];
-  }
+  enemyColor(c){ return c === 'w' ? 'b' : 'w'; }
+  pawnDir(c){ return c === 'w' ? -1 : +1; }
 
-  set(x, y, p) {
-    if (x < 0 || x >= SIZE || y < 0 || y >= SIZE) return;
-    this.board[y][x] = p;
-  }
+  /* ---------- Pseudo-legal moves (don’t check self-check) ---------- */
 
-  /* ===== Move logic ===== */
-
-  legalMoves(x, y) {
-    const p = this.at(x, y);
+  pseudoMoves(x,y){
+    const p = this.at(x,y);
     if (!p) return [];
-    const moves = [];
+    const out = [];
 
-    const forward = p.c === COLORS.WHITE ? -1 : 1;
-    const enemy = p.c === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
-
-    const add = (nx, ny) => {
-      if (nx < 0 || nx >= SIZE || ny < 0 || ny >= SIZE) return;
-      const t = this.at(nx, ny);
-      if (!t || t.c !== p.c) moves.push({ x: nx, y: ny });
+    const tryAdd = (nx,ny,mode='both')=>{
+      if (!this.inBounds(nx,ny)) return false;
+      const t = this.at(nx,ny);
+      if (!t){
+        if (mode !== 'capture') out.push({ x:nx, y:ny });
+        return true; // rays can continue
+      } else if (t.c !== p.c){
+        if (mode !== 'move') out.push({ x:nx, y:ny });
+      }
+      return false; // blocked
     };
 
-    switch (p.t) {
-      case 'P': // Pawn
-        if (!this.at(x, y + forward)) add(x, y + forward);
-        const diag = [x - 1, x + 1];
-        for (const dx of diag) {
-          const t = this.at(dx, y + forward);
-          if (t && t.c === enemy) moves.push({ x: dx, y: y + forward });
+    const ray = (dx,dy)=>{
+      let nx = x+dx, ny = y+dy;
+      while (this.inBounds(nx,ny)){
+        const go = tryAdd(nx,ny,'both');
+        if (!go) break;
+        nx += dx; ny += dy;
+      }
+    };
+
+    switch (p.t){
+
+      // KING: 1 step any direction
+      case 'K': {
+        for (let dx=-1; dx<=1; dx++){
+          for (let dy=-1; dy<=1; dy++){
+            if (!dx && !dy) continue;
+            tryAdd(x+dx, y+dy, 'both');
+          }
         }
         break;
+      }
 
-      case 'R': // Rook
-        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-          let nx = x + dx, ny = y + dy;
-          while (nx >= 0 && nx < SIZE && ny >= 0 && ny < SIZE) {
-            const t = this.at(nx, ny);
-            if (!t) moves.push({ x: nx, y: ny });
-            else { if (t.c === enemy) moves.push({ x: nx, y: ny }); break; }
-            nx += dx; ny += dy;
+      // MET / QUEEN: 1 step diagonals only
+      case 'Q': {
+        tryAdd(x-1, y-1, 'both');
+        tryAdd(x+1, y-1, 'both');
+        tryAdd(x-1, y+1, 'both');
+        tryAdd(x+1, y+1, 'both');
+        break;
+      }
+
+      // KHON / BISHOP: 1 step diagonals + 1 step straight forward
+      case 'B': {
+        const d = this.pawnDir(p.c);
+        tryAdd(x-1, y-1, 'both');
+        tryAdd(x+1, y-1, 'both');
+        tryAdd(x-1, y+1, 'both');
+        tryAdd(x+1, y+1, 'both');
+        tryAdd(x,   y+d, 'both'); // straight forward
+        break;
+      }
+
+      // ROOK: sliders orthogonal
+      case 'R':
+        ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1);
+        break;
+
+      // KNIGHT: L jumper
+      case 'N': {
+        const steps = [
+          [ 1,-2],[ 2,-1],[ 2, 1],[ 1, 2],
+          [-1, 2],[-2, 1],[-2,-1],[-1,-2]
+        ];
+        for (const [dx,dy] of steps){
+          tryAdd(x+dx,y+dy,'both');
+        }
+        break;
+      }
+
+      // PAWN / FISH: 1 forward (non-capture), diagonal forward capture
+      case 'P': {
+        const d = this.pawnDir(p.c);
+        // forward quiet
+        const fy = y + d;
+        if (this.inBounds(x,fy) && !this.at(x,fy)){
+          out.push({ x, y:fy });
+        }
+        // diagonal captures
+        for (const dx of [-1, +1]){
+          const nx = x+dx, ny = y+d;
+          if (!this.inBounds(nx,ny)) continue;
+          const t = this.at(nx,ny);
+          if (t && t.c !== p.c){
+            out.push({ x:nx, y:ny });
+          }
+        }
+        break;
+      }
+    }
+
+    return out;
+  }
+
+  /* ---------- Attack map (for check detection) ---------- */
+
+  attacksFrom(x,y){
+    const p = this.at(x,y);
+    if (!p) return [];
+    const A = [];
+
+    const addStep = (nx,ny)=>{
+      if (!this.inBounds(nx,ny)) return;
+      A.push({ x:nx, y:ny });
+    };
+
+    const ray = (dx,dy)=>{
+      let nx = x+dx, ny = y+dy;
+      while (this.inBounds(nx,ny)){
+        A.push({ x:nx, y:ny });
+        if (this.at(nx,ny)) break;
+        nx += dx; ny += dy;
+      }
+    };
+
+    switch (p.t){
+      case 'K':
+        for (let dx=-1; dx<=1; dx++){
+          for (let dy=-1; dy<=1; dy++){
+            if (!dx && !dy) continue;
+            addStep(x+dx,y+dy);
           }
         }
         break;
 
-      case 'N': // Knight
-        for (const [dx, dy] of [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]]) {
-          add(x + dx, y + dy);
-        }
+      case 'Q':
+        addStep(x-1,y-1); addStep(x+1,y-1);
+        addStep(x-1,y+1); addStep(x+1,y+1);
         break;
 
-      case 'B': // Khon — diagonal + orthogonal 1 step
-        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
-          add(x + dx, y + dy);
-        }
+      case 'B': {
+        const d = this.pawnDir(p.c);
+        addStep(x-1,y-1); addStep(x+1,y-1);
+        addStep(x-1,y+1); addStep(x+1,y+1);
+        addStep(x,  y+d);
+        break;
+      }
+
+      case 'R':
+        ray(+1,0); ray(-1,0); ray(0,+1); ray(0,-1);
         break;
 
-      case 'M': // Met — diagonals 1 or straight forward 1
-        for (const [dx, dy] of [[1,1],[-1,1],[1,-1],[-1,-1],[0,forward]]) {
-          add(x + dx, y + dy);
+      case 'N': {
+        const steps = [
+          [ 1,-2],[ 2,-1],[ 2, 1],[ 1, 2],
+          [-1, 2],[-2, 1],[-2,-1],[-1,-2]
+        ];
+        for (const [dx,dy] of steps){
+          addStep(x+dx,y+dy);
         }
         break;
+      }
 
-      case 'K': // King — 1 step any direction
-        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]]) {
-          add(x + dx, y + dy);
-        }
+      case 'P': {
+        const d = this.pawnDir(p.c);
+        addStep(x-1, y+d);
+        addStep(x+1, y+d);
         break;
-    }
-
-    return moves;
-  }
-
-  move(from, to) {
-    const p = this.at(from.x, from.y);
-    if (!p) return { ok: false };
-
-    const legal = this.legalMoves(from.x, from.y)
-      .some(m => m.x === to.x && m.y === to.y);
-
-    if (!legal) return { ok: false };
-
-    const target = this.at(to.x, to.y);
-    this.set(to.x, to.y, { ...p, moved: true });
-    this.set(from.x, from.y, null);
-
-    // promotion: pawn becomes Met when reaching 3rd rank from enemy
-    if (p.t === 'P') {
-      if ((p.c === COLORS.WHITE && to.y === 2) ||
-          (p.c === COLORS.BLACK && to.y === 5)) {
-        this.set(to.x, to.y, { c: p.c, t: 'M', moved: true });
       }
     }
 
-    this.history.push({ from, to, captured: target });
-    this.turn = this.turn === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
-    return { ok: true, status: this.status() };
+    return A;
   }
 
-  undo() {
+  /* ---------- Check / status ---------- */
+
+  findKing(color){
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const p = this.at(x,y);
+        if (p && p.c === color && p.t === 'K'){
+          return { x, y };
+        }
+      }
+    }
+    return null;
+  }
+
+  squareAttacked(x,y,byColor){
+    for (let j=0; j<SIZE; j++){
+      for (let i=0; i<SIZE; i++){
+        const p = this.at(i,j);
+        if (!p || p.c !== byColor) continue;
+        const att = this.attacksFrom(i,j);
+        if (att.some(m => m.x === x && m.y === y)) return true;
+      }
+    }
+    return false;
+  }
+
+  inCheck(color){
+    const k = this.findKing(color);
+    if (!k) return false;
+    return this.squareAttacked(k.x, k.y, this.enemyColor(color));
+  }
+
+  /* ---------- Legal moves (filter self-check) ---------- */
+
+  _do(from,to){
+    const p = this.at(from.x,from.y);
+    const prevMoved = p.moved;
+    const prevType  = p.t;
+    const captured  = this.at(to.x,to.y) || null;
+
+    // move piece
+    this.set(to.x,to.y, { ...p, moved:true });
+    this.set(from.x,from.y, null);
+
+    // promotion: entering last 3 ranks
+    let promo = false;
+    const now = this.at(to.x,to.y);
+    if (now.t === 'P'){
+      if (now.c === 'w' && to.y <= 2){
+        now.t = 'Q'; promo = true;
+      }
+      if (now.c === 'b' && to.y >= 5){
+        now.t = 'Q'; promo = true;
+      }
+    }
+
+    return { captured, promo, prevMoved, prevType };
+  }
+
+  _undo(from,to,snap){
+    const p = this.at(to.x,to.y);
+    if (snap.promo) p.t = snap.prevType;
+    this.set(from.x,from.y, { ...p, moved:snap.prevMoved });
+    this.set(to.x,to.y, snap.captured);
+  }
+
+  legalMoves(x,y){
+    const p = this.at(x,y);
+    if (!p) return [];
+    const raw   = this.pseudoMoves(x,y);
+    const keep  = [];
+
+    for (const mv of raw){
+      const snap = this._do({x,y}, mv);
+      const ok   = !this.inCheck(p.c);
+      this._undo({x,y}, mv, snap);
+      if (ok) keep.push(mv);
+    }
+
+    return keep;
+  }
+
+  hasAnyLegalMove(color){
+    for (let y=0; y<SIZE; y++){
+      for (let x=0; x<SIZE; x++){
+        const p = this.at(x,y);
+        if (!p || p.c !== color) continue;
+        if (this.legalMoves(x,y).length) return true;
+      }
+    }
+    return false;
+  }
+
+  status(){
+    const toMove = this.turn;
+    const check  = this.inCheck(toMove);
+    const any    = this.hasAnyLegalMove(toMove);
+    if (any){
+      return { state: check ? 'check' : 'ongoing', inCheck:check, toMove };
+    }
+    return { state: check ? 'checkmate' : 'stalemate', inCheck:check, toMove };
+  }
+
+  /* ---------- Public move / undo ---------- */
+
+  move(from,to){
+    const p = this.at(from.x,from.y);
+    if (!p) return { ok:false };
+
+    const legal = this.legalMoves(from.x,from.y);
+    const isLegal = legal.some(m => m.x === to.x && m.y === to.y);
+    if (!isLegal) return { ok:false };
+
+    const snap = this._do(from,to);
+    const { captured, promo } = snap;
+
+    this.history.push({
+      from, to, captured, promo,
+      prevType:  snap.prevType,
+      prevMoved: snap.prevMoved
+    });
+
+    this.turn = this.enemyColor(this.turn);
+
+    const st = this.status();
+    if (st.state === 'checkmate'){
+      this.winner = this.enemyColor(st.toMove);
+    } else if (st.state === 'stalemate'){
+      this.winner = 'draw';
+    } else {
+      this.winner = null;
+    }
+
+    return { ok:true, promo, captured, status:st };
+  }
+
+  undo(){
     const last = this.history.pop();
     if (!last) return false;
-    const p = this.at(last.to.x, last.to.y);
-    this.set(last.from.x, last.from.y, p);
-    this.set(last.to.x, last.to.y, last.captured || null);
-    this.turn = this.turn === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
-    return true;
-  }
 
-  status() {
-    // simplified — checks only if opponent's king exists
-    const all = [];
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const p = this.at(x, y);
-        if (p) all.push(p);
-      }
-    }
-    const whiteKing = all.some(p => p.c === COLORS.WHITE && p.t === 'K');
-    const blackKing = all.some(p => p.c === COLORS.BLACK && p.t === 'K');
-    if (!whiteKing) return { state: 'checkmate', winner: COLORS.BLACK };
-    if (!blackKing) return { state: 'checkmate', winner: COLORS.WHITE };
-    return { state: 'playing' };
+    this.turn = this.enemyColor(this.turn);
+    this._undo(last.from, last.to, {
+      captured:  last.captured,
+      promo:     last.promo,
+      prevType:  last.prevType,
+      prevMoved: last.prevMoved
+    });
+    this.winner = null;
+    return true;
   }
 }

@@ -15,8 +15,7 @@ const SAFE_HASH    = 32;
 
 // Use Makruk start FEN when the board looks empty/uninitialized
 const MAKRUK_START_FEN =
-  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
-
+  'rnsmksnr/8/pppppppp/8/8/PPPPPPPP/8/RNSKMSNR w - - 0 1';
 // ===== TEMP DEBUG PANEL =====
 
 const ENABLE_DEBUG = true;

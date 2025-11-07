@@ -3,25 +3,33 @@
 //
 // Rules implemented to match Fairy-Stockfish "makruk":
 // - Board: 8×8, ranks 8→1 from top to bottom.
-// - Back ranks (both sides): R N B Q K B N R
+// - Back ranks (both sides): R N S M K S N R
+//   (Rook, Knight, Khon, Met, King, Khon, Knight, Rook)
 // - Pawns: on ranks 3 (white) and 6 (black), no double step, no en passant.
 // - King: 1 step any direction.
-// - Met (Makruk queen): 1 step diagonally (Ferz-like).
-//   (We encode it as PT.QUEEN / letter Q in FEN, as Fairy-Stockfish does.)
-// - Khon (Makruk bishop): 1 step diagonally + 1 step straight forward.
+// - Met (M/m): 1 step diagonally (Ferz-like).
+// - Khon (S/s): 1 step diagonally + 1 step straight forward.
 // - Rook: sliders orthogonal.
 // - Knight: standard knight jump.
 // - Pawn: 1 forward if empty, capture diagonally forward.
-// - Promotion: Pawn → Met (Q) upon entering last 3 ranks
+// - Promotion: Pawn → Met (M/m) upon entering last 3 ranks
 //   (White: y <= 2, Black: y >= 5).
+//
+// Important: piece letters follow Fairy-Stockfish makruk:
+//   p = pawn
+//   r = rook
+//   n = knight
+//   s = khon
+//   m = met
+//   k = king
 
 export const SIZE   = 8;
 export const COLORS = { WHITE: 'w', BLACK: 'b' };
 
 export const PT = {
   KING:   'K',
-  QUEEN:  'Q',  // Met
-  BISHOP: 'B',  // Khon
+  MET:    'M',  // Met (Makruk "queen")
+  KHON:   'S',  // Khon (Makruk "bishop")
   ROOK:   'R',
   KNIGHT: 'N',
   PAWN:   'P',
@@ -29,9 +37,10 @@ export const PT = {
 
 // Standard Makruk start FEN used by Fairy-Stockfish
 export const MAKRUK_START_FEN =
-  'rnbqkbnr/8/pppppppp/8/8/PPPPPPPP/8/RNBQKBNR w - - 0 1';
+  'rnsmksnr/8/pppppppp/8/8/PPPPPPPP/8/RNSKMSNR w - - 0 1';
 
 // ---------- helpers ----------
+
 export function piece(t, c) {
   return { t, c, moved: false };
 }
@@ -41,9 +50,10 @@ function emptyRow() {
 }
 
 // Parse only the board part of a FEN into our board array
-function boardFromFen(fen) {
+export function boardFromFen(fen) {
   const boardPart = fen.trim().split(/\s+/)[0]; // first token
-  const rows = boardPart.split('/');            // <- NO reverse here
+  const rows = boardPart.split('/');            // 8 ranks, 8 → 1
+
   if (rows.length !== 8) {
     throw new Error('Invalid FEN rows for Makruk');
   }
@@ -53,6 +63,7 @@ function boardFromFen(fen) {
   for (let y = 0; y < 8; y++) {
     const rowStr = rows[y];
     let x = 0;
+
     for (const ch of rowStr) {
       if (/[1-8]/.test(ch)) {
         x += parseInt(ch, 10);
@@ -61,31 +72,59 @@ function boardFromFen(fen) {
         const c = isLower ? COLORS.BLACK : COLORS.WHITE;
         const up = ch.toUpperCase();
         let t;
+
+        // Map letters to our internal piece types.
+        // Primary mapping uses Makruk letters:
+        //   K → KING
+        //   M → MET
+        //   S → KHON
+        //   R → ROOK
+        //   N → KNIGHT
+        //   P → PAWN
+        //
+        // Secondary mapping accepts B/Q as synonyms for S/M
+        // (for compatibility with any old saved games).
         switch (up) {
           case 'K': t = PT.KING;   break;
-          case 'Q': t = PT.QUEEN;  break; // Met
-          case 'B': t = PT.BISHOP; break; // Khon
+          case 'M': t = PT.MET;    break; // Met
+          case 'S': t = PT.KHON;   break; // Khon
           case 'R': t = PT.ROOK;   break;
           case 'N': t = PT.KNIGHT; break;
           case 'P': t = PT.PAWN;   break;
-          default:  t = PT.PAWN;   break;
+
+          case 'Q': t = PT.MET;    break; // accept old Q as Met
+          case 'B': t = PT.KHON;   break; // accept old B as Khon
+
+          default:
+            t = PT.PAWN;           break;
         }
+
         board[y][x] = piece(t, c);
         x++;
       }
     }
+
     if (x !== 8) {
       throw new Error('Invalid FEN row length for Makruk');
     }
   }
+
   return board;
 }
 
 function pieceLetter(p) {
+  // Convert our internal piece type to a FEN letter.
+  // We output pure Makruk letters to match Fairy-Stockfish:
+  //   KING → K
+  //   MET  → M
+  //   KHON → S
+  //   ROOK → R
+  //   KNIGHT → N
+  //   PAWN → P
   switch (p.t) {
     case PT.KING:   return 'K';
-    case PT.QUEEN:  return 'Q'; // Met
-    case PT.BISHOP: return 'B';
+    case PT.MET:    return 'M';
+    case PT.KHON:   return 'S';
     case PT.ROOK:   return 'R';
     case PT.KNIGHT: return 'N';
     case PT.PAWN:   return 'P';
@@ -97,9 +136,11 @@ function pieceLetter(p) {
 // We ignore castling / en passant / halfmove / fullmove and just use "- - 0 1".
 export function toFen(game) {
   const rows = [];
+
   for (let y = 0; y < 8; y++) {
     let row = '';
     let empties = 0;
+
     for (let x = 0; x < 8; x++) {
       const p = game.at(x, y);
       if (!p) {
@@ -111,24 +152,30 @@ export function toFen(game) {
         empties = 0;
       }
       const letter = pieceLetter(p);
-      row += (p.c === COLORS.WHITE) ? letter : letter.toLowerCase();
+      row += p.c === COLORS.WHITE ? letter : letter.toLowerCase();
     }
+
     if (empties) row += String(empties);
     rows.push(row);
   }
-  const boardPart = rows.join('/');    // <- NO reverse here
+
+  const boardPart = rows.join('/');
   const stm = game.turn === COLORS.WHITE ? 'w' : 'b';
   return `${boardPart} ${stm} - - 0 1`;
 }
 
 // ----- Setup -----
+
 export function initialPosition() {
   return boardFromFen(MAKRUK_START_FEN);
 }
 
-// ----- Engine -----
+// ----- Engine core -----
+
 export class Game {
-  constructor() { this.reset(); }
+  constructor() {
+    this.reset();
+  }
 
   reset() {
     this.board   = initialPosition();
@@ -138,15 +185,18 @@ export class Game {
   }
 
   // Expose FEN for the AI
-  toFEN() { return toFen(this); }
+  toFEN() {
+    return toFen(this);
+  }
 
   inBounds(x, y) { return x >= 0 && x < SIZE && y >= 0 && y < SIZE; }
   at(x, y)       { return this.board[y][x]; }
   set(x, y, v)   { this.board[y][x] = v; }
   enemyColor(c)  { return c === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE; }
-  pawnDir(c)     { return c === COLORS.WHITE ? -1 : +1; } // white moves up (toward y=0)
+  pawnDir(c)     { return c === COLORS.WHITE ? -1 : +1; } // white moves up
 
   // ---------- Move generators (pseudo-legal) ----------
+
   pseudoMoves(x, y) {
     const p = this.at(x, y);
     if (!p) return [];
@@ -155,12 +205,14 @@ export class Game {
     const tryAdd = (nx, ny, mode = 'both') => {
       if (!this.inBounds(nx, ny)) return false;
       const t = this.at(nx, ny);
+
       if (!t) {
         if (mode !== 'capture') out.push({ x: nx, y: ny });
         return true; // sliding ray can continue
       } else if (t.c !== p.c) {
         if (mode !== 'move') out.push({ x: nx, y: ny });
       }
+
       return false; // blocked
     };
 
@@ -184,8 +236,8 @@ export class Game {
         break;
       }
 
-      case PT.QUEEN: {
-        // Met: 1-step diagonally
+      case PT.MET: {
+        // Met: 1-step diagonally (Ferz)
         tryAdd(x - 1, y - 1, 'both');
         tryAdd(x + 1, y - 1, 'both');
         tryAdd(x - 1, y + 1, 'both');
@@ -193,28 +245,33 @@ export class Game {
         break;
       }
 
-      case PT.BISHOP: {
+      case PT.KHON: {
         // Khon: 1-step diagonals + 1-step straight forward
         const d = this.pawnDir(p.c);
         tryAdd(x - 1, y - 1, 'both');
         tryAdd(x + 1, y - 1, 'both');
         tryAdd(x - 1, y + 1, 'both');
         tryAdd(x + 1, y + 1, 'both');
-        tryAdd(x, y + d, 'both');
+        tryAdd(x,     y + d, 'both');
         break;
       }
 
       case PT.ROOK: {
-        ray(+1, 0); ray(-1, 0); ray(0, +1); ray(0, -1);
+        ray(+1, 0);
+        ray(-1, 0);
+        ray(0, +1);
+        ray(0, -1);
         break;
       }
 
       case PT.KNIGHT: {
         const jumps = [
           [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2]
+          [-1, 2], [-2, 1], [-2, -1], [-1, -2],
         ];
-        for (const [dx, dy] of jumps) tryAdd(x + dx, y + dy, 'both');
+        for (const [dx, dy] of jumps) {
+          tryAdd(x + dx, y + dy, 'both');
+        }
         break;
       }
 
@@ -226,7 +283,8 @@ export class Game {
         }
         // captures diagonally forward
         for (const dx of [-1, 1]) {
-          const nx = x + dx, ny = y + d;
+          const nx = x + dx;
+          const ny = y + d;
           if (!this.inBounds(nx, ny)) continue;
           const t = this.at(nx, ny);
           if (t && t.c !== p.c) out.push({ x: nx, y: ny });
@@ -267,27 +325,34 @@ export class Game {
         }
         break;
 
-      case PT.QUEEN:
-        addStep(x - 1, y - 1); addStep(x + 1, y - 1);
-        addStep(x - 1, y + 1); addStep(x + 1, y + 1);
+      case PT.MET:
+        addStep(x - 1, y - 1);
+        addStep(x + 1, y - 1);
+        addStep(x - 1, y + 1);
+        addStep(x + 1, y + 1);
         break;
 
-      case PT.BISHOP: {
+      case PT.KHON: {
         const d = this.pawnDir(p.c);
-        addStep(x - 1, y - 1); addStep(x + 1, y - 1);
-        addStep(x - 1, y + 1); addStep(x + 1, y + 1);
-        addStep(x, y + d);
+        addStep(x - 1, y - 1);
+        addStep(x + 1, y - 1);
+        addStep(x - 1, y + 1);
+        addStep(x + 1, y + 1);
+        addStep(x,     y + d);
         break;
       }
 
       case PT.ROOK:
-        addRay(+1, 0); addRay(-1, 0); addRay(0, +1); addRay(0, -1);
+        addRay(+1, 0);
+        addRay(-1, 0);
+        addRay(0, +1);
+        addRay(0, -1);
         break;
 
       case PT.KNIGHT: {
         const jumps = [
           [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2]
+          [-1, 2], [-2, 1], [-2, -1], [-1, -2],
         ];
         for (const [dx, dy] of jumps) addStep(x + dx, y + dy);
         break;
@@ -300,10 +365,12 @@ export class Game {
         break;
       }
     }
+
     return A;
   }
 
   // ---------- Check / status ----------
+
   findKing(color) {
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
@@ -333,6 +400,7 @@ export class Game {
   }
 
   // ---------- Legal moves (filter out self-check) ----------
+
   _do(from, to) {
     const p = this.at(from.x, from.y);
     const prevMoved = p.moved;
@@ -343,15 +411,15 @@ export class Game {
     this.set(to.x, to.y, { ...p, moved: true });
     this.set(from.x, from.y, null);
 
-    // promotion to Met (Queen) in last 3 ranks
+    // promotion to Met (M) in last 3 ranks
     let promo = false;
     const now = this.at(to.x, to.y);
     if (now.t === PT.PAWN) {
       if (now.c === COLORS.WHITE && to.y <= 2) {
-        now.t = PT.QUEEN; promo = true;
+        now.t = PT.MET; promo = true;
       }
       if (now.c === COLORS.BLACK && to.y >= 5) {
-        now.t = PT.QUEEN; promo = true;
+        now.t = PT.MET; promo = true;
       }
     }
 
@@ -370,12 +438,14 @@ export class Game {
     if (!p) return [];
     const raw = this.pseudoMoves(x, y);
     const keep = [];
+
     for (const mv of raw) {
       const snap = this._do({ x, y }, mv);
       const ok = !this.inCheck(p.c);
       this._undo({ x, y }, mv, snap);
       if (ok) keep.push(mv);
     }
+
     return keep;
   }
 
@@ -394,16 +464,28 @@ export class Game {
     const toMove = this.turn;
     const check  = this.inCheck(toMove);
     const any    = this.hasAnyLegalMove(toMove);
-    if (any) return { state: check ? 'check' : 'ongoing', inCheck: check, toMove };
-    return { state: check ? 'checkmate' : 'stalemate', inCheck: check, toMove };
+
+    if (any) {
+      return { state: check ? 'check' : 'ongoing', inCheck: check, toMove };
+    }
+
+    return {
+      state: check ? 'checkmate' : 'stalemate',
+      inCheck: check,
+      toMove,
+    };
   }
 
   // ---------- Public make/undo ----------
+
   move(from, to) {
     const p = this.at(from.x, from.y);
     if (!p) return { ok: false };
-    const isLegal = this.legalMoves(from.x, from.y)
+
+    const isLegal = this
+      .legalMoves(from.x, from.y)
       .some(m => m.x === to.x && m.y === to.y);
+
     if (!isLegal) return { ok: false };
 
     const snap = this._do(from, to);
@@ -414,8 +496,8 @@ export class Game {
       to,
       captured,
       promo,
-      prevType: snap.prevType,
-      prevMoved: snap.prevMoved
+      prevType:  snap.prevType,
+      prevMoved: snap.prevMoved,
     });
 
     this.turn = this.enemyColor(this.turn);
@@ -435,6 +517,7 @@ export class Game {
   undo() {
     const last = this.history.pop();
     if (!last) return false;
+
     this.turn = this.enemyColor(this.turn);
     this._undo(last.from, last.to, {
       captured:  last.captured,
@@ -442,6 +525,7 @@ export class Game {
       prevType:  last.prevType,
       prevMoved: last.prevMoved,
     });
+
     this.winner = null;
     return true;
   }

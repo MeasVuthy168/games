@@ -243,18 +243,21 @@ export function initUI() {
   }
 
   function setPieceBG(span, p) {
-    const map = {
-      K: 'king',
-      Q: 'queen',
-      B: 'bishop',
-      R: 'rook',
-      N: 'knight',
-      P: 'pawn'
-    };
-    const key = map[p.t] || 'pawn';
-    const name = `${p.c === 'w' ? 'w' : 'b'}-${key}.png`;
-    span.style.backgroundImage = `url(./assets/pieces/${name})`;
-  }
+  function setPieceBG(span, p){
+  const map = {
+    K: 'king',
+    Q: 'queen',  // legacy
+    M: 'queen',  // Met uses queen sprite
+    B: 'bishop', // legacy
+    S: 'bishop', // Khon uses bishop sprite
+    R: 'rook',
+    N: 'knight',
+    P: 'pawn',
+  };
+  const key  = map[p.t] || 'pawn';
+  const name = `${p.c === 'w' ? 'w' : 'b'}-${key}.png`;
+  span.style.backgroundImage = `url(./assets/pieces/${name})`;
+}
 
   function khTurnLabel() {
     const side = game.turn === COLORS.WHITE ? KH.white : KH.black;

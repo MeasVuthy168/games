@@ -4,7 +4,8 @@ import * as AI from './ai.js';
 const AIPICK = AI.pickAIMove || AI.chooseAIMove;
 
 const LS_KEY   = 'kc_settings_v1';
-const SAVE_KEY = 'kc_game_state_v2';
+// NEW save key so old buggy states are ignored
+const SAVE_KEY = 'kc_game_state_makruk_v1';
 const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
 
 /* ---------------- storage ---------------- */
@@ -226,7 +227,7 @@ export function initUI(){
     return null;
   }
 
-    async function thinkAndPlay(){
+  async function thinkAndPlay(){
     if (AILock || !isAITurn()) return;
     setBoardBusy(true);
     try{
@@ -409,3 +410,4 @@ export function initUI(){
 
   window.addEventListener('beforeunload', ()=> saveGameState(game,clocks));
 }
+```0

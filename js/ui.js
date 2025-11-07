@@ -226,97 +226,71 @@ export function initUI(){
     return null;
   }
 
-  async function thinkAndPlay(){
+    async function thinkAndPlay(){
     if (AILock || !isAITurn()) return;
     setBoardBusy(true);
     try{
       const aiOpts = { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
-      const aiHint = await Promise.resolve(AIPICK(game, aiOpts));
-      window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiHint));
+      const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
 
-      if (!aiHint || !aiHint.from || !aiHint.to){
-        window.AIDebug?.log('[UI] AI returned null or invalid move');
+      window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
+
+      // If AI failed to produce any move → disable AI, let human continue both sides
+      if (!aiMove || !aiMove.from || !aiMove.to){
+        window.AIDebug?.log('[UI] AI returned null/invalid move → disabling AI (no fallback)');
+        alert('AI engine could not find a move.\nAI play has been stopped. You can continue playing both sides or press Reset.');
+        settings.aiEnabled = false;  // so isAITurn() will be false from now on
         return;
       }
 
-      let from = { x: aiHint.from.x, y: aiHint.from.y };
-      const to = { x: aiHint.to.x,   y: aiHint.to.y   };
+      const from = { x: aiMove.from.x, y: aiMove.from.y };
+      const to   = { x: aiMove.to.x,   y: aiMove.to.y   };
 
-      // Board bounds safety
+      // board bounds safety
       if (from.x<0 || from.x>=SIZE || from.y<0 || from.y>=SIZE ||
           to.x<0   || to.x>=SIZE   || to.y<0   || to.y>=SIZE) {
-        window.AIDebug?.log('[UI] AI move outside board, ignoring');
+        window.AIDebug?.log('[UI] AI move outside board → disabling AI');
+        alert('AI engine produced an off-board move.\nAI play has been stopped.');
+        settings.aiEnabled = false;
         return;
       }
 
-      let piece = game.at(from.x, from.y);
-      const before = game.at(to.x, to.y);
       const prevTurn = game.turn;
+      const before   = game.at(to.x,to.y);
 
-      // Case 1: no piece at the engine's from-square → try to salvage
-      if (!piece){
-        window.AIDebug?.log('[UI] No piece at engine from-square, trying to locate substitute');
-        const legalSource = findLegalSourceFor(to.x, to.y);
-        if (legalSource){
-          from = legalSource;
-          piece = game.at(from.x, from.y);
-          window.AIDebug?.log('[UI] Using substitute source', JSON.stringify(from), 'for target', JSON.stringify(to));
-        } else {
-          window.AIDebug?.log('[UI] No legal source found; will later teleport some AI piece');
-        }
+      const res = game.move(from, to);
+
+      if (!res || !res.ok){
+        // Engine move not legal under our local Makruk rules (should be rare now).
+        window.AIDebug?.log('[UI] game.move rejected for engine move → disabling AI (no fallback)');
+        alert('AI engine suggested a move that is illegal in the local Makruk rules.\nAI play has been stopped. You can finish the game manually or reset.');
+        settings.aiEnabled = false;
+        return;
       }
 
-      let res = { ok:false, status:null };
-
-      if (piece){
-        // Try normal move according to local rules
-        res = game.move(from, to);
-        if (!res.ok){
-          window.AIDebug?.log('[UI] game.move rejected — forcing teleport from', JSON.stringify(from), 'to', JSON.stringify(to));
-          // Force teleport this piece
-          game.set(to.x, to.y, { ...piece, moved:true });
-          game.set(from.x, from.y, null);
-          // flip turn manually
-          game.turn = game.enemyColor(game.turn);
-          res = { ok:true, status: game.status() };
-        }
-      } else {
-        // No piece at from AND no legal source found → teleport some AI piece anyway
-        const anySrc = findAnyAIPiece();
-        if (anySrc){
-          const anyPiece = game.at(anySrc.x, anySrc.y);
-          window.AIDebug?.log('[UI] Teleporting arbitrary AI piece from', JSON.stringify(anySrc), 'to', JSON.stringify(to));
-          game.set(to.x, to.y, { ...anyPiece, moved:true });
-          game.set(anySrc.x, anySrc.y, null);
-          game.turn = game.enemyColor(game.turn);
-          res = { ok:true, status: game.status() };
-        } else {
-          window.AIDebug?.log('[UI] No AI pieces found at all — nothing to move');
-          res = { ok:false };
-        }
+      // SFX
+      if (beeper.enabled){
+        if (before){ beeper.capture(); vibrate([20,40,30]); }
+        else beeper.move();
+        if (res.status?.state === 'check') beeper.check();
       }
 
-      if (res.ok){
-        if (beeper.enabled){
-          if (before){ beeper.capture(); vibrate([20,40,30]); }
-          else beeper.move();
-          if (res.status?.state === 'check') beeper.check();
-        }
+      // clocks + UI
+      clocks.switchedByMove(prevTurn);
+      render();
+      saveGameState(game, clocks);
 
-        clocks.switchedByMove(prevTurn);
-        render();
-        saveGameState(game, clocks);
-
-        if (res.status?.state === 'checkmate'){
-          alert('អុកស្លាប់! AI ឈ្នះ');
-        } else if (res.status?.state === 'stalemate'){
-          alert('អាប់ — ស្មើជាមួយ AI!');
-        }
+      if (res.status?.state === 'checkmate'){
+        alert('អុកស្លាប់! AI ឈ្នះ');
+      } else if (res.status?.state === 'stalemate'){
+        alert('អាប់ — ស្មើជាមួយ AI!');
       }
 
     }catch(e){
       console.error('[AI] thinkAndPlay failed', e);
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
+      alert('AI error occurred. AI play has been stopped.');
+      settings.aiEnabled = false;
     }finally{
       setBoardBusy(false);
       window.AIDebug?.log('[UI] thinkAndPlay END turn=', game.turn);

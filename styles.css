@@ -474,10 +474,10 @@ body.ai-thinking #board{
   align-items:center;
   justify-content:center;
 
-  /* 🔽 main changes */
-  background: rgba(255, 255, 255, 0.15);           /* less white, more transparent */
-  backdrop-filter: blur(2px) brightness(0.95);     /* mild blur, keep board visible */
-  -webkit-backdrop-filter: blur(2px) brightness(0.95);
+  /* softened overlay */
+  background:rgba(255,255,255,.18);
+  backdrop-filter:blur(3px) brightness(.95);
+  -webkit-backdrop-filter:blur(3px) brightness(.95);
 
   z-index:9999;
 }
@@ -487,16 +487,23 @@ body.ai-thinking #board{
   align-items:center;
   gap:.5rem;
 
-  background: rgba(255,255,255,0.88);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  /* slightly translucent “glass” card */
+  background:rgba(255,255,255,.88);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
 
   padding:.9rem 1.1rem;
   border-radius:.9rem;
   box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
-.ai-dot{ width:16px; height:16px; border-radius:50%;
-  border:3px solid #0d2d5c; border-top-color:transparent; animation:ai-spin .9s linear infinite; box-sizing:border-box;
+.ai-dot{
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  border:3px solid #0d2d5c;
+  border-top-color:transparent;
+  animation:ai-spin .9s linear infinite;
+  box-sizing:border-box;
 }
 .ai-text{ font-weight:700; color:#0d2d5c }
 @keyframes ai-spin{ to{ transform:rotate(360deg) } }

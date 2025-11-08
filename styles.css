@@ -317,9 +317,9 @@ body.ai-thinking #board{
   justify-content:center;
 
   /* more visible but still soft */
-  background:rgba(0,0,0,.30);
-  backdrop-filter:blur(1px);
-  -webkit-backdrop-filter:blur(1px);
+  background:rgba(0,0,0,.15);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
 
   z-index:9999;
 }

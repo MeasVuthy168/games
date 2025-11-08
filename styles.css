@@ -468,11 +468,32 @@ body.ai-thinking #board{
 
 /* ===== AI overlay & turn blocking ===== */
 #aiBusy{
-  position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-  background:rgba(255,255,255,.55); backdrop-filter:blur(2px); z-index:9999;
+  position:fixed;
+  inset:0;
+  display:none;
+  align-items:center;
+  justify-content:center;
+
+  /* 🔽 main changes */
+  background: rgba(255, 255, 255, 0.15);           /* less white, more transparent */
+  backdrop-filter: blur(2px) brightness(0.95);     /* mild blur, keep board visible */
+  -webkit-backdrop-filter: blur(2px) brightness(0.95);
+
+  z-index:9999;
 }
-.ai-spinner{ display:flex; flex-direction:column; align-items:center; gap:.5rem;
-  background:#fff; padding:.9rem 1.1rem; border-radius:.9rem; box-shadow:0 8px 24px rgba(0,0,0,.18);
+.ai-spinner{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:.5rem;
+
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+
+  padding:.9rem 1.1rem;
+  border-radius:.9rem;
+  box-shadow:0 8px 24px rgba(0,0,0,.18);
 }
 .ai-dot{ width:16px; height:16px; border-radius:50%;
   border:3px solid #0d2d5c; border-top-color:transparent; animation:ai-spin .9s linear infinite; box-sizing:border-box;

@@ -331,7 +331,7 @@ body.ai-thinking #board{
 
 .ai-spinner{
   /* push it down to sit around the Black name + clock area */
-  margin-top:90px;   /* tweak 70–110px depending on your layout */
+  margin-top:70px;   /* tweak 70–110px depending on your layout */
 
   display:flex;
   flex-direction:column;
@@ -349,7 +349,7 @@ body.ai-thinking #board{
 
 .ai-dot{
   width:16px;
-  height:10px;
+  height:16px;
   border-radius:50%;
   border:3px solid #0d2d5c;
   border-top-color:transparent;

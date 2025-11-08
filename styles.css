@@ -308,164 +308,6 @@ body.ai-thinking #board{
 .nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 
-/* ===== Responsive ===== */
-@media (min-width:720px){
-  .card,.exp,.profile-bar{ width:min(700px,100%) }
-}
-@media(max-width:920px){
-  .layout{ grid-template-columns:1fr }
-}
-
-/* ===== Dark theme ===== */
-:root[data-theme="dark"]{ --ink:#e6f0ff }
-:root[data-theme="dark"] .card,
-:root[data-theme="dark"] .exp,
-:root[data-theme="dark"] .profile-bar{ background:#11192a; border-color:#22304a }
-:root[data-theme="dark"] .card-title{ color:var(--ink) }
-:root[data-theme="dark"] .card-sub{ color:rgba(230,240,255,.75) }
-
-/* ===== Orientation blocker ===== */
-.orientation-blocker{
-  position:fixed; inset:0; z-index:9999; display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.65); color:#fff; text-align:center;
-}
-.orientation-blocker .ob-card{
-  background:#0d2d5c; color:#fff; padding:18px 22px;
-  border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,.3);
-  font-weight:800; text-align:center;
-}
-.orientation-blocker .ob-card small{ display:block; font-weight:600; opacity:.85; margin-top:6px }
-
-/* ===================== Settings Page + Cards ===================== */
-.settings-page{ padding:12px 0 90px 0 }
-.profile-bar{ display:flex; align-items:center; gap:14px; padding:14px }
-.avatar,
-.avatar-s{
-  width:96px; height:96px; border-radius:50%;
-  object-fit:cover; border:3px solid #fff;
-  box-shadow:0 6px 20px rgba(0,0,0,.12); background:#f1f5f9;
-}
-.profile-meta{ display:flex; flex-direction:column; gap:4px }
-.profile-name{ font-weight:800; font-size:1.15rem }
-.profile-sub{ opacity:.8 }
-
-.card{
-  background:#fff; border:1px solid #e9eef5;
-  border-radius:14px; box-shadow:var(--shadow);
-  padding:12px 14px;
-  display:flex; align-items:center; justify-content:space-between;
-  gap:12px;
-}
-.card-full{ width:min(720px, 96vw); margin:0 auto; }
-.card-list{ padding:12px; display:grid; gap:12px }
-.card-left{ display:flex; flex-direction:column; gap:4px; min-width:0 }
-.card-right{ color:#94a3b8; font-weight:800; user-select:none }
-.card-title{ font-weight:800; font-size:1.02rem; color:#0f172a }
-.card-sub{ font-size:.92rem; opacity:.75 }
-.card.clickable{ cursor:pointer }
-.card.disabled{ opacity:.55; pointer-events:none }
-
-/* Expanders */
-.exp{ padding:0 }
-.exp > summary{
-  list-style:none; cursor:pointer; display:flex; align-items:center;
-  justify-content:space-between; gap:12px; padding:12px 14px;
-}
-.exp > summary::-webkit-details-marker{ display:none }
-.exp > .card-body{
-  padding:12px 14px 14px 14px; display:grid; gap:10px; border-top:1px solid #eef2f7;
-}
-.exp .caret{ transform:rotate(90deg); transition:transform .18s ease }
-.exp[open] .caret{ transform:rotate(270deg) }
-
-/* Inputs & Controls */
-.field{ display:grid; gap:6px }
-.field span{ font-weight:700; opacity:.8 }
-.field input[type="number"],.field input[type="text"]{
-  width:100%; padding:.55rem .7rem; border-radius:.6rem;
-  border:1px solid #d8e1f0; background:#fff; font-weight:700;
-}
-.row-inline{ display:flex; gap:10px }
-.primary{
-  background:var(--blue); color:#fff; border:none; border-radius:.6rem;
-  padding:.55rem .9rem; font-weight:800;
-}
-.secondary{
-  background:#fff; color:#0f172a; border:1px solid #d8e1f0;
-  border-radius:.6rem; padding:.55rem .9rem; font-weight:800;
-}
-
-/* Switch */
-.switch{ position:relative; display:inline-block; width:44px; height:26px }
-.switch input{ display:none }
-.switch .slider{
-  position:absolute; inset:0; background:#d1d5db; border-radius:999px;
-  transition: background .18s ease;
-}
-.switch .slider::before{
-  content:""; position:absolute; left:3px; top:3px;
-  width:20px; height:20px; background:#fff;
-  border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,.25);
-  transition: transform .18s ease;
-}
-.switch input:checked + .slider{ background:#22c55e }
-.switch input:checked + .slider::before{ transform:translateX(18px) }
-
-/* Modal */
-.modal{ position:fixed; inset:0; z-index:1000; display:none }
-.modal.show{ display:block }
-.modal-backdrop{
-  position:absolute; inset:0; background:rgba(0,0,0,.45); backdrop-filter:blur(2px);
-}
-.modal-card{
-  position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
-  width:min(520px,92vw); background:#fff;
-  border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.28);
-  overflow:hidden;
-}
-.modal-header{
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; background:var(--blue); color:#fff;
-}
-.modal-body{ padding:14px; display:grid; gap:10px }
-
-.about-row{
-  display:flex;
-}
-
-/* === Home-specific small avatar + Khmer font on tiles (NEW) ======= */
-.home-app .avatar{
-  width:36px; height:36px; border-width:2px;
-}
-.home-app .menu-card span{
-  font-family:"Krasar","Noto Sans Khmer",system-ui,sans-serif !important;
-  font-weight:800;
-  font-size:1rem; /* ensures same size for both tiles */
-  letter-spacing:0;
-}
-
-
-
-
-/* ==== TEMP DEBUG STYLES ==== */
-.debug-log{
-  width:100%;
-  max-height:220px;
-  background:#0b1220;
-  color:#e6f0ff;
-  border-radius:10px;
-  padding:10px 12px;
-  overflow:auto;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
-  font-size:.82rem;
-  line-height:1.25rem;
-  box-shadow: var(--shadow);
-}
-.debug-log .ok{ color:#7fffd4 }
-.debug-log .warn{ color:#ffd479 }
-.debug-log .err{ color:#ff7b7b }
-
-
 /* ===== AI overlay & turn blocking ===== */
 #aiBusy{
   position:fixed;
@@ -474,10 +316,10 @@ body.ai-thinking #board{
   align-items:center;
   justify-content:center;
 
-  /* softened overlay */
-  background:rgba(255,255,255,.18);
-  backdrop-filter:blur(3px) brightness(.95);
-  -webkit-backdrop-filter:blur(3px) brightness(.95);
+  /* more visible but still soft */
+  background:rgba(0,0,0,.30);
+  backdrop-filter:blur(3px);
+  -webkit-backdrop-filter:blur(3px);
 
   z-index:9999;
 }
@@ -487,11 +329,8 @@ body.ai-thinking #board{
   align-items:center;
   gap:.5rem;
 
-  /* slightly translucent “glass” card */
-  background:rgba(255,255,255,.88);
-  backdrop-filter:blur(4px);
-  -webkit-backdrop-filter:blur(4px);
-
+  /* bright solid popup */
+  background:#fff;
   padding:.9rem 1.1rem;
   border-radius:.9rem;
   box-shadow:0 8px 24px rgba(0,0,0,.18);

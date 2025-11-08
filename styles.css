@@ -314,28 +314,37 @@ body.ai-thinking #board{
   position:fixed;
   inset:0;
   display:none;
-  align-items:center;
+  /* 👇 place spinner at top, horizontally centered */
+  align-items:flex-start;
   justify-content:center;
 
-  /* completely clear background */
+  /* background completely clear */
   background:transparent;
   backdrop-filter:none;
   -webkit-backdrop-filter:none;
 
   z-index:9999;
+
+  /* let clicks pass through overlay (board is blocked separately) */
+  pointer-events:none;
 }
 
 .ai-spinner{
+  /* push it down to sit around the Black name + clock area */
+  margin-top:90px;   /* tweak 70–110px depending on your layout */
+
   display:flex;
   flex-direction:column;
   align-items:center;
   gap:.5rem;
 
-  /* keep spinner card clearly visible */
   background:#fff;
   padding:.9rem 1.1rem;
   border-radius:.9rem;
   box-shadow:0 8px 24px rgba(0,0,0,.18);
+
+  /* allow interaction on the box itself if needed */
+  pointer-events:auto;
 }
 
 .ai-dot{
@@ -348,9 +357,15 @@ body.ai-thinking #board{
   box-sizing:border-box;
 }
 
-.ai-text{ font-weight:700; color:#0d2d5c }
+.ai-text{
+  font-weight:700;
+  color:#0d2d5c;
+}
 
 @keyframes ai-spin{ to{ transform:rotate(360deg) } }
 
 /* When AI is thinking or it's AI's turn, block board input */
-.ai-thinking .board, .ai-turn .board{ pointer-events:none; }
+.ai-thinking .board,
+.ai-turn .board{
+  pointer-events:none;
+}

@@ -349,7 +349,7 @@ body.ai-thinking #board{
 
 .ai-dot{
   width:16px;
-  height:16px;
+  height:10px;
   border-radius:50%;
   border:3px solid #0d2d5c;
   border-top-color:transparent;

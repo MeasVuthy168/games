@@ -46,7 +46,7 @@
         </div>
 
         <!-- Controls -->
-        <div class="controls controls-top">
+        <div class="controls controls-top" style="display:flex; gap:10px; justify-content:center;">
           <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
             <img src="assets/ui/reset.png" width="22" height="22" alt="">
             <span>ចាប់ផ្ដើមថ្មី</span>
@@ -60,6 +60,12 @@
           <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
             <img src="assets/ui/undo.png" width="22" height="22" alt="">
             <span>ថយក្រោយ</span>
+          </button>
+
+          <!-- ④ Analysis Arrow (Hint) -->
+          <button id="btnHint" class="btn-icon secondary" title="Best move">
+            <img src="assets/ui/hint.png" width="22" height="22" alt="">
+            <span>Hint</span>
           </button>
         </div>
 
@@ -83,12 +89,19 @@
         </div>
 
         <!-- Chat placeholder -->
-        <section id="chatCard" class="panel card chat-panel card-full">
+        <section class="panel card chat-panel card-full" id="chatCard">
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>
             <div class="card-sub">coming soon</div>
           </div>
         </section>
+
+        <!-- ② Result tools (used by your flash overlay if present) -->
+        <div id="flashTools" style="display:none; gap:8px; justify-content:center; margin-top:8px;">
+          <button id="flashCopyFen" class="btn-icon" style="background:#fffbe6;">Copy FEN</button>
+          <button id="flashCopyPgn" class="btn-icon" style="background:#fffbe6;">Copy PGN</button>
+          <button id="flashShare"   class="btn-icon" style="background:#e6fffb;">Share</button>
+        </div>
 
       </section>
     </main>
@@ -112,33 +125,12 @@
     </div>
   </div>
 
-  <!-- === END FLASH OVERLAY (NEW) === -->
-  <div id="flashOverlay" aria-hidden="true">
-    <div class="flash-card">
-      <div class="fireworks" aria-hidden="true">
-        <div class="burst b1"></div>
-        <div class="burst b2"></div>
-        <div class="burst b3"></div>
-        <div class="burst b4"></div>
-        <div class="burst b5"></div>
-      </div>
-      <h2 class="flash-title" id="flashTitle">អ្នកឈ្នះ!</h2>
-      <div class="flash-row">
-        <div class="flash-sub" id="flashSub">អុកស្លាប់ខាងខ្មៅ (AI)! ល្បែងត្រូវបញ្ចប់។</div>
-      </div>
-      <div class="rip-wrap" id="ripWrap" style="display:none;">
-        <!-- Provide your image: assets/ui/rip.png -->
-        <img class="rip-img" src="assets/ui/rip.png" alt="RIP">
-      </div>
-      <div class="flash-actions">
-        <button id="flashAgain" class="flash-btn">ចាប់ផ្ដើមថ្មី</button>
-        <button id="flashClose" class="flash-btn" style="background:#eef4ff;">បិទ</button>
-      </div>
-    </div>
-  </div>
+  <!-- Toast -->
+  <div id="kcToast" aria-live="polite"></div>
 
   <!-- JS -->
   <script type="module" src="./js/main.js"></script>
+  <!-- Hook that connects to backend AI + spinner + fallback -->
   <script type="module" src="./js/ai-hook.js"></script>
 </body>
 </html>

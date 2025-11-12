@@ -1,4 +1,4 @@
-/* === Khmer UI Font (Krasar) ============================================ */
+ /* === Khmer UI Font (Krasar) ============================================ */
 @font-face{
   font-family: "Krasar";
   src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -37,13 +37,6 @@ body{
   color:var(--ink);
   background:#f5f6f7;
   overscroll-behavior-y: none;
-}
-
-/* Battery saver reduces motion/contrast */
-body.low-battery *{
-  transition:none !important;
-  animation:none !important;
-  filter:none !important;
 }
 
 /* ===== App shell ===== */
@@ -287,7 +280,7 @@ body.low-battery *{
   100%{box-shadow:none}
 }
 
-/* === AI thinking visual (NEW) ===================================== */
+/* === AI thinking visual ===================================== */
 body.ai-thinking #board{
   opacity:.9;
   filter:saturate(.9);
@@ -330,14 +323,8 @@ body.ai-thinking #board{
 }
 .ai-spinner{
   margin-top:60px;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:.5rem;
-  background:#fff;
-  padding:.9rem 1.1rem;
-  border-radius:.9rem;
-  box-shadow:0 8px 24px rgba(0,0,0,.18);
+  display:flex; flex-direction:column; align-items:center; gap:.5rem;
+  background:#fff; padding:.9rem 1.1rem; border-radius:.9rem; box-shadow:0 8px 24px rgba(0,0,0,.18);
   pointer-events:auto;
 }
 .ai-dot{
@@ -345,20 +332,101 @@ body.ai-thinking #board{
   border:3px solid #0d2d5c; border-top-color:transparent;
   animation:ai-spin .9s linear infinite; box-sizing:border-box;
 }
-.ai-text{ font-weight:700; color:#0d2d5c }
+.ai-text{ font-weight:700; color:#0d2d5c; }
 @keyframes ai-spin{ to{ transform:rotate(360deg) } }
-.ai-thinking .board,
-.ai-turn .board{ pointer-events:none }
+.ai-thinking .board, .ai-turn .board{ pointer-events:none; }
 
-/* ===== Analysis Arrow (Hint) ===== */
-.best-arrow{ position:absolute; inset:10px; pointer-events:none; z-index:6 }
-.best-arrow svg{ width:100%; height:100%; display:block }
+/* ===================== DRAG & DROP (NEW) ===================== */
+.drag-ghost{
+  position:fixed; z-index:99999; pointer-events:none;
+  width:72px; height:72px; background-size:contain; background-repeat:no-repeat;
+  filter: drop-shadow(0 12px 24px rgba(0,0,0,.35));
+  transform: translate(-50%,-50%) scale(1.04);
+}
+.cell.drag-target{ outline:4px solid rgba(132,202,255,.95) }
+.cell.drag-legal::before{
+  content:""; position:absolute; width:22%; height:22%;
+  background:var(--legal); border-radius:50%; opacity:.9; box-shadow:0 0 0 6px rgba(0,0,0,.05) inset;
+}
 
-/* ===== Toast ===== */
-#kcToast{
-  position:fixed; left:50%; top:14px; transform:translateX(-50%);
+/* ===================== MOVE ANIMATIONS ===================== */
+@keyframes slideIn { from{transform:translate(var(--dx,0),var(--dy,0))} to{transform:translate(0,0)} }
+@keyframes hopIn   { 0%{transform:translate(var(--dx,0),var(--dy,0)) scale(.96)} 60%{transform:translate(0,0) scale(1.04)} 100%{transform:translate(0,0) scale(1)} }
+.piece.anim-slide{ animation:slideIn .12s ease-out }
+.piece.anim-hop  { animation:hopIn .16s ease-out }
+
+/* capture ripple */
+.capture-ripple{ position:absolute; inset:0; border-radius:4px; pointer-events:none; overflow:hidden; }
+.capture-ripple::after{
+  content:""; position:absolute; top:50%; left:50%;
+  width:10px; height:10px; background:rgba(255,0,0,.25); border-radius:50%;
+  transform:translate(-50%,-50%) scale(0.2); animation:capRipple .3s ease-out;
+}
+@keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(12); opacity:0; } }
+
+/* ===================== END FLASH OVERLAY ===================== */
+#flashOverlay{
+  position:fixed; inset:0; z-index:10000;
+  display:none; align-items:center; justify-content:center;
+  background:rgba(0,0,0,.55);
+  backdrop-filter: blur(3px);
+}
+#flashOverlay.show{ display:flex; }
+
+.flash-card{
+  position:relative;
+  width:min(560px, 92vw);
+  border-radius:16px; padding:18px 18px 20px;
   background:#0b1220; color:#e6f0ff;
-  padding:.5rem .75rem; border-radius:10px; font-weight:800;
-  z-index:99999; box-shadow:0 8px 24px rgba(0,0,0,.25);
-  opacity:0; transition:opacity .2s ease;
+  box-shadow:0 18px 60px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.08);
+  text-align:center;
+}
+
+.flash-title{ font-size:1.6rem; font-weight:800; margin:0 0 .25rem; }
+.flash-sub  { font-size:1rem; opacity:.9; margin:.25rem 0 .75rem; }
+.flash-row  { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
+
+.flash-actions{ margin-top:12px; display:flex; gap:10px; justify-content:center; }
+.flash-btn{
+  background:#fff; color:#0d2d5c; border:none; border-radius:12px;
+  padding:.6rem 1rem; font-weight:800; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.2);
+}
+.flash-btn:active{ transform:translateY(1px) }
+
+/* Fireworks (pure CSS bursts) */
+.fireworks{
+  position:absolute; inset:0; pointer-events:none; overflow:hidden;
+}
+.fireworks .burst{
+  position:absolute; width:6px; height:6px; background:transparent;
+  left:50%; top:50%;
+}
+.fireworks .burst::before, .fireworks .burst::after{
+  content:""; position:absolute; inset:-3px; border-radius:50%;
+  box-shadow:
+    0 -40px 0 2px #ffec99,
+    28px -28px 0 2px #ffd6a5,
+    40px 0 0 2px #ffc6ff,
+    28px 28px 0 2px #bdb2ff,
+    0 40px 0 2px #a0c4ff,
+    -28px 28px 0 2px #9bf6ff,
+    -40px 0 0 2px #caffbf,
+    -28px -28px 0 2px #fdffb6;
+  transform:scale(0);
+  animation:pop 900ms ease-out forwards;
+}
+.fireworks .b2{ transform:translate(-140px,-60px) }
+.fireworks .b3{ transform:translate(140px,-40px) }
+.fireworks .b4{ transform:translate(-120px,70px) }
+.fireworks .b5{ transform:translate(120px,90px) }
+@keyframes pop{ 60%{transform:scale(1)} 100%{transform:scale(0); opacity:0} }
+
+/* RIP image */
+.rip-wrap{ display:flex; align-items:center; justify-content:center; }
+.rip-img{ width:min(200px, 60vw); height:auto; display:block; filter:drop-shadow(0 10px 24px rgba(0,0,0,.35)); margin:10px auto; }
+
+/* Draw badge */
+.draw-badge{
+  display:inline-block; padding:6px 12px; border-radius:999px;
+  background:#fff3bf; color:#7c5b00; font-weight:800;
 }

@@ -83,7 +83,7 @@
         </div>
 
         <!-- Chat placeholder -->
-        <section class="panel card chat-panel card-full">
+        <section class="panel card chat-panel card-full" id="chatCard">
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>
             <div class="card-sub">coming soon</div>
@@ -109,6 +109,31 @@
     <div class="ob-card">
       សូមប្រើទម្រង់បញ្ឈរ<br/>
       <small>Rotate back to portrait to continue</small>
+    </div>
+  </div>
+
+  <!-- Game End Flash Overlay -->
+  <div id="flashOverlay" aria-hidden="true">
+    <div class="flash-card" role="dialog" aria-modal="true" aria-labelledby="flashTitle">
+      <!-- fireworks canvas injected only for WIN -->
+      <canvas id="fwCanvas" width="10" height="10" style="display:none;"></canvas>
+
+      <div class="flash-row">
+        <div id="flashEmoji" style="font-size:28px">🎉</div>
+        <div class="flash-title" id="flashTitle">អ្នកឈ្នះ!</div>
+      </div>
+      <div class="flash-sub"  id="flashSub">អុកស្លាប់ខាងខ្មៅ (AI)!</div>
+
+      <div class="rip-wrap" id="ripWrap" style="display:none;">
+        <img class="rip-img" id="ripImg" src="assets/ui/rip.png" alt="RIP" onerror="this.style.display='none'">
+      </div>
+
+      <div class="flash-note">ល្បែងត្រូវបញ្ចប់។</div>
+
+      <div class="flash-actions">
+        <button id="flashReset"  class="flash-btn primary">ចាប់ផ្ដើមថ្មី</button>
+        <button id="flashClose"  class="flash-btn ghost">បិទ</button>
+      </div>
     </div>
   </div>
 

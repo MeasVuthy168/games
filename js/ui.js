@@ -1,8 +1,9 @@
-// ui.js — Khmer Chess (Play page) — Makruk AI with remote engine + fallback
-import { Game, SIZE, COLORS } from './game.js';
+// ui.js — Khmer Chess (Play page) — Makruk AI with remote engine + fallback + end flashes + DnD + premove
+
+import { Game, SIZE, COLORS, PT } from './game.js';
 import * as AI from './ai.js';
 
-const AIPICK = AI.pickAIMove || AI.chooseAIMove;
+const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_makruk_v1';
@@ -25,23 +26,16 @@ function saveGameState(game, clocks) {
     msB: clocks.msB,
     clockTurn: clocks.turn
   };
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(s));
-  } catch {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(s)); } catch {}
 }
 
 function loadGameState() {
-  try {
-    return JSON.parse(localStorage.getItem(SAVE_KEY));
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(localStorage.getItem(SAVE_KEY)); }
+  catch { return null; }
 }
 
 function clearGameState() {
-  try {
-    localStorage.removeItem(SAVE_KEY);
-  } catch {}
+  try { localStorage.removeItem(SAVE_KEY); } catch {}
 }
 
 function loadSettings() {
@@ -68,123 +62,121 @@ class AudioBeeper {
       capture: new Audio('assets/sfx/capture.mp3'),
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
-      check:   new Audio('assets/sfx/check.mp3')
+      check:   new Audio('assets/sfx/check.mp3'),
+      win:     new Audio('assets/sfx/win.mp3'),
+      lose:    new Audio('assets/sfx/lose.mp3')
     };
     for (const k in this.bank) this.bank[k].preload = 'auto';
   }
   play(name, vol = 1) {
     if (!this.enabled) return;
-    const src = this.bank[name];
-    if (!src) return;
-    const a = src.cloneNode(true);
-    a.volume = Math.max(0, Math.min(1, vol));
-    a.play().catch(() => {});
+    const src = this.bank[name]; if (!src) return;
+    const a = src.cloneNode(true); a.volume = Math.max(0, Math.min(1, vol));
+    a.play().catch(()=>{});
   }
-  move()    { this.play('move',   0.9); }
-  capture() { this.play('capture', 1.0); }
-  select()  { this.play('select', 0.85); }
-  error()   { this.play('error',  0.9); }
-  check()   { this.play('check',  1.0); }
+  move(){ this.play('move', .9); }
+  capture(){ this.play('capture', 1.0); }
+  select(){ this.play('select', .85); }
+  error(){ this.play('error', .9); }
+  check(){ this.play('check', 1.0); }
+  sfxWin(){ this.play('win', 1.0); }
+  sfxLose(){ this.play('lose', 1.0); }
 }
 const beeper = new AudioBeeper();
 
-function vibrate(pattern) {
-  if (navigator.vibrate) navigator.vibrate(pattern);
-}
+function vibrate(pattern){ if (navigator.vibrate) navigator.vibrate(pattern); }
 
 /* ---------------- clocks ---------------- */
 
 class Clocks {
   constructor(update) {
-    this.msW = 0;
-    this.msB = 0;
-    this.running = false;
-    this.turn = COLORS.WHITE;
-    this.increment = 0;
-    this._t = null;
-    this._u = update;
+    this.msW = 0; this.msB = 0; this.running = false;
+    this.turn = COLORS.WHITE; this.increment = 0; this._t = null; this._u = update;
   }
-
   init(min, inc, turn = COLORS.WHITE) {
-    this.msW = min * 60 * 1000;
-    this.msB = min * 60 * 1000;
-    this.increment = inc * 1000;
-    this.turn = turn;
-    this.stop();
-    this._u(this.msW, this.msB);
+    this.msW = min * 60 * 1000; this.msB = min * 60 * 1000;
+    this.increment = inc * 1000; this.turn = turn; this.stop(); this._u(this.msW, this.msB);
   }
-
   start() {
-    if (this.running) return;
-    this.running = true;
+    if (this.running) return; this.running = true;
     let last = performance.now();
-
     const tick = () => {
       if (!this.running) return;
-      const now = performance.now();
-      const dt = now - last;
-      last = now;
-
-      if (this.turn === COLORS.WHITE) {
-        this.msW = Math.max(0, this.msW - dt);
-      } else {
-        this.msB = Math.max(0, this.msB - dt);
-      }
-
+      const now = performance.now(); const dt = now - last; last = now;
+      if (this.turn === COLORS.WHITE) this.msW = Math.max(0, this.msW - dt);
+      else this.msB = Math.max(0, this.msB - dt);
       this._u(this.msW, this.msB);
-
-      if (this.msW <= 0 || this.msB <= 0) {
-        this.stop();
-        return;
-      }
-
+      if (this.msW <= 0 || this.msB <= 0){ this.stop(); return; }
       this._t = requestAnimationFrame(tick);
     };
-
     this._t = requestAnimationFrame(tick);
   }
-
-  stop() {
-    this.running = false;
-    if (this._t) cancelAnimationFrame(this._t);
-    this._t = null;
-  }
-
-  pauseResume() {
-    this.running ? this.stop() : this.start();
-  }
-
+  stop(){ this.running = false; if (this._t) cancelAnimationFrame(this._t); this._t=null; }
+  pauseResume(){ this.running ? this.stop() : this.start(); }
   switchedByMove(prev) {
     if (prev === COLORS.WHITE) this.msW += this.increment;
     else this.msB += this.increment;
-
     this.turn = (prev === COLORS.WHITE) ? COLORS.BLACK : COLORS.WHITE;
-    this._u(this.msW, this.msB);
-    this.start();
+    this._u(this.msW, this.msB); this.start();
   }
-
-  format(ms) {
-    const m = Math.floor(ms / 60000);
-    const s = Math.floor((ms % 60000) / 1000);
-    const t = Math.floor((ms % 1000) / 100);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${t}`;
+  format(ms){
+    const m = Math.floor(ms/60000), s = Math.floor((ms%60000)/1000), t = Math.floor((ms%1000)/100);
+    return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}.${t}`;
   }
 }
 
-/* ---------------- Toast + helpers (①,②,④,⑤ use this) ---------------- */
-function toast(t){
-  let el = document.getElementById('kcToast');
-  if (!el){
-    el = document.createElement('div');
-    el.id='kcToast';
-    document.body.appendChild(el);
+/* ---------------- end-flash overlay ---------------- */
+
+function $(s, r=document){ return r.querySelector(s); }
+
+function showEndFlash(opts){
+  const { type='win' } = opts||{};
+  const overlay = $('#flashOverlay');
+  const title = $('#flashTitle');
+  const sub = $('#flashSub');
+  const rip = $('#ripWrap');
+  const fw = overlay.querySelector('.fireworks');
+
+  // Defaults
+  fw.style.display = 'none';
+  rip.style.display = 'none';
+
+  if (type === 'win'){
+    title.textContent = 'អ្នកឈ្នះ!';
+    sub.textContent   = 'អុកស្លាប់ខាងខ្មៅ (AI)! ល្បែងត្រូវបញ្ចប់។';
+    fw.style.display  = 'block';
+    beeper.sfxWin();
+  } else if (type === 'lose'){
+    title.textContent = 'អ្នកចាញ់!';
+    sub.textContent   = 'អុកស្លាប់ខាងស! ល្បែងត្រូវបញ្ចប់។';
+    rip.style.display = 'block';
+    beeper.sfxLose();
+  } else {
+    title.textContent = 'ស្មើ!';
+    sub.innerHTML     = '<span class="draw-badge">ល្បែងត្រូវបញ្ចប់</span>';
   }
-  el.textContent = t;
-  el.style.opacity = '1';
-  clearTimeout(window.__toastT);
-  window.__toastT = setTimeout(()=>{ el.style.opacity='0'; }, 1400);
+
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden','false');
+  $('#appTabbar')?.classList.add('is-hidden');
 }
-function copyText(s){ navigator.clipboard?.writeText(s).then(()=>toast('Copied!')).catch(()=>alert(s)); }
+window.showEndFlash = showEndFlash;
+
+// Close/reset buttons
+document.addEventListener('click', (e)=>{
+  if (e.target?.id === 'flashClose'){
+    $('#flashOverlay')?.classList.remove('show');
+    $('#flashOverlay')?.setAttribute('aria-hidden','true');
+    $('#appTabbar')?.classList.remove('is-hidden');
+  }
+  if (e.target?.id === 'flashAgain'){
+    $('#flashOverlay')?.classList.remove('show');
+    $('#flashOverlay')?.setAttribute('aria-hidden','true');
+    $('#appTabbar')?.classList.remove('is-hidden');
+    // call reset
+    $('#btnReset')?.click();
+  }
+});
 
 /* ---------------- main UI ---------------- */
 
@@ -194,7 +186,6 @@ export function initUI() {
   const btnReset = document.getElementById('btnReset');
   const btnUndo  = document.getElementById('btnUndo');
   const btnPause = document.getElementById('btnPause');
-  const btnHint  = document.getElementById('btnHint');
   const clockW   = document.getElementById('clockW');
   const clockB   = document.getElementById('clockB');
 
@@ -209,19 +200,6 @@ export function initUI() {
   const game = new Game();
   const settings = loadSettings();
   beeper.enabled = !!settings.sound;
-
-  // ⑤ Battery Saver
-  if (navigator.getBattery) {
-    try {
-      navigator.getBattery().then(b=>{
-        if (b.level <= 0.2){
-          beeper.enabled = false;
-          document.body.classList.add('low-battery');
-          toast('Battery Saver On');
-        }
-      });
-    } catch {}
-  }
 
   window.AIDebug?.log('[UI] init — Makruk AI (remote + fallback)');
 
@@ -284,135 +262,64 @@ export function initUI() {
     return `វេនខាង (${side})`;
   }
 
+  /* ====== render with animations ====== */
   function render() {
     for (const c of cells) {
       c.innerHTML = '';
       c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
     }
 
+    const last = game.history[game.history.length - 1];
+
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const p = game.at(x, y);
         if (!p) continue;
         const cell = cells[y * SIZE + x];
+
+        // compute delta for small animation
+        let dx = '0px', dy = '0px', klass = 'anim-slide';
+        if (last && last.to.x === x && last.to.y === y){
+          dx = (last.from.x - last.to.x) * 12 + 'px';
+          dy = (last.from.y - last.to.y) * 12 + 'px';
+          const isKnight = (p.t === PT.KNIGHT);
+          klass = isKnight ? 'anim-hop' : 'anim-slide';
+        }
+
         const s = document.createElement('div');
-        s.className = `piece ${p.c === 'w' ? 'white' : 'black'}`;
+        s.className = `piece ${p.c === 'w' ? 'white' : 'black'} ${klass}`;
+        s.style.setProperty('--dx', dx);
+        s.style.setProperty('--dy', dy);
         setPieceBG(s, p);
         cell.appendChild(s);
       }
     }
 
-    const last = game.history[game.history.length - 1];
     if (last) {
       const fromIdx = last.from.y * SIZE + last.from.x;
-      const toIdx   = last.to.y * SIZE + last.to.x;
+      const toIdx   = last.to.y   * SIZE + last.to.x;
       cells[fromIdx]?.classList.add('last-from');
       cells[toIdx]?.classList.add('last-to');
-      if (last.captured) cells[toIdx]?.classList.add('last-capture');
+      if (last.captured){
+        cells[toIdx]?.classList.add('last-capture');
+        const rp = document.createElement('div'); rp.className = 'capture-ripple';
+        cells[toIdx]?.appendChild(rp); setTimeout(()=> rp.remove(), 350);
+      }
     }
 
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
   }
 
-  /* ====== Coach Mode (①) ====== */
-  async function quickCoach(game, sideJustMoved) {
-    try{
-      // very quick probe; relies on your AI’s fast setting
-      const best = await (AIPICK)(game, { aiColor: sideJustMoved, timeMs: 220, maxDepth: 4 });
-      // If your AI does not return scores, show “Good move” randomly (or skip entirely).
-      // Here we just give a gentle positive nudge to keep UX nice.
-      if (best?.from && best?.to) {
-        // 30% chance of praising; avoids spam
-        if (Math.random() < 0.3) toast('✅ Good move');
-      }
-    }catch{}
-  }
-
-  /* ====== Auto "Count for Draw" detector (③) ====== */
-  function materialKey(game){
-    const counts = { w:{R:0,N:0,B:0,Q:0,P:0}, b:{R:0,N:0,B:0,Q:0,P:0} };
-    for (let y=0;y<8;y++) for (let x=0;x<8;x++){
-      const p = game.at(x,y); if(!p) continue;
-      const side = p.c; const t = p.t;
-      if (t==='R') counts[side].R++;
-      else if (t==='N') counts[side].N++;
-      else if (t==='B' || t==='S') counts[side].B++;
-      else if (t==='Q' || t==='M') counts[side].Q++;
-      else if (t==='P') counts[side].P++;
-    }
-    return counts;
-  }
-  function detectCountingTarget(game){
-    const c = materialKey(game);
-    const onlyRNBQlessP = (side)=> c[side].P===0; // quick coarse filter
-
-    // Example rules (expand these for full Khmer count rules):
-    // If rooks only remain (no Q/B/N/P), target 8 (two rooks total) or 16 (one rook total)
-    const onlyRooks = (side)=> c[side].Q===0 && c[side].B===0 && c[side].N===0 && c[side].P===0;
-    if (onlyRooks('w') && onlyRooks('b')){
-      const totalR = c.w.R + c.b.R;
-      if (totalR >= 2) return 8;
-      if (totalR === 1) return 16;
-    }
-
-    // If no rooks and no queens but minor pieces exist → sample target 22
-    const noRQ = (side)=> c[side].R===0 && c[side].Q===0;
-    if (noRQ('w') && noRQ('b') && onlyRNBQlessP('w') && onlyRNBQlessP('b')) {
-      return 22;
-    }
-
-    return null;
-  }
-  function maybeSetCountingTarget(){
-    const tgt = detectCountingTarget(game);
-    if (tgt && window.CountUI?.setTarget){
-      window.CountUI.setTarget(tgt);
-      toast(`រាប់ស្មើគោលដៅ: ${tgt}`);
-      // reveal tools row if you are using a flash/overlay
-      const tools = document.getElementById('flashTools');
-      if (tools) tools.style.display = 'flex';
-    }
-  }
-
-  /* ====== Analysis Arrow (④) ====== */
-  let arrowEl = null;
-  function clearArrow(){ if (arrowEl){ arrowEl.remove(); arrowEl=null; } }
-  function boardRect(){ return elBoard.getBoundingClientRect(); }
-  function drawArrow(from,to){
-    clearArrow();
-    const r = boardRect(); const cw = r.width/8, ch = r.height/8;
-    const x1=(from.x+.5)*cw, y1=(from.y+.5)*ch;
-    const x2=(to.x+.5)*cw,   y2=(to.y+.5)*ch;
-    arrowEl = document.createElement('div'); arrowEl.className='best-arrow';
-    arrowEl.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg">
-      <defs><marker id="ah" markerWidth="10" markerHeight="10" refX="9" refY="4" orient="auto">
-        <path d="M0,0 L0,8 L10,4 z" fill="rgba(0,128,0,.95)"/>
-      </marker></defs>
-      <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-        stroke="rgba(0,128,0,.95)" stroke-width="6" marker-end="url(#ah)" />
-    </svg>`;
-    elBoard.appendChild(arrowEl);
-  }
-
-  /* ===================== RENDER =================================== */
-  function renderAndMaybeHintClear(){
-    render();
-    // clear hint arrow when position changes
-    clearArrow();
-  }
-
   /* ====== AI helpers & logic (with fallback + debug) ====== */
 
   function pickRandomLegalFor(color) {
     const moves = [];
-    for (let y = 0; y < SIZE; y++) {
-      for (let x = 0; x < SIZE; x++) {
-        const p = game.at(x, y);
-        if (!p || p.c !== color) continue;
-        const ms = game.legalMoves(x, y);
-        for (const m of ms) moves.push({ from:{x,y}, to:{x:m.x,y:m.y} });
-      }
+    for (let y = 0; y < SIZE; y++) for (let x = 0; x < SIZE; x++) {
+      const p = game.at(x, y);
+      if (!p || p.c !== color) continue;
+      const ms = game.legalMoves(x, y);
+      for (const m of ms) moves.push({ from:{x,y}, to:{x:m.x,y:m.y} });
     }
     if (!moves.length) return null;
     return moves[(Math.random() * moves.length) | 0];
@@ -428,100 +335,61 @@ export function initUI() {
       window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
 
       if (!aiMove || !aiMove.from || !aiMove.to) {
-        window.AIDebug?.log('[UI] AI returned null/invalid move → disabling AI (no fallback)');
-        alert(
-          'AI engine could not find a move.\n' +
-          'AI play has been stopped. You can continue playing both sides or press Reset.'
-        );
-        settings.aiEnabled = false;
-        return;
+        window.AIDebug?.log('[UI] AI returned null → disabling AI');
+        alert('AI error. AI play has been stopped.'); settings.aiEnabled = false; return;
       }
 
       const from = { x: aiMove.from.x, y: aiMove.from.y };
       const to   = { x: aiMove.to.x,   y: aiMove.to.y   };
 
-      if (
-        from.x < 0 || from.x >= SIZE || from.y < 0 || from.y >= SIZE ||
-        to.x   < 0 || to.x   >= SIZE || to.y   < 0 || to.y   >= SIZE
-      ) {
-        window.AIDebug?.log('[UI] AI move outside board → disabling AI');
-        alert('AI engine produced an off-board move.\nAI play has been stopped.');
-        settings.aiEnabled = false;
-        return;
-      }
-
       const prevTurn = game.turn;
       const before   = game.at(to.x, to.y);
-
       let res = game.move(from, to);
 
       if (!res || !res.ok) {
-        window.AIDebug?.log('[UI] illegal engine move → trying local fallback');
-        const fallback = pickRandomLegalFor(settings.aiColor);
-        if (!fallback) {
-          window.AIDebug?.log('[UI] no fallback move available');
-          alert('AI engine and fallback move both failed.\nAI play has been stopped.');
-          settings.aiEnabled = false;
-          return;
-        }
+        window.AIDebug?.log('[UI] engine move illegal → fallback random');
+        const fb = pickRandomLegalFor(settings.aiColor);
+        if (!fb) { settings.aiEnabled = false; return; }
+        const before2 = game.at(fb.to.x, fb.to.y);
+        const prev2 = game.turn;
+        const res2 = game.move(fb.from, fb.to);
+        if (!res2?.ok){ settings.aiEnabled=false; return; }
 
-        const before2   = game.at(fallback.to.x, fallback.to.y);
-        const prevTurn2 = game.turn;
-        const res2      = game.move(fallback.from, fallback.to);
-        if (!res2 || !res2.ok) {
-          window.AIDebug?.log('[UI] fallback move also illegal → disabling AI');
-          alert('AI engine and fallback failed.\nAI stopped.');
-          settings.aiEnabled = false;
-          return;
-        }
-
-        if (beeper.enabled) {
-          if (before2) { beeper.capture(); vibrate([20, 40, 30]); }
-          else beeper.move();
+        if (beeper.enabled){
+          before2 ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
           if (res2.status?.state === 'check') beeper.check();
         }
 
-        clocks.switchedByMove(prevTurn2);
-        renderAndMaybeHintClear();
-        saveGameState(game, clocks);
+        clocks.switchedByMove(prev2);
+        render(); saveGameState(game, clocks);
 
-        maybeSetCountingTarget();
-
-        if (res2.status?.state === 'checkmate') {
-          alert('អុកស្លាប់! AI ឈ្នះ');
-          const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
-        } else if (res2.status?.state === 'stalemate') {
-          alert('អាប់ — ស្មើជាមួយ AI!');
-          const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
+        if (res2.status?.state === 'checkmate'){
+          // AI delivered mate → player loses
+          showEndFlash({ type:'lose' });
+        } else if (res2.status?.state === 'stalemate'){
+          showEndFlash({ type:'draw' });
         }
         return;
       }
 
-      // Normal engine move OK
-      if (beeper.enabled) {
-        if (before) { beeper.capture(); vibrate([20, 40, 30]); }
-        else beeper.move();
+      if (beeper.enabled){
+        before ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
         if (res.status?.state === 'check') beeper.check();
       }
 
       clocks.switchedByMove(prevTurn);
-      renderAndMaybeHintClear();
-      saveGameState(game, clocks);
+      render(); saveGameState(game, clocks);
 
-      maybeSetCountingTarget();
-
-      if (res.status?.state === 'checkmate') {
-        alert('អុកស្លាប់! AI ឈ្នះ');
-        const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
-      } else if (res.status?.state === 'stalemate') {
-        alert('អាប់ — ស្មើជាមួយ AI!');
-        const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
+      if (res.status?.state === 'checkmate'){
+        showEndFlash({ type:'lose' });
+      } else if (res.status?.state === 'stalemate'){
+        showEndFlash({ type:'draw' });
       }
 
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
-      alert('AI error occurred. AI play has been stopped.');
+      alert('AI error. AI play has been stopped.');
       settings.aiEnabled = false;
     } finally {
       setBoardBusy(false);
@@ -529,13 +397,14 @@ export function initUI() {
     }
   }
 
-  /* ========== Human move ========== */
+  /* ========== Human move + Tap-to-move ========== */
 
   let selected = null;
   let legal = [];
+  let premove = null; // queued move while AI thinks
 
   const clearHints = () => {
-    for (const c of cells) c.classList.remove('selected', 'hint-move', 'hint-capture');
+    for (const c of cells) c.classList.remove('selected','hint-move','hint-capture');
   };
 
   const hintsEnabled = () => settings.hints !== false;
@@ -558,37 +427,36 @@ export function initUI() {
     const y = +e.currentTarget.dataset.y;
     const p = game.at(x, y);
 
-    // Block user moves during AI turn / thinking
+    // If AI turn → allow premove selection
     if (isAITurn() || AILock) {
-      if (beeper.enabled) beeper.error();
-      vibrate(40);
+      if (p && p.c === COLORS.WHITE){
+        if (!selected){ selected = {x,y}; showHints(x,y); beeper.select(); return; }
+        const ok = legal.some(m => m.x===x && m.y===y);
+        if (ok){
+          premove = { from:{...selected}, to:{x,y} };
+          cells[selected.y*SIZE+selected.x].classList.add('last-from');
+          cells[y*SIZE+x].classList.add('last-to');
+          beeper.select();
+        } else { beeper.error(); }
+      } else { beeper.error(); }
+      vibrate(30);
       return;
     }
 
     // Select piece
     if (p && p.c === game.turn) {
-      selected = { x, y };
-      showHints(x, y);
-      if (beeper.enabled) beeper.select();
-      return;
+      selected = { x, y }; showHints(x, y);
+      if (beeper.enabled) beeper.select(); return;
     }
 
     // No selection yet
-    if (!selected) {
-      if (beeper.enabled) beeper.error();
-      vibrate(40);
-      return;
-    }
+    if (!selected) { if (beeper.enabled) beeper.error(); vibrate(40); return; }
 
     // Check if target is legal
     const ok = legal.some(m => m.x === x && m.y === y);
     if (!ok) {
-      selected = null;
-      legal = [];
-      clearHints();
-      if (beeper.enabled) beeper.error();
-      vibrate(40);
-      return;
+      selected = null; legal = []; clearHints();
+      if (beeper.enabled) beeper.error(); vibrate(40); return;
     }
 
     const from   = { ...selected };
@@ -600,37 +468,123 @@ export function initUI() {
     if (res.ok) {
       if (beeper.enabled) {
         if (before) { beeper.capture(); vibrate([20, 40, 30]); }
-        else beeper.move();
+        else { beeper.move(); }
         if (res.status?.state === 'check') beeper.check();
       }
 
       clocks.switchedByMove(prev);
-      selected = null;
-      legal = [];
-      clearHints();
-      renderAndMaybeHintClear();
-      saveGameState(game, clocks);
-
-      // ① Coach Mode (quick feedback)
-      quickCoach(game, prev);
-
-      // ③ auto counting detector
-      maybeSetCountingTarget();
+      selected = null; legal = []; clearHints();
+      render(); saveGameState(game, clocks);
 
       if (res.status?.state === 'checkmate') {
-        alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
-        const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
+        // Player delivered mate vs AI black
+        showEndFlash({ type:'win' });
       } else if (res.status?.state === 'stalemate') {
-        alert('អាប់ — ស្មើគ្នា!');
-        const tools = document.getElementById('flashTools'); if (tools) tools.style.display='flex';
+        showEndFlash({ type:'draw' });
       } else {
-        // Let AI reply
         thinkAndPlay();
       }
     }
   }
 
-  for (const c of cells) c.addEventListener('click', onCellTap, { passive: true });
+  for (const c of cells) {
+    c.addEventListener('click', onCellTap, { passive: true });
+  }
+
+  /* ========== Drag & Drop (pointer) ========== */
+
+  function boardRect(){ return elBoard.getBoundingClientRect(); }
+  function cellAtXY(px, py){
+    const r = boardRect(); if (!r.width || !r.height) return null;
+    const cw = r.width / 8, ch = r.height / 8;
+    const x = Math.min(7, Math.max(0, Math.floor((px - r.left) / cw)));
+    const y = Math.min(7, Math.max(0, Math.floor((py - r.top)  / ch)));
+    if (px < r.left || py < r.top || px > r.right || py > r.bottom) return null;
+    return { x, y, idx: y*SIZE + x, el: cells[y*SIZE + x] };
+  }
+
+  let dragging = null;        // { from:{x,y}, ghost:El, legal:[{x,y,el}] }
+  let dragPointerId = null;
+
+  function legalForSquare(x, y){
+    const ls = game.legalMoves(x,y) || [];
+    return ls.map(m => ({ x:m.x, y:m.y, el: cells[m.y*SIZE+m.x] }));
+  }
+
+  function startDrag(x, y, clientX, clientY, pointerId){
+    const p = game.at(x, y); if (!p) return;
+    if (p.c !== game.turn) return;
+    dragging = { from:{x,y}, legal: legalForSquare(x,y) };
+    dragPointerId = pointerId;
+
+    const g = document.createElement('div');
+    g.className = 'drag-ghost';
+    const tmp = document.createElement('div'); tmp.style.display='none'; setPieceBG(tmp, p);
+    g.style.backgroundImage = tmp.style.backgroundImage;
+    document.body.appendChild(g);
+    dragging.ghost = g;
+    moveGhost(clientX, clientY);
+
+    cells[y*SIZE+x].classList.add('selected');
+    if (hintsEnabled()) for (const t of dragging.legal) t.el.classList.add('drag-legal');
+  }
+
+  function moveGhost(px, py){
+    if (!dragging?.ghost) return;
+    dragging.ghost.style.left = px+'px';
+    dragging.ghost.style.top  = py+'px';
+    for (const c of cells) c.classList.remove('drag-target');
+    const dest = cellAtXY(px, py);
+    if (dest && dragging.legal.some(m => m.x===dest.x && m.y===dest.y)){
+      dest.el.classList.add('drag-target');
+    }
+  }
+
+  function endDrag(px, py){
+    const d = dragging; dragging = null;
+    for (const c of cells) c.classList.remove('drag-target','drag-legal','selected');
+    if (d?.ghost){ d.ghost.remove(); }
+    if (!d) return;
+
+    const dest = cellAtXY(px, py);
+    if (!dest){ beeper.error(); vibrate(40); return; }
+    const ok = d.legal.some(m => m.x===dest.x && m.y===dest.y);
+    if (!ok){ beeper.error(); vibrate(40); return; }
+
+    const before = game.at(dest.x, dest.y);
+    const prev   = game.turn;
+    const res    = game.move(d.from, {x:dest.x, y:dest.y});
+    if (!res?.ok){ beeper.error(); vibrate(40); return; }
+
+    if (beeper.enabled){
+      before ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
+      if (res.status?.state === 'check') beeper.check();
+    }
+    clocks.switchedByMove(prev);
+    render(); saveGameState(game, clocks);
+
+    if (res.status?.state === 'checkmate'){ showEndFlash({type:'win'}); }
+    else if (res.status?.state === 'stalemate'){ showEndFlash({type:'draw'}); }
+    else { thinkAndPlay(); }
+  }
+
+  function onCellPointerDown(e){
+    if (isAITurn() || AILock) { beeper.error(); vibrate(40); return; }
+    const x = +e.currentTarget.dataset.x, y = +e.currentTarget.dataset.y;
+    const p = game.at(x,y);
+    if (!p || p.c !== game.turn){ if (beeper.enabled) beeper.error(); return; }
+    e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
+    startDrag(x,y, e.clientX, e.clientY, e.pointerId);
+  }
+  function onCellPointerMove(e){ if (dragging && e.pointerId===dragPointerId){ moveGhost(e.clientX, e.clientY); } }
+  function onCellPointerUp(e){ if (e.pointerId===dragPointerId){ endDrag(e.clientX, e.clientY); dragPointerId=null; } }
+
+  for (const c of cells){
+    c.addEventListener('pointerdown', onCellPointerDown, { passive:false });
+    c.addEventListener('pointermove', onCellPointerMove, { passive:true });
+    c.addEventListener('pointerup',   onCellPointerUp,   { passive:true });
+    c.addEventListener('pointercancel', onCellPointerUp, { passive:true });
+  }
 
   // resume or fresh start
   const saved = loadGameState();
@@ -652,24 +606,15 @@ export function initUI() {
 
   btnReset?.addEventListener('click', () => {
     game.reset();
-    selected = null;
-    legal = [];
-    clearHints();
-    clearGameState();
+    selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-    renderAndMaybeHintClear();
-    clocks.start();
-    const tools = document.getElementById('flashTools'); if (tools) tools.style.display='none';
+    render(); clocks.start();
     if (isAITurn()) thinkAndPlay();
   });
 
   btnUndo?.addEventListener('click', () => {
     if (game.undo()) {
-      selected = null;
-      legal = [];
-      clearHints();
-      renderAndMaybeHintClear();
-      saveGameState(game, clocks);
+      selected = null; legal = []; clearHints(); render(); saveGameState(game, clocks);
     }
   });
 
@@ -682,40 +627,31 @@ export function initUI() {
     if (s) s.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
   });
 
-  // ④ Hint button
-  btnHint?.addEventListener('click', async ()=>{
-    if (isAITurn() || AILock) { toast('Wait for AI'); return; }
-    try{
-      const mv = await (AIPICK)(game, { aiColor: game.turn, timeMs: 200, maxDepth: 4 });
-      if (mv?.from && mv?.to) drawArrow(mv.from, mv.to);
-    }catch{ toast('Hint failed'); }
-  });
-  elBoard.addEventListener('click', clearArrow);
-
-  // ② Result tools (FEN/PGN/Share) — these also work with your flash overlay
-  document.addEventListener('click', (e)=>{
-    const id = e.target?.id;
-    if (id === 'flashCopyFen'){
-      try{ copyText(game.toFEN?.() || game.fen?.() || ''); }catch{}
-    }
-    if (id === 'flashCopyPgn'){
-      try{
-        // if you later add a PGN generator, swap here:
-        const pgn = game.pgn?.() || '(No PGN yet)';
-        copyText(pgn);
-      }catch{}
-    }
-    if (id === 'flashShare'){
-      try{
-        const title = 'Khmer Chess Result';
-        const text  = (game.pgn?.() || 'My game') + '\n' + (game.toFEN?.() || game.fen?.() || '');
-        if (navigator.share) navigator.share({ title, text });
-        else copyText(text);
-      }catch{}
-    }
-  });
-
   window.addEventListener('beforeunload', () => saveGameState(game, clocks));
 
   return game;
+}
+
+/* ---------------- service worker (unchanged) ---------------- */
+
+const SW_URL = './sw.js';
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register(SW_URL, { scope: './', updateViaCache: 'none' });
+      reg.update();
+      reg.addEventListener('updatefound', () => {
+        const sw = reg.installing; if (!sw) return;
+        sw.addEventListener('statechange', () => {
+          if (sw.state === 'installed' && navigator.serviceWorker.controller) sw.postMessage({ type: 'SKIP_WAITING' });
+        });
+      });
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!window.__reloadedForSW) { window.__reloadedForSW = true; location.reload(); }
+      });
+      setInterval(() => reg.update(), 60 * 1000);
+    } catch (err) {
+      console.log('SW registration failed:', err);
+    }
+  });
 }

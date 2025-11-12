@@ -98,85 +98,6 @@ function vibrate(pattern) {
   if (navigator.vibrate) navigator.vibrate(pattern);
 }
 
-/* ---------------- clocks ---------------- */
-
-class Clocks {
-  constructor(update) {
-    this.msW = 0;
-    this.msB = 0;
-    this.running = false;
-    this.turn = COLORS.WHITE;
-    this.increment = 0;
-    this._t = null;
-    this._u = update;
-  }
-
-  init(min, inc, turn = COLORS.WHITE) {
-    this.msW = min * 60 * 1000;
-    this.msB = min * 60 * 1000;
-    this.increment = inc * 1000;
-    this.turn = turn;
-    this.stop();
-    this._u(this.msW, this.msB);
-  }
-
-  start() {
-    if (this.running) return;
-    this.running = true;
-    let last = performance.now();
-
-    const tick = () => {
-      if (!this.running) return;
-      const now = performance.now();
-      const dt = now - last;
-      last = now;
-
-      if (this.turn === COLORS.WHITE) {
-        this.msW = Math.max(0, this.msW - dt);
-      } else {
-        this.msB = Math.max(0, this.msB - dt);
-      }
-
-      this._u(this.msW, this.msB);
-
-      if (this.msW <= 0 || this.msB <= 0) {
-        this.stop();
-        return;
-      }
-
-      this._t = requestAnimationFrame(tick);
-    };
-
-    this._t = requestAnimationFrame(tick);
-  }
-
-  stop() {
-    this.running = false;
-    if (this._t) cancelAnimationFrame(this._t);
-    this._t = null;
-  }
-
-  pauseResume() {
-    this.running ? this.stop() : this.start();
-  }
-
-  switchedByMove(prev) {
-    if (prev === COLORS.WHITE) this.msW += this.increment;
-    else this.msB += this.increment;
-
-    this.turn = (prev === COLORS.WHITE) ? COLORS.BLACK : COLORS.WHITE;
-    this._u(this.msW, this.msB);
-    this.start();
-  }
-
-  format(ms) {
-    const m = Math.floor(ms / 60000);
-    const s = Math.floor((ms % 60000) / 1000);
-    const t = Math.floor((ms % 1000) / 100);
-    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${t}`;
-  }
-}
-
 /* ---------------- main UI ---------------- */
 
 export function initUI() {
@@ -196,11 +117,194 @@ export function initUI() {
     stalemate: 'អាប់'
   };
 
+  // === Flash overlay (Win / Loss / Draw) ===============================
+  function $(sel, r=document){ return r.querySelector(sel); }
+
+  // simple canvas fireworks for WIN
+  function runFireworks(ms=3500){
+    const canvas = $('#fwCanvas'); if (!canvas) return;
+    const card = canvas.parentElement;
+    const W = card.clientWidth, H = card.clientHeight;
+    canvas.width = W; canvas.height = H; canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+    const N = 120;
+    const parts = Array.from({length:N}, () => ({
+      x: W*0.5, y: H*0.45,
+      vx: (Math.random()*2-1)* (1.8 + Math.random()*2.6),
+      vy: (Math.random()* -2.5) - (1.5 + Math.random()*2.5),
+      g:  0.038 + Math.random()*0.055,
+      life: 0, max: 30 + (Math.random()*28|0),
+      size: 1.2 + Math.random()*2.2,
+      hue:  10 + Math.random()*340
+    }));
+
+    let t0 = performance.now();
+    function step(now){
+      const dt = Math.min(33, now - t0); t0 = now;
+      ctx.clearRect(0,0,W,H);
+
+      for (const p of parts){
+        p.life += 1;
+        if (p.life < p.max){
+          p.vy += p.g;
+          p.x  += p.vx * (dt/16);
+          p.y  += p.vy * (dt/16);
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.fillStyle = `hsl(${p.hue}, 95%, 56%)`;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+          ctx.globalAlpha = .35;
+          ctx.fillRect(p.x - p.vx*1.6, p.y - p.vy*1.6, 1.5, 1.5);
+          ctx.globalAlpha = 1;
+        }
+      }
+      if (performance.now() - (t0 - dt) < ms) requestAnimationFrame(step);
+      else canvas.style.display = 'none';
+    }
+    requestAnimationFrame(step);
+  }
+
+  function showEndFlash({ type }) {
+    const ov   = $('#flashOverlay');
+    const t    = $('#flashTitle');
+    const s    = $('#flashSub');
+    const e    = $('#flashEmoji');
+    const ripW = $('#ripWrap');
+    const fw   = $('#fwCanvas');
+
+    try { clocks.stop(); } catch {}
+    setBoardBusy(true);
+
+    if (type === 'win') {
+      e.textContent = '🎆';
+      t.textContent = 'អ្នកឈ្នះ!';
+      s.textContent = 'អុកស្លាប់ខាងខ្មៅ (AI)!';
+      ripW.style.display = 'none';
+      fw.style.display = 'block';
+      ov.classList.add('show');
+      runFireworks();
+    } else if (type === 'loss') {
+      e.textContent = '🪦';
+      t.textContent = 'អ្នកចាញ់!';
+      s.textContent = 'អុកស្លាប់ខាងស!';
+      fw.style.display = 'none';
+      ripW.style.display = 'flex';
+      ov.classList.add('show');
+    } else {
+      e.textContent = '🤝';
+      t.textContent = 'ស្មើគ្នា';
+      s.textContent = 'ល្បែងត្រូវបញ្ចប់។';
+      fw.style.display = 'none';
+      ripW.style.display = 'none';
+      ov.classList.add('show');
+    }
+
+    $('#flashReset')?.addEventListener('click', () => {
+      ov.classList.remove('show');
+      game.reset();
+      selected = null; legal = []; clearHints();
+      clearGameState();
+      clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
+      render();
+      clocks.start();
+      setBoardBusy(false);
+      if (isAITurn()) thinkAndPlay();
+    }, { once:true });
+
+    $('#flashClose')?.addEventListener('click', () => {
+      ov.classList.remove('show');
+      setBoardBusy(false);
+    }, { once:true });
+  }
+
+  /* ---------------- clocks ---------------- */
+
+  class Clocks {
+    constructor(update) {
+      this.msW = 0;
+      this.msB = 0;
+      this.running = false;
+      this.turn = COLORS.WHITE;
+      this.increment = 0;
+      this._t = null;
+      this._u = update;
+    }
+
+    init(min, inc, turn = COLORS.WHITE) {
+      this.msW = min * 60 * 1000;
+      this.msB = min * 60 * 1000;
+      this.increment = inc * 1000;
+      this.turn = turn;
+      this.stop();
+      this._u(this.msW, this.msB);
+    }
+
+    start() {
+      if (this.running) return;
+      this.running = true;
+      let last = performance.now();
+
+      const tick = () => {
+        if (!this.running) return;
+        const now = performance.now();
+        const dt = now - last;
+        last = now;
+
+        if (this.turn === COLORS.WHITE) {
+          this.msW = Math.max(0, this.msW - dt);
+        } else {
+          this.msB = Math.max(0, this.msB - dt);
+        }
+
+        this._u(this.msW, this.msB);
+
+        if (this.msW <= 0 || this.msB <= 0) {
+          this.stop();
+          return;
+        }
+
+        this._t = requestAnimationFrame(tick);
+      };
+
+      this._t = requestAnimationFrame(tick);
+    }
+
+    stop() {
+      this.running = false;
+      if (this._t) cancelAnimationFrame(this._t);
+      this._t = null;
+    }
+
+    pauseResume() {
+      this.running ? this.stop() : this.start();
+    }
+
+    switchedByMove(prev) {
+      if (prev === COLORS.WHITE) this.msW += this.increment;
+      else this.msB += this.increment;
+
+      this.turn = (prev === COLORS.WHITE) ? COLORS.BLACK : COLORS.WHITE;
+      this._u(this.msW, this.msB);
+      this.start();
+    }
+
+    format(ms) {
+      const m = Math.floor(ms / 60000);
+      const s = Math.floor((ms % 60000) / 1000);
+      const t = Math.floor((ms % 1000) / 100);
+      return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${t}`;
+    }
+  }
+
   const game = new Game();
   const settings = loadSettings();
-  beeper.enabled = !!settings.sound;
+  const clocks = new Clocks((w, b) => {
+    if (clockW) clockW.textContent = clocks.format(w);
+    if (clockB) clockB.textContent = clocks.format(b);
+  });
 
+  beeper.enabled = !!settings.sound;
   window.AIDebug?.log('[UI] init — Makruk AI (remote + fallback)');
+  clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
   let AILock = false;
 
@@ -216,12 +320,6 @@ export function initUI() {
     if (settings.aiColor === 'b' && game.turn === COLORS.BLACK) return true;
     return false;
   }
-
-  const clocks = new Clocks((w, b) => {
-    if (clockW) clockW.textContent = clocks.format(w);
-    if (clockB) clockB.textContent = clocks.format(b);
-  });
-  clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
   // Build board
   elBoard.innerHTML = '';
@@ -243,20 +341,20 @@ export function initUI() {
   }
 
   function setPieceBG(span, p){
-  const map = {
-    K: 'king',
-    Q: 'queen',  // legacy
-    M: 'queen',  // Met uses queen sprite
-    B: 'bishop', // legacy
-    S: 'bishop', // Khon uses bishop sprite
-    R: 'rook',
-    N: 'knight',
-    P: 'pawn',
-  };
-  const key  = map[p.t] || 'pawn';
-  const name = `${p.c === 'w' ? 'w' : 'b'}-${key}.png`;
-  span.style.backgroundImage = `url(./assets/pieces/${name})`;
-}
+    const map = {
+      K: 'king',
+      Q: 'queen',
+      M: 'queen',
+      B: 'bishop',
+      S: 'bishop',
+      R: 'rook',
+      N: 'knight',
+      P: 'pawn',
+    };
+    const key  = map[p.t] || 'pawn';
+    const name = `${p.c === 'w' ? 'w' : 'b'}-${key}.png`;
+    span.style.backgroundImage = `url(./assets/pieces/${name})`;
+  }
 
   function khTurnLabel() {
     const side = game.turn === COLORS.WHITE ? KH.white : KH.black;
@@ -310,7 +408,6 @@ export function initUI() {
 
   /* ====== AI helpers & logic (with fallback + debug) ====== */
 
-  // Pick a random *legal* move for the given side (for fallback)
   function pickRandomLegalFor(color) {
     const moves = [];
     for (let y = 0; y < SIZE; y++) {
@@ -347,7 +444,6 @@ export function initUI() {
         JSON.stringify(aiMove)
       );
 
-      // If AI failed to produce any move → disable AI, let human continue both sides
       if (!aiMove || !aiMove.from || !aiMove.to) {
         window.AIDebug?.log(
           '[UI] AI returned null/invalid move → disabling AI (no fallback)'
@@ -363,7 +459,6 @@ export function initUI() {
       const from = { x: aiMove.from.x, y: aiMove.from.y };
       const to   = { x: aiMove.to.x,   y: aiMove.to.y   };
 
-      // Board bounds safety
       if (
         from.x < 0 || from.x >= SIZE || from.y < 0 || from.y >= SIZE ||
         to.x   < 0 || to.x   >= SIZE || to.y   < 0 || to.y   >= SIZE
@@ -382,7 +477,6 @@ export function initUI() {
 
       let res = game.move(from, to);
 
-      // If remote engine move is illegal under local Makruk rules → try fallback
       if (!res || !res.ok) {
         window.AIDebug?.log(
           '[UI] game.move rejected for engine move → trying local fallback move'
@@ -399,12 +493,6 @@ export function initUI() {
           return;
         }
 
-        // log which fallback move we use
-        window.AIDebug?.log(
-          '[UI] fallback move used:',
-          JSON.stringify(fallback)
-        );
-
         const before2   = game.at(fallback.to.x, fallback.to.y);
         const prevTurn2 = game.turn;
         const res2      = game.move(fallback.from, fallback.to);
@@ -419,7 +507,6 @@ export function initUI() {
           return;
         }
 
-        // SFX for fallback
         if (beeper.enabled) {
           if (before2) {
             beeper.capture();
@@ -435,9 +522,10 @@ export function initUI() {
         saveGameState(game, clocks);
 
         if (res2.status?.state === 'checkmate') {
-          alert('អុកស្លាប់! AI ឈ្នះ');
+          // AI mated → loss
+          showEndFlash({ type: 'loss' });
         } else if (res2.status?.state === 'stalemate') {
-          alert('អាប់ — ស្មើជាមួយ AI!');
+          showEndFlash({ type: 'draw' });
         }
 
         return;
@@ -459,9 +547,10 @@ export function initUI() {
       saveGameState(game, clocks);
 
       if (res.status?.state === 'checkmate') {
-        alert('អុកស្លាប់! AI ឈ្នះ');
+        // AI mated you → loss
+        showEndFlash({ type: 'loss' });
       } else if (res.status?.state === 'stalemate') {
-        alert('អាប់ — ស្មើជាមួយ AI!');
+        showEndFlash({ type: 'draw' });
       }
 
     } catch (e) {
@@ -507,14 +596,12 @@ export function initUI() {
     const y = +e.currentTarget.dataset.y;
     const p = game.at(x, y);
 
-    // Block user moves during AI turn / thinking
     if (isAITurn() || AILock) {
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
     }
 
-    // Select piece
     if (p && p.c === game.turn) {
       selected = { x, y };
       showHints(x, y);
@@ -522,14 +609,12 @@ export function initUI() {
       return;
     }
 
-    // No selection yet
     if (!selected) {
       if (beeper.enabled) beeper.error();
       vibrate(40);
       return;
     }
 
-    // Check if target is legal
     const ok = legal.some(m => m.x === x && m.y === y);
     if (!ok) {
       selected = null;
@@ -565,9 +650,10 @@ export function initUI() {
       saveGameState(game, clocks);
 
       if (res.status?.state === 'checkmate') {
-        alert('អុកស្លាប់! ការប្រកួតបានបញ្ចប់');
+        // player mated Black AI → win
+        showEndFlash({ type: 'win' });
       } else if (res.status?.state === 'stalemate') {
-        alert('អាប់ — ស្មើគ្នា!');
+        showEndFlash({ type: 'draw' });
       } else {
         // Let AI reply
         thinkAndPlay();
@@ -592,7 +678,6 @@ export function initUI() {
     clocks.start();
   }
 
-  // AI first move (if ever AI=White later)
   if (isAITurn()) thinkAndPlay();
 
   /* -------- controls -------- */

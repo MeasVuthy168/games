@@ -195,8 +195,8 @@ body{
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   width:100%;
-  aspect-ratio:1/1.25;
-  border-radius:18px;
+  aspect-ratio:1/1.35;
+  border-radius:16px;
   margin:0;
   touch-action:none;
   overscroll-behavior:contain;

@@ -1,4 +1,4 @@
-/* === Khmer UI Font (Krasar) ============================================ */
+ /* === Khmer UI Font (Krasar) ============================================ */
 @font-face{
   font-family: "Krasar";
   src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -186,82 +186,66 @@ body{
 }
 
 /* =================================================================== */
-/* =================== CHESS BOARD (NEW STYLE) ======================= */
+/* =================== CHESS BOARD ================================== */
 .timers,.board,.chat-panel{ inline-size:100% }
 
-/* Board container */
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
-
   width:100%;
-  max-width:480px;           /* similar feel to your screenshot */
-  aspect-ratio:1/1.05;       /* almost square */
-  margin:0 auto;
-
-  padding:6px;               /* thin inner frame */
+  aspect-ratio:1/1.25;
+  border-radius:18px;
+  margin:0;
   touch-action:none;
   overscroll-behavior:contain;
   user-select:none;
+  padding:10px;
+  background:#2a170a;
   box-sizing:border-box;
-
-  /* flat warm wood background */
-  background:#c88a47;
-  background-image:
-    linear-gradient(135deg, rgba(255,255,255,.06), rgba(0,0,0,.08)),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255,255,255,.02) 0,
-      rgba(255,255,255,.02) 4px,
-      rgba(0,0,0,.02)       4px,
-      rgba(0,0,0,.02)       8px
-    );
-
-  border-radius:14px;
-  box-shadow:0 6px 18px rgba(0,0,0,.35);
 }
 
-/* Simple inner wood frame */
 .board::before{
   content:"";
-  position:absolute;
-  inset:0;
-  border-radius:14px;
-  border:3px solid rgba(104,60,25,.85); /* dark wood edge */
+  position:absolute; inset:0;
+  border-radius:20px;
+  background:linear-gradient(145deg,#5b3215,#2a170a);
   box-shadow:
-    inset 0 0 0 1px rgba(255,255,255,.18),
-    inset 0 2px 4px rgba(0,0,0,.35);
-  pointer-events:none;
+    inset 0 2px 4px rgba(255,255,255,.22),
+    inset 0 -5px 8px rgba(0,0,0,.5),
+    0 10px 20px rgba(0,0,0,.4);
+  z-index:-2;
 }
-
-/* No second deep frame */
-.board::after{ content:none; }
+.board::after{
+  content:"";
+  position:absolute; inset:6px;
+  border-radius:14px;
+  border:4px solid rgba(214,178,104,.95);
+  pointer-events:none;
+  box-shadow:0 1px 2px rgba(255,255,255,.25), inset 0 0 10px rgba(0,0,0,.35);
+}
 
 /* Cells */
 .cell{
   position:relative;
   display:flex; align-items:center; justify-content:center;
+  background-repeat:repeat;
+  background-size:512px 512px;
+  background-position:center;
   user-select:none;
+  border-radius:2px;
   z-index:1;
-
-  /* flat board squares + thin grid lines */
-  background:#cc9050;
-  border:1px solid rgba(104,60,25,.35); /* grid */
-  border-radius:0;
 }
+.cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
+.cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
-/* subtle light/dark */
-.cell.light{ background:#d19755; }
-.cell.dark { background:#c07f45; }
-
-/* Coordinates (optional) */
+/* Hide coordinates if .no-coords present */
 .cell::after{
   content:attr(data-ax);
-  position:absolute; bottom:3px; right:4px;
-  font-size:.62rem; color:rgba(0,0,0,.45);
-  text-shadow:1px 1px 2px rgba(255,255,255,.6);
+  position:absolute; bottom:5px; right:7px;
+  font-size:.62rem; color:rgba(0,0,0,.6);
+  text-shadow:1px 1px 2px rgba(255,255,255,.8);
 }
 .board.no-coords .cell::after{ display:none !important }
 
@@ -274,29 +258,22 @@ body{
   transition:transform .1s ease, box-shadow .15s ease, filter .15s ease;
 }
 .piece:active{ transform:scale(.96) }
-
-/* 3D “raised” look only for side to move (neutral shadow, not blue) */
 .turn-white .piece.white,
 .turn-black .piece.black{
-  box-shadow:0 6px 14px rgba(0,0,0,.28);
-  filter:brightness(1.03);
+  box-shadow:0 6px 14px rgba(0,0,255,0.4);
+  filter:brightness(1.02);
 }
 
 /* Highlights */
 .cell.hint-move::before{
-  content:"";
-  position:absolute;
-  inset:16%;
-  border-radius:6px;
-  border:3px solid #3da35a;           /* green frame like in sample app */
-  background:rgba(61,163,90,.12);
-  box-sizing:border-box;
+  content:""; position:absolute; width:24%; height:24%;
+  background:var(--legal); border-radius:50%; opacity:.8;
 }
-.cell.hint-capture{ outline:3px solid var(--danger); }
-.cell.selected{ outline:3px solid var(--hi); z-index:2; }
-.cell.last-from{ outline:3px solid rgba(132,202,255,.95); }
-.cell.last-to{   outline:3px solid rgba(147,231,158,.95); }
-.cell.last-capture{ animation:capFlash .9s ease-out; }
+.cell.hint-capture{ outline:3px solid var(--danger) }
+.cell.selected{ outline:3px solid var(--hi); z-index:2 }
+.cell.last-from{ outline:3px solid rgba(132,202,255,.95) }
+.cell.last-to{   outline:3px solid rgba(147,231,158,.95) }
+.cell.last-capture{ animation:capFlash .9s ease-out }
 @keyframes capFlash{
   0%{box-shadow:none}
   30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55),0 0 14px 6px rgba(255,0,0,.25)}

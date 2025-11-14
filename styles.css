@@ -255,7 +255,7 @@ body{
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
   box-shadow:none;
-  transition:transform .1s ease, box-shadow .15s ease, filter .15s ease;
+  transition:transform .25s ease, box-shadow .18s ease, filter .18s ease;
 }
 .piece:active{ transform:scale(.96) }
 .turn-white .piece.white,
@@ -352,8 +352,8 @@ body.ai-thinking #board{
 /* ===================== MOVE ANIMATIONS ===================== */
 @keyframes slideIn { from{transform:translate(var(--dx,0),var(--dy,0))} to{transform:translate(0,0)} }
 @keyframes hopIn   { 0%{transform:translate(var(--dx,0),var(--dy,0)) scale(.96)} 60%{transform:translate(0,0) scale(1.04)} 100%{transform:translate(0,0) scale(1)} }
-.piece.anim-slide{ animation:slideIn .12s ease-out }
-.piece.anim-hop  { animation:hopIn .16s ease-out }
+.piece.anim-slide{ animation:slideIn .25s ease-out }
+.piece.anim-hop  { animation:hopIn .30s ease-out }
 
 /* capture ripple */
 .capture-ripple{ position:absolute; inset:0; border-radius:4px; pointer-events:none; overflow:hidden; }

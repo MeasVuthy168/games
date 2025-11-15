@@ -30,7 +30,7 @@
   /* Realistic medium wood frame image */
   --frame-wood:url("assets/board/frame_wood_medium.jpg");
 
-  /* NEW: control frame thickness globally (thinner) */
+  /* Control frame thickness (thin) */
   --frame-thickness: 8px;
 }
 
@@ -211,16 +211,12 @@ body{
   width:100%;
   aspect-ratio:1/1.35;
 
-  /* thinner frame */
   padding:var(--frame-thickness);
   border-radius:16px;
 
-  /* Multi-layer wood frame with subtle tint + grain */
   background:
-    /* top soft highlight that makes wood look polished */
     linear-gradient(180deg,rgba(255,255,255,.10),rgba(255,255,255,0) 40%),
     var(--frame-wood),
-    /* warm base tint under grain */
     linear-gradient(145deg,#c29363,#7b5334);
 
   background-size:cover, 680px 680px, cover;
@@ -228,12 +224,11 @@ body{
   background-origin:content-box, border-box, border-box;
   background-clip:content-box, border-box, border-box;
 
-  /* 3D depth: stronger outer drop + inner occlusion */
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.28), /* inner top highlight */
-    inset 0 -3px 6px rgba(0,0,0,.42),     /* inner bottom shadow */
-    0 14px 30px rgba(0,0,0,.34),          /* outer drop */
-    0 2px 0 rgba(255,255,255,.18) inset;  /* micro edge shine */
+    inset 0 1px 0 rgba(255,255,255,.28),
+    inset 0 -3px 6px rgba(0,0,0,.42),
+    0 14px 30px rgba(0,0,0,.34),
+    0 2px 0 rgba(255,255,255,.18) inset;
 
   margin:0;
   touch-action:none;
@@ -242,14 +237,12 @@ body{
   box-sizing:border-box;
 }
 
-/* Inner chamfer/lip right where the squares start */
+/* Inner chamfer/lip where squares begin */
 .board::before{
   content:"";
   position:absolute;
   inset:var(--frame-thickness);
   border-radius:12px;
-
-  /* beveled ring: light on TL, shadow on BR */
   box-shadow:
     inset 0 2px 3px rgba(255,255,255,.24),
     inset 0 -5px 9px rgba(0,0,0,.38),
@@ -259,7 +252,7 @@ body{
   z-index:0;
 }
 
-/* Outer rim glow / lifted effect (no yellow border) */
+/* Outer rim glow (no yellow border) */
 .board::after{
   content:"";
   position:absolute;
@@ -269,9 +262,9 @@ body{
   pointer-events:none;
   background:linear-gradient(180deg,rgba(255,255,255,.18),rgba(255,255,255,0) 30%);
   box-shadow:
-    0 22px 40px rgba(0,0,0,.28),               /* deeper lift */
-    0 2px 0 rgba(255,255,255,.24) inset,       /* top lip */
-    0 -2px 6px rgba(0,0,0,.22) inset;          /* bottom lip */
+    0 22px 40px rgba(0,0,0,.28),
+    0 2px 0 rgba(255,255,255,.24) inset,
+    0 -2px 6px rgba(0,0,0,.22) inset;
 }
 
 /* Cells */
@@ -284,6 +277,10 @@ body{
   user-select:none;
   border-radius:1px;
   z-index:1;
+
+  /* === Glowing corner size/thickness for all states === */
+  --corner-size: 10px;   /* adjust for smaller/bigger brackets */
+  --corner-thick: 2px;
 }
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
 .cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
@@ -308,20 +305,102 @@ body{
 .piece:active{ transform:scale(.96) }
 .turn-white .piece.white,
 .turn-black .piece.black{
-  /* keep subtle lift on side-to-move */
   box-shadow:0 6px 14px rgba(0,0,255,0.4);
   filter:brightness(1.02);
 }
 
-/* Highlights */
+/* ===== Highlights (3D glowing corners) ===== */
+
+/* reset any old outlines */
+.cell.selected,
+.cell.last-from,
+.cell.last-to{ outline:none; }
+
+/* helper mixin via gradients in each rule */
+
+/* SELECTED — blue (uses --hi) */
+.cell.selected::before{
+  content:"";
+  position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
+  --c: var(--hi);
+  --glow: rgba(132,202,255,.90);
+  --inner: rgba(132,202,255,.35);
+  background:
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-thick) var(--corner-size) no-repeat;
+  box-shadow:
+    inset 0 0 6px var(--inner),
+    inset 0 0 1px rgba(255,255,255,.6);
+  filter:
+    drop-shadow(0 0 6px var(--glow))
+    drop-shadow(0 0 14px rgba(132,202,255,.55));
+  mix-blend-mode: screen;
+}
+
+/* LAST FROM — cyan */
+.cell.last-from::before{
+  content:"";
+  position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
+  --c: #6bd2ff;
+  --glow: rgba(107,210,255,.85);
+  --inner: rgba(107,210,255,.35);
+  background:
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-thick) var(--corner-size) no-repeat;
+  box-shadow:
+    inset 0 0 6px var(--inner),
+    inset 0 0 1px rgba(255,255,255,.6);
+  filter:
+    drop-shadow(0 0 6px var(--glow))
+    drop-shadow(0 0 14px rgba(107,210,255,.6));
+  mix-blend-mode: screen;
+}
+
+/* LAST TO — green */
+.cell.last-to::before{
+  content:"";
+  position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
+  --c: #6fe58d;
+  --glow: rgba(111,229,141,.85);
+  --inner: rgba(111,229,141,.35);
+  background:
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 0/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 0 100%/var(--corner-thick) var(--corner-size) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-size) var(--corner-thick) no-repeat,
+    linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-thick) var(--corner-size) no-repeat;
+  box-shadow:
+    inset 0 0 6px var(--inner),
+    inset 0 0 1px rgba(255,255,255,.6);
+  filter:
+    drop-shadow(0 0 6px var(--glow))
+    drop-shadow(0 0 14px rgba(111,229,141,.55));
+  mix-blend-mode: screen;
+}
+
+/* Hints / captures (unchanged) */
 .cell.hint-move::before{
   content:""; position:absolute; width:24%; height:24%;
   background:var(--legal); border-radius:50%; opacity:.8;
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
-.cell.selected{ outline:3px solid var(--hi); z-index:2 }
-.cell.last-from{ outline:3px solid rgba(132,202,255,.95) }
-.cell.last-to{   outline:3px solid rgba(147,231,158,.95) }
+
+/* Last capture flash */
 .cell.last-capture{ animation:capFlash .9s ease-out }
 @keyframes capFlash{
   0%{box-shadow:none}

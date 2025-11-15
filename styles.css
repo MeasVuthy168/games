@@ -301,14 +301,237 @@ body{
   background-repeat:repeat;
   background-size:512px 512px;
   background-position:center;
+/* === Khmer UI Font (Krasar) ============================================ */
+@font-face{
+  font-family: "Krasar";
+  src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Global UI font stack uses Krasar first */
+:root{
+  --ui-font: "Krasar", "Noto Sans Khmer",
+             system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  --blue:#0d2d5c;
+  --wood1:#a57a54;
+  --wood2:#d3a574;
+  --cell-a:#e7cfa6;
+  --cell-b:#b88f5a;
+  --hi:#84caff;
+  --legal:#93e79e;
+  --danger:#ff9ba2;
+  --ink:#1b1f23;
+  --panel:#ffffff;
+  --shadow: 0 8px 24px rgba(0,0,0,.12);
+
+  --board-light-img:url("assets/board/wood_light.jpg");
+  --board-dark-img:url("assets/board/wood_dark.jpg");
+
+  /* NEW — Medium wood texture */
+  --frame-wood:url("assets/board/frame_wood_medium.jpg");
+}
+
+/* === Base =============================================================== */
+*{ box-sizing:border-box }
+html,body{ height:100% }
+html, body{ font-family: var(--ui-font); }
+body{
+  margin:0;
+  color:var(--ink);
+  background:#f5f6f7;
+  overscroll-behavior-y: none;
+}
+
+/* ===== App shell ===== */
+.app{ min-height:100dvh; display:flex; flex-direction:column }
+
+/* ===== Top bar ===== */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:var(--blue); color:#fff;
+  display:flex; align-items:center; gap:.5rem;
+  padding:.75rem 1rem;
+  transition: transform .25s ease, opacity .25s ease;
+}
+.topbar h1{ font-size:1.1rem; margin:0 }
+.icon-btn{
+  background:#fff; color:var(--blue); border:none; border-radius:.75rem;
+  padding:.4rem .7rem; font-weight:600; cursor:pointer;
+}
+.icon-btn:active{ transform:translateY(1px) }
+.topbar .spacer{ flex:1 }
+
+/* ===== Layout ===== */
+.layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
+.layout.layout-single{ grid-template-columns:1fr; padding:0 }
+.panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:12px }
+
+/* === PLAY PAGE PANEL ==================================================== */
+.board-panel{
+  display:flex; flex-direction:column; align-items:center; gap:.6rem;
+  padding:8px 0 12px 0;
+  overscroll-behavior: contain;
+}
+
+/* --- Turn banner --- */
+.turn-banner{
+  font-weight:800;
+  font-size:1.15rem;
+  text-align:center;
+  margin:0;
+}
+
+/* === Counting Draw UI ================================================ */
+.turn-wrap{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:10px;
+  flex-wrap:wrap;
+  width:100%;
+}
+
+.count-label{
+  padding:2px 10px;
+  border-radius:8px;
+  font-weight:700;
+  font-size:.95rem;
+  background:rgba(13,45,92,.10);
+  backdrop-filter:blur(2px);
+  white-space:nowrap;
+  user-select:none;
+  color:inherit;
+}
+:root[data-theme="dark"] .count-label{
+  background:rgba(255,255,255,.12); color:#e6f0ff;
+}
+.count-label.pulse{ animation:pulse .9s ease-in-out infinite }
+@keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
+
+.count-bar{
+  position:relative;
+  width:160px;
+  height:20px;
+  border-radius:999px;
+  background:rgba(13,45,92,.12);
+  overflow:hidden;
+}
+:root[data-theme="dark"] .count-bar{
+  background:rgba(255,255,255,.18);
+}
+
+.count-bar-fill{
+  height:100%;
+  width:100%;
+  border-radius:inherit;
+  background:linear-gradient(90deg,#79e2ff,#32ff7e);
+  transform-origin:left center;
+  transition:width 180ms ease, background 220ms ease;
+}
+.count-bar-fill.low{
+  background:linear-gradient(90deg,#ffd479,#ff5e57);
+}
+.count-bar.urgent{ animation:shake .5s ease-in-out infinite }
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-1px)}
+  75%{transform:translateX(1px)}
+}
+
+.count-badge{
+  position:absolute;
+  right:6px;
+  top:50%;
+  transform:translateY(-50%);
+  font-weight:800;
+  font-size:.7rem;
+  line-height:1;
+  padding:2px 6px;
+  border-radius:8px;
+  background:rgba(255,255,255,.9);
+  color:#0f172a;
+}
+:root[data-theme="dark"] .count-badge{
+  background:rgba(10,15,30,.9); color:#e6f0ff;
+}
+
+/* =================================================================== */
+/* =================== CHESS BOARD — NEW REALISTIC FRAME ============= */
+
+/* NEW: Thinner frame (8px) + strong 3D shadow */
+.board{
+  position:relative;
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  grid-template-rows:repeat(8,1fr);
+  width:100%;
+  aspect-ratio:1/1.35;
+
+  padding:8px;                    /* thinner frame */
+  border-radius:14px;             /* 3D smooth corner */
+
+  /* Multi-layer realistic frame */
+  background:
+    linear-gradient(180deg,rgba(255,255,255,.20),rgba(0,0,0,.15)),
+    var(--frame-wood),
+    linear-gradient(145deg,#c29363,#7b5334);
+
+  background-size:cover, 800px 800px, cover;
+  background-position:center, center, center;
+  background-clip:content-box, border-box, border-box;
+  background-origin:content-box, border-box, border-box;
+
+  /* Strong 3D bevel */
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,.45),
+    inset 0 -6px 10px rgba(0,0,0,.55),
+    0 10px 26px rgba(0,0,0,.38);
+}
+
+/* Inner bevel ring */
+.board::before{
+  content:"";
+  position:absolute;
+  inset:8px;                       /* match new thickness */
+  border-radius:10px;
+
+  /* Highlight on top, shadow bottom */
+  box-shadow:
+    inset 0 2px 2px rgba(255,255,255,.35),
+    inset 0 -4px 6px rgba(0,0,0,.45);
+}
+
+/* Remove old yellow frame */
+.board::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border:none !important;
+  box-shadow:none !important;
+  background:none !important;
+  pointer-events:none;
+}
+
+/* =================================================================== */
+/* =================== CELLS & PIECES =============================== */
+
+.cell{
+  position:relative;
+  display:flex; align-items:center; justify-content:center;
+  background-repeat:repeat;
+  background-size:512px 512px;
+  background-position:center;
   user-select:none;
   border-radius:1px;
   z-index:1;
 }
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
-.cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
+.cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.92) }
 
-/* Coordinates (hidden when .no-coords) */
+/* Coordinates */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
@@ -322,15 +545,22 @@ body{
   width:86%; height:86%;
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
-  box-shadow:none;
   transition:transform .25s ease, box-shadow .18s ease, filter .18s ease;
 }
 .piece:active{ transform:scale(.96) }
+
 .turn-white .piece.white,
 .turn-black .piece.black{
-  box-shadow:0 6px 14px rgba(0,0,255,0.4);
-  filter:brightness(1.02);
+  /* stronger 3D on active side */
+  box-shadow:
+    0 6px 14px rgba(0,0,0,.30),
+    0 0 6px rgba(255,255,255,.25) inset;
+  filter:brightness(1.05);
 }
+
+/* =================================================================== */
+/* HIGHLIGHTS, ANIMATION, NAV, AI OVERLAY, RIP, ETC — SAME AS BEFORE */
+/* (unchanged, so I keep the file short here) */
 
 /* Highlights */
 .cell.hint-move::before{

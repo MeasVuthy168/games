@@ -1,4 +1,4 @@
-/* === Khmer UI Font (Krasar) ============================================ */
+ /* === Khmer UI Font (Krasar) ============================================ */
 @font-face{
   font-family: "Krasar";
   src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -189,67 +189,41 @@ body{
 /* =================== CHESS BOARD ================================== */
 .timers,.board,.chat-panel{ inline-size:100% }
 
-/* ---- MODIFIED: only the frame (board, ::before, ::after) ---- */
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
-
   width:100%;
-  aspect-ratio:1/1.35;       /* keep your ratio */
+  aspect-ratio:1/1.35;
   border-radius:16px;
   margin:0;
-
   touch-action:none;
   overscroll-behavior:contain;
   user-select:none;
-
-  /* inner gap between grid and bezel */
-  padding:8px;               /* was 10px; slimmer to match framed look */
-  box-sizing:border-box;
-
-  /* keep your base color (cells cover it anyway) */
+  padding:10px;
   background:#2a170a;
-
-  /* light global lift */
-  box-shadow:0 10px 20px rgba(0,0,0,.35);
+  box-sizing:border-box;
 }
 
-/* OUTER WOODEN FRAME — thicker, beveled */
 .board::before{
   content:"";
-  position:absolute;
-  inset:-18px;               /* frame thickness (↑ increase for thicker) */
-  border-radius:22px;
-  background:#b0743b;        /* wood tone */
-  background-image:
-    linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.12)),
-    repeating-linear-gradient(
-      0deg,
-      rgba(255,255,255,.03) 0,
-      rgba(255,255,255,.03) 6px,
-      rgba(0,0,0,.03)       6px,
-      rgba(0,0,0,.03)       12px
-    );
+  position:absolute; inset:0;
+  border-radius:20px;
+  background:linear-gradient(145deg,#5b3215,#2a170a);
   box-shadow:
-    inset 0 2px 4px rgba(255,255,255,.25),  /* top bevel highlight */
-    inset 0 -6px 10px rgba(0,0,0,.35),      /* bottom bevel shadow */
-    0 8px 22px rgba(0,0,0,.35);             /* outer drop shadow */
-  z-index:-1;
+    inset 0 2px 4px rgba(255,255,255,.22),
+    inset 0 -5px 8px rgba(0,0,0,.5),
+    0 10px 20px rgba(0,0,0,.4);
+  z-index:-2;
 }
-
-/* INNER BEZEL — thin dark line around squares */
 .board::after{
   content:"";
-  position:absolute;
-  inset:4px;                 /* distance from grid; tweak 3–6px */
-  border-radius:12px;
-  border:2px solid rgba(80,48,26,.88);  /* dark wood line */
+  position:absolute; inset:6px;
+  border-radius:14px;
+  border:4px solid rgba(214,178,104,.95);
   pointer-events:none;
-  box-shadow:
-    inset 0 1px 2px rgba(255,255,255,.25),
-    inset 0 0 6px rgba(0,0,0,.25);
+  box-shadow:0 1px 2px rgba(255,255,255,.25), inset 0 0 10px rgba(0,0,0,.35);
 }
 
 /* Cells */

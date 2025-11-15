@@ -7,7 +7,7 @@
   font-display: swap;
 }
 
-/* ================== Root variables ===================================== */
+/* Global UI font stack uses Krasar first */
 :root{
   --ui-font: "Krasar", "Noto Sans Khmer",
              system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
@@ -24,18 +24,8 @@
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
 
-  /* legacy (kept for other pages) */
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
-
-  /* NEW — frame & tiles tuned to screenshot */
-  --frame-wood:#b0743b;                    /* outer frame color */
-  --frame-highlight:rgba(255,255,255,.16); /* top bevel */
-  --frame-shadow:rgba(0,0,0,.35);          /* drop & inner shadow */
-  --bezel:#50301a;                         /* thin dark inner line */
-  --tile-light:#d19755;                    /* light squares */
-  --tile-dark:#c07f45;                     /* dark squares */
-  --grid-line:rgba(104,60,25,.35);         /* grid line between squares */
 }
 
 /* === Base =============================================================== */
@@ -196,55 +186,45 @@ body{
 }
 
 /* =================================================================== */
-/* =================== CHESS BOARD (wood frame style) ================= */
+/* =================== CHESS BOARD ================================== */
 .timers,.board,.chat-panel{ inline-size:100% }
 
+/* ---- MODIFIED: only the frame (board, ::before, ::after) ---- */
 .board{
   position:relative;
   display:grid;
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
 
-  /* SIZE / SHAPE */
   width:100%;
-  max-width:520px;          /* cap on large screens */
-  aspect-ratio:1/1.05;      /* almost square like the screenshot */
+  aspect-ratio:1/1.35;       /* keep your ratio */
+  border-radius:16px;
+  margin:0;
 
-  /* gap between grid and inner bezel */
-  padding:8px;
-
-  margin:0 auto;
-  box-sizing:border-box;
-  user-select:none;
   touch-action:none;
   overscroll-behavior:contain;
+  user-select:none;
 
-  /* playing surface under the grid */
-  background:#c88a47;
-  background-image:
-    linear-gradient(135deg, rgba(255,255,255,.06), rgba(0,0,0,.08)),
-    repeating-linear-gradient(
-      90deg,
-      rgba(255,255,255,.02) 0,
-      rgba(255,255,255,.02) 4px,
-      rgba(0,0,0,.02)       4px,
-      rgba(0,0,0,.02)       8px
-    );
-  border-radius:12px;
+  /* inner gap between grid and bezel */
+  padding:8px;               /* was 10px; slimmer to match framed look */
+  box-sizing:border-box;
 
-  /* subtle lift */
+  /* keep your base color (cells cover it anyway) */
+  background:#2a170a;
+
+  /* light global lift */
   box-shadow:0 10px 20px rgba(0,0,0,.35);
 }
 
-/* OUTER WOODEN FRAME (thick) */
+/* OUTER WOODEN FRAME — thicker, beveled */
 .board::before{
   content:"";
   position:absolute;
-  inset:-18px;                  /* frame thickness */
-  border-radius:18px;
-  background:var(--frame-wood);
+  inset:-18px;               /* frame thickness (↑ increase for thicker) */
+  border-radius:22px;
+  background:#b0743b;        /* wood tone */
   background-image:
-    linear-gradient(180deg, var(--frame-highlight), rgba(0,0,0,.12)),
+    linear-gradient(180deg, rgba(255,255,255,.16), rgba(0,0,0,.12)),
     repeating-linear-gradient(
       0deg,
       rgba(255,255,255,.03) 0,
@@ -253,44 +233,45 @@ body{
       rgba(0,0,0,.03)       12px
     );
   box-shadow:
-    inset 0 2px 4px rgba(255,255,255,.25),
-    inset 0 -6px 10px var(--frame-shadow),
-    0 8px 22px var(--frame-shadow);
+    inset 0 2px 4px rgba(255,255,255,.25),  /* top bevel highlight */
+    inset 0 -6px 10px rgba(0,0,0,.35),      /* bottom bevel shadow */
+    0 8px 22px rgba(0,0,0,.35);             /* outer drop shadow */
   z-index:-1;
 }
 
-/* INNER BEZEL (thin dark line around grid) */
+/* INNER BEZEL — thin dark line around squares */
 .board::after{
   content:"";
   position:absolute;
-  inset:4px;                     /* distance from grid */
-  border-radius:10px;
-  border:2px solid var(--bezel);
+  inset:4px;                 /* distance from grid; tweak 3–6px */
+  border-radius:12px;
+  border:2px solid rgba(80,48,26,.88);  /* dark wood line */
   pointer-events:none;
   box-shadow:
     inset 0 1px 2px rgba(255,255,255,.25),
     inset 0 0 6px rgba(0,0,0,.25);
 }
 
-/* Cells (flat wood + thin grid lines) */
+/* Cells */
 .cell{
   position:relative;
   display:flex; align-items:center; justify-content:center;
-  user-select:none; z-index:1;
-
-  background:var(--tile-light);
-  border:1px solid var(--grid-line);
-  border-radius:0;
+  background-repeat:repeat;
+  background-size:512px 512px;
+  background-position:center;
+  user-select:none;
+  border-radius:2px;
+  z-index:1;
 }
-.cell.light{ background:var(--tile-light); }
-.cell.dark { background:var(--tile-dark);  }
+.cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
+.cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
 /* Hide coordinates if .no-coords present */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
-  font-size:.62rem; color:rgba(0,0,0,.55);
-  text-shadow:1px 1px 2px rgba(255,255,255,.75);
+  font-size:.62rem; color:rgba(0,0,0,.6);
+  text-shadow:1px 1px 2px rgba(255,255,255,.8);
 }
 .board.no-coords .cell::after{ display:none !important }
 
@@ -300,23 +281,19 @@ body{
   background-size:contain; background-repeat:no-repeat; background-position:center;
   border-radius:.4rem; cursor:grab; touch-action:none;
   box-shadow:none;
-
-  /* smoother movement */
   transition:transform .25s ease, box-shadow .18s ease, filter .18s ease;
 }
 .piece:active{ transform:scale(.96) }
 .turn-white .piece.white,
 .turn-black .piece.black{
-  box-shadow:0 6px 14px rgba(0,0,0,.28);
-  filter:brightness(1.03);
+  box-shadow:0 6px 14px rgba(0,0,255,0.4);
+  filter:brightness(1.02);
 }
 
 /* Highlights */
 .cell.hint-move::before{
-  content:""; position:absolute; inset:16%;
-  border-radius:6px; box-sizing:border-box;
-  border:3px solid #3da35a;
-  background:rgba(61,163,90,.12);
+  content:""; position:absolute; width:24%; height:24%;
+  background:var(--legal); border-radius:50%; opacity:.8;
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
 .cell.selected{ outline:3px solid var(--hi); z-index:2 }

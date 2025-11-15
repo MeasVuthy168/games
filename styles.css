@@ -26,9 +26,11 @@
 
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
+  --frame-wood:url("assets/board/frame_wood_medium.jpg"); /* your added texture */
 
-  /* New realistic medium wood frame */
-  --frame-wood:url("assets/board/frame_wood_medium.jpg");
+  /* Gold rim tunables */
+  --gold-w: 10px;  /* golden rim width */
+  --gold-a: .85;   /* rim opacity (0..1) */
 }
 
 /* === Base =============================================================== */
@@ -102,9 +104,7 @@ body{
   user-select:none;
   color:inherit;
 }
-:root[data-theme="dark"] .count-label{
-  background:rgba(255,255,255,.12); color:#e6f0ff;
-}
+:root[data-theme="dark"] .count-label{ background:rgba(255,255,255,.12); color:#e6f0ff }
 .count-label.pulse{ animation:pulse .9s ease-in-out infinite }
 @keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
 
@@ -116,9 +116,7 @@ body{
   background:rgba(13,45,92,.12);
   overflow:hidden;
 }
-:root[data-theme="dark"] .count-bar{
-  background:rgba(255,255,255,.18);
-}
+:root[data-theme="dark"] .count-bar{ background:rgba(255,255,255,.18) }
 
 .count-bar-fill{
   height:100%;
@@ -128,9 +126,7 @@ body{
   transform-origin:left center;
   transition:width 180ms ease, background 220ms ease;
 }
-.count-bar-fill.low{
-  background:linear-gradient(90deg,#ffd479,#ff5e57);
-}
+.count-bar-fill.low{ background:linear-gradient(90deg,#ffd479,#ff5e57) }
 .count-bar.urgent{ animation:shake .5s ease-in-out infinite }
 @keyframes shake{
   0%,100%{transform:translateX(0)}
@@ -151,9 +147,7 @@ body{
   background:rgba(255,255,255,.9);
   color:#0f172a;
 }
-:root[data-theme="dark"] .count-badge{
-  background:rgba(10,15,30,.9); color:#e6f0ff;
-}
+:root[data-theme="dark"] .count-badge{ background:rgba(10,15,30,.9); color:#e6f0ff }
 
 /* ===== Small control buttons row ===== */
 .ctrl-row{
@@ -199,7 +193,7 @@ body{
 /* =================================================================== */
 /* =================== CHESS BOARD ================================== */
 
-/* --- REALISTIC MEDIUM WOOD FRAME --- */
+/* --- Realistic wood frame + GOLD edge + bottom engraving + 3D --- */
 .board{
   position:relative;
   display:grid;
@@ -208,25 +202,44 @@ body{
   width:100%;
   aspect-ratio:1/1.35;
 
-  padding:14px;                 /* frame thickness */
-  border-radius:18px;           /* soft frame corner */
+  /* frame geometry */
+  padding:14px;                               /* wood thickness */
+  border-radius:18px;                          /* soft frame corners */
+  border: var(--gold-w) solid transparent;     /* reserved space for gold rim */
 
-  /* Multi-layer wood frame */
+  /* layered frame: [0]=gold rim, [1]=inner lip, [2]=wood, [3]=warm base */
   background:
-    linear-gradient(180deg,rgba(0,0,0,.10),rgba(255,255,255,.04)),
+    conic-gradient(
+      from 0deg,
+      rgba(255,242,183,var(--gold-a)) 0deg,
+      rgba(255,215,128,var(--gold-a)) 40deg,
+      rgba(253,208,82,var(--gold-a)) 90deg,
+      rgba(212,167,74,var(--gold-a)) 140deg,
+      rgba(255,223,140,var(--gold-a)) 200deg,
+      rgba(255,240,190,var(--gold-a)) 260deg,
+      rgba(253,208,82,var(--gold-a)) 320deg,
+      rgba(255,242,183,var(--gold-a)) 360deg
+    ),
+    linear-gradient(180deg, rgba(0,0,0,.10), rgba(255,255,255,.05)),
     var(--frame-wood),
     linear-gradient(145deg,#c29363,#7b5334);
 
-  background-size:cover, 720px 720px, cover;
-  background-position:center, center, center;
-  background-origin:content-box, border-box, border-box;
-  background-clip:content-box, border-box, border-box;
+  /* clip so gold paints border only; wood stays in padding box */
+  background-clip:
+    border-box,   /* conic gold on border area */
+    padding-box,  /* inner lip inside wood */
+    padding-box,  /* wood texture on frame area */
+    border-box;   /* warm base can extend under border for glow */
 
-  /* Depth */
+  background-size:auto, cover, 720px 720px, cover;
+  background-position:center, center, center, center;
+
+  /* 3D lift */
+  filter:saturate(1.04);
   box-shadow:
-    inset 0 2px 2px rgba(255,255,255,.25),
-    inset 0 -4px 7px rgba(0,0,0,.45),
-    0 12px 28px rgba(0,0,0,.33);
+    inset 0 1px 0 rgba(255,255,255,.20),   /* faint inner highlight */
+    inset 0 -4px 7px rgba(0,0,0,.45),      /* inner bottom shade */
+    0 16px 34px rgba(0,0,0,.35);           /* outer lift */
 
   margin:0;
   touch-action:none;
@@ -235,34 +248,53 @@ body{
   box-sizing:border-box;
 }
 
-/* Inner bevel ring */
+/* Inner bevel ring just inside wood frame */
 .board::before{
   content:"";
   position:absolute;
-  inset:14px;
-  border-radius:12px;
-
+  inset: calc(var(--gold-w) + 14px);
+  border-radius: max(12px, calc(18px - var(--gold-w)));
+  pointer-events:none;
   box-shadow:
     inset 0 2px 3px rgba(255,255,255,.22),
-    inset 0 -4px 8px rgba(0,0,0,.35);
-
-  background:transparent;
+    inset 0 -5px 10px rgba(0,0,0,.38);
+  background: transparent;
   z-index:0;
 }
 
-/* Remove old frame */
+/* Bottom-center engraving + glossy/glint accents */
 .board::after{
-  content:"";
+  content: "អុកចត្រង្គ";            /* Bottom center engraving */
   position:absolute;
-  inset:0;
-  border:none !important;
-  border-radius:0;
-  box-shadow:none !important;
+  left:50%;
+  bottom: calc(var(--gold-w) + 6px);
+  transform: translateX(-50%);
+  z-index:0;
   pointer-events:none;
-  background:none !important;
+
+  font-family:"Krasar","Noto Sans Khmer",system-ui,sans-serif;
+  font-weight:800;
+  font-size: clamp(14px, 3.6vw, 22px);
+  letter-spacing:.02em;
+  color: rgba(0,0,0,.42);
+  opacity:.88;
+  mix-blend-mode:multiply;
+  text-shadow:
+    0.6px 0.6px 0 rgba(255,255,255,.30),  /* top-left highlight */
+   -0.8px -0.8px 0 rgba(0,0,0,.45);       /* carved shadow */
+
+  /* corner glints for extra realism */
+  background:
+    radial-gradient(200px 120px at 12% 10%, rgba(255,255,255,.28), transparent 60%),
+    radial-gradient(200px 120px at 88% 12%, rgba(255,255,255,.18), transparent 60%),
+    radial-gradient(200px 140px at 10% 90%, rgba(0,0,0,.18), transparent 65%),
+    radial-gradient(200px 140px at 92% 88%, rgba(0,0,0,.12), transparent 65%);
+  inset:0;                     /* make background cover to place glints */
+  border-radius:inherit;
 }
 
 /* Cells */
+.timers,.board,.chat-panel{ inline-size:100% }
 .cell{
   position:relative;
   display:flex; align-items:center; justify-content:center;
@@ -276,7 +308,7 @@ body{
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
 .cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
-/* Coordinates */
+/* Coordinates (hidden when .no-coords) */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
@@ -334,21 +366,17 @@ body.ai-thinking #board{
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
   transition: transform .25s ease, opacity .25s ease;
 }
-#appTabbar.is-hidden{
-  transform:translateY(100%); opacity:0; pointer-events:none;
-}
+#appTabbar.is-hidden{ transform:translateY(100%); opacity:0; pointer-events:none }
 .nav-item{
   display:flex; flex-direction:column; align-items:center; gap:.15rem;
   padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
   font-size:.8rem;
 }
 .ni-img{ width:24px; height:24px; display:block }
-.nav-item.active{
-  background:#eef4ff; color:#0d2d5c; font-weight:800;
-}
+.nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 
-/* AI overlay */
+/* ===== AI overlay & turn blocking ===== */
 #aiBusy{
   position:fixed;
   inset:0;
@@ -375,7 +403,7 @@ body.ai-thinking #board{
 .ai-text{ font-weight:700; color:#0d2d5c; }
 @keyframes ai-spin{ to{ transform:rotate(360deg) } }
 
-/* ===================== DRAG & DROP ===================== */
+/* ===================== DRAG & DROP (NEW) ===================== */
 .drag-ghost{
   position:fixed; z-index:99999; pointer-events:none;
   width:72px; height:72px; background-size:contain; background-repeat:no-repeat;
@@ -403,7 +431,7 @@ body.ai-thinking #board{
 }
 @keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(12); opacity:0; } }
 
-/* ===================== FLASH OVERLAY ===================== */
+/* ===================== END FLASH OVERLAY ===================== */
 #flashOverlay{
   position:fixed; inset:0; z-index:10000;
   display:none; align-items:center; justify-content:center;
@@ -432,7 +460,7 @@ body.ai-thinking #board{
 }
 .flash-btn:active{ transform:translateY(1px) }
 
-/* Fireworks */
+/* Fireworks (pure CSS bursts) */
 .fireworks{
   position:absolute; inset:0; pointer-events:none; overflow:hidden;
 }
@@ -458,10 +486,7 @@ body.ai-thinking #board{
 .fireworks .b3{ transform:translate(140px,-40px) }
 .fireworks .b4{ transform:translate(-120px,70px) }
 .fireworks .b5{ transform:translate(120px,90px) }
-@keyframes pop{
-  60%{transform:scale(1)}
-  100%{transform:scale(0); opacity:0}
-}
+@keyframes pop{ 60%{transform:scale(1)} 100%{transform:scale(0); opacity:0} }
 
 /* RIP image */
 .rip-wrap{ display:flex; align-items:center; justify-content:center; }

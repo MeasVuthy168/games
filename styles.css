@@ -1,4 +1,4 @@
- /* === Khmer UI Font (Krasar) ============================================ */
+/* === Khmer UI Font (Krasar) ============================================ */
 @font-face{
   font-family: "Krasar";
   src: url("assets/fonts/Krasar-Regular.ttf") format("truetype");
@@ -26,6 +26,9 @@
 
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
+
+  /* New realistic medium wood frame */
+  --frame-wood:url("assets/board/frame_wood_medium.jpg");
 }
 
 /* === Base =============================================================== */
@@ -99,7 +102,9 @@ body{
   user-select:none;
   color:inherit;
 }
-:root[data-theme="dark"] .count-label{ background:rgba(255,255,255,.12); color:#e6f0ff }
+:root[data-theme="dark"] .count-label{
+  background:rgba(255,255,255,.12); color:#e6f0ff;
+}
 .count-label.pulse{ animation:pulse .9s ease-in-out infinite }
 @keyframes pulse{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.04)} }
 
@@ -111,7 +116,9 @@ body{
   background:rgba(13,45,92,.12);
   overflow:hidden;
 }
-:root[data-theme="dark"] .count-bar{ background:rgba(255,255,255,.18) }
+:root[data-theme="dark"] .count-bar{
+  background:rgba(255,255,255,.18);
+}
 
 .count-bar-fill{
   height:100%;
@@ -121,7 +128,9 @@ body{
   transform-origin:left center;
   transition:width 180ms ease, background 220ms ease;
 }
-.count-bar-fill.low{ background:linear-gradient(90deg,#ffd479,#ff5e57) }
+.count-bar-fill.low{
+  background:linear-gradient(90deg,#ffd479,#ff5e57);
+}
 .count-bar.urgent{ animation:shake .5s ease-in-out infinite }
 @keyframes shake{
   0%,100%{transform:translateX(0)}
@@ -142,7 +151,9 @@ body{
   background:rgba(255,255,255,.9);
   color:#0f172a;
 }
-:root[data-theme="dark"] .count-badge{ background:rgba(10,15,30,.9); color:#e6f0ff }
+:root[data-theme="dark"] .count-badge{
+  background:rgba(10,15,30,.9); color:#e6f0ff;
+}
 
 /* ===== Small control buttons row ===== */
 .ctrl-row{
@@ -187,8 +198,8 @@ body{
 
 /* =================================================================== */
 /* =================== CHESS BOARD ================================== */
-.timers,.board,.chat-panel{ inline-size:100% }
 
+/* --- REALISTIC MEDIUM WOOD FRAME --- */
 .board{
   position:relative;
   display:grid;
@@ -196,33 +207,55 @@ body{
   grid-template-rows:repeat(8,1fr);
   width:100%;
   aspect-ratio:1/1.35;
-  border-radius:0;           /* ← no rounded edge */
+
+  padding:14px;                 /* frame thickness */
+  border-radius:18px;           /* soft frame corner */
+
+  /* Multi-layer wood frame */
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.10),rgba(255,255,255,.04)),
+    var(--frame-wood),
+    linear-gradient(145deg,#c29363,#7b5334);
+
+  background-size:cover, 720px 720px, cover;
+  background-position:center, center, center;
+  background-origin:content-box, border-box, border-box;
+  background-clip:content-box, border-box, border-box;
+
+  /* Depth */
+  box-shadow:
+    inset 0 2px 2px rgba(255,255,255,.25),
+    inset 0 -4px 7px rgba(0,0,0,.45),
+    0 12px 28px rgba(0,0,0,.33);
+
   margin:0;
   touch-action:none;
   overscroll-behavior:contain;
   user-select:none;
-  padding:10px;
-  background:#2a170a;
   box-sizing:border-box;
 }
 
+/* Inner bevel ring */
 .board::before{
   content:"";
-  position:absolute; inset:0;
-  border-radius:0;           /* ← no rounded edge */
-  background:linear-gradient(145deg,#5b3215,#2a170a);
+  position:absolute;
+  inset:14px;
+  border-radius:12px;
+
   box-shadow:
-    inset 0 2px 4px rgba(255,255,255,.22),
-    inset 0 -5px 8px rgba(0,0,0,.5),
-    0 10px 20px rgba(0,0,0,.4);
-  z-index:-2;
+    inset 0 2px 3px rgba(255,255,255,.22),
+    inset 0 -4px 8px rgba(0,0,0,.35);
+
+  background:transparent;
+  z-index:0;
 }
 
+/* Remove old frame */
 .board::after{
   content:"";
   position:absolute;
-  inset:0;               /* fill entire board */
-  border:none !important;/* remove yellow frame */
+  inset:0;
+  border:none !important;
   border-radius:0;
   box-shadow:none !important;
   pointer-events:none;
@@ -243,7 +276,7 @@ body{
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
 .cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
 
-/* Hide coordinates if .no-coords present */
+/* Coordinates */
 .cell::after{
   content:attr(data-ax);
   position:absolute; bottom:5px; right:7px;
@@ -301,17 +334,21 @@ body.ai-thinking #board{
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
   transition: transform .25s ease, opacity .25s ease;
 }
-#appTabbar.is-hidden{ transform:translateY(100%); opacity:0; pointer-events:none }
+#appTabbar.is-hidden{
+  transform:translateY(100%); opacity:0; pointer-events:none;
+}
 .nav-item{
   display:flex; flex-direction:column; align-items:center; gap:.15rem;
   padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
   font-size:.8rem;
 }
 .ni-img{ width:24px; height:24px; display:block }
-.nav-item.active{ background:#eef4ff; color:#0d2d5c; font-weight:800 }
+.nav-item.active{
+  background:#eef4ff; color:#0d2d5c; font-weight:800;
+}
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 
-/* ===== AI overlay & turn blocking ===== */
+/* AI overlay */
 #aiBusy{
   position:fixed;
   inset:0;
@@ -337,9 +374,8 @@ body.ai-thinking #board{
 }
 .ai-text{ font-weight:700; color:#0d2d5c; }
 @keyframes ai-spin{ to{ transform:rotate(360deg) } }
-.ai-thinking .board, .ai-turn .board{ pointer-events:none; }
 
-/* ===================== DRAG & DROP (NEW) ===================== */
+/* ===================== DRAG & DROP ===================== */
 .drag-ghost{
   position:fixed; z-index:99999; pointer-events:none;
   width:72px; height:72px; background-size:contain; background-repeat:no-repeat;
@@ -367,7 +403,7 @@ body.ai-thinking #board{
 }
 @keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(12); opacity:0; } }
 
-/* ===================== END FLASH OVERLAY ===================== */
+/* ===================== FLASH OVERLAY ===================== */
 #flashOverlay{
   position:fixed; inset:0; z-index:10000;
   display:none; align-items:center; justify-content:center;
@@ -396,7 +432,7 @@ body.ai-thinking #board{
 }
 .flash-btn:active{ transform:translateY(1px) }
 
-/* Fireworks (pure CSS bursts) */
+/* Fireworks */
 .fireworks{
   position:absolute; inset:0; pointer-events:none; overflow:hidden;
 }
@@ -422,11 +458,18 @@ body.ai-thinking #board{
 .fireworks .b3{ transform:translate(140px,-40px) }
 .fireworks .b4{ transform:translate(-120px,70px) }
 .fireworks .b5{ transform:translate(120px,90px) }
-@keyframes pop{ 60%{transform:scale(1)} 100%{transform:scale(0); opacity:0} }
+@keyframes pop{
+  60%{transform:scale(1)}
+  100%{transform:scale(0); opacity:0}
+}
 
 /* RIP image */
 .rip-wrap{ display:flex; align-items:center; justify-content:center; }
-.rip-img{ width:min(200px, 60vw); height:auto; display:block; filter:drop-shadow(0 10px 24px rgba(0,0,0,.35)); margin:10px auto; }
+.rip-img{
+  width:min(200px, 60vw); height:auto; display:block;
+  filter:drop-shadow(0 10px 24px rgba(0,0,0,.35));
+  margin:10px auto;
+}
 
 /* Draw badge */
 .draw-badge{

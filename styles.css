@@ -201,7 +201,7 @@ body{
   touch-action:none;
   overscroll-behavior:contain;
   user-select:none;
-  padding:0;
+  padding:10px;
   background:#2a170a;
   box-sizing:border-box;
 }
@@ -237,7 +237,7 @@ body{
   background-size:512px 512px;
   background-position:center;
   user-select:none;
-  border-radius:2px;
+  border-radius:1px;
   z-index:1;
 }
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }

@@ -235,11 +235,6 @@ body{
   overscroll-behavior:contain;
   user-select:none;
   box-sizing:border-box;
-
-  /* NEW: help browser repaint this layer correctly */
-  transform: translateZ(0);
-  backface-visibility: hidden;
-  will-change: transform;
 }
 
 /* Inner chamfer/lip where squares begin */
@@ -283,9 +278,9 @@ body{
   border-radius:1px;
   z-index:1;
 
-  /* corner bracket size/thickness */
-  --corner-size: 12px;
-  --corner-thick: 3px;
+  /* === Glowing corner size/thickness for all states === */
+  --corner-size: 10px;   /* adjust for smaller/bigger brackets */
+  --corner-thick: 2px;
 }
 .cell.light{ background-image:var(--board-light-img); filter:brightness(1.05) }
 .cell.dark { background-image:var(--board-dark-img);  filter:brightness(0.90) }
@@ -306,9 +301,6 @@ body{
   border-radius:.4rem; cursor:grab; touch-action:none;
   box-shadow:none;
   transition:transform .25s ease, box-shadow .18s ease, filter .18s ease;
-
-  /* NEW: hints for smoother updates */
-  will-change: transform, filter;
 }
 .piece:active{ transform:scale(.96) }
 .turn-white .piece.white,
@@ -319,19 +311,25 @@ body{
 
 /* ===== Highlights (STRONG 3D glowing corners) ===== */
 
-/* reset any old outlines */
+/* Corner thickness / size */
+.cell{
+  --corner-size: 12px;
+  --corner-thick: 3px;
+}
+
+/* Clear old borders */
 .cell.selected,
 .cell.last-from,
 .cell.last-to{
   outline:none;
 }
 
-/* SELECTED — strong bright blue */
+/* ===== SELECTED — strong bright blue ===== */
 .cell.selected::before{
   content:"";
   position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
 
-  --c: #1e90ff;
+  --c: #1e90ff;     /* LINE color */
   --inner: rgba(30,144,255,.45);
   --glow:  rgba(30,144,255,1);
 
@@ -345,18 +343,21 @@ body{
     linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-size) var(--corner-thick) no-repeat,
     linear-gradient(var(--c),var(--c)) 100% 100%/var(--corner-thick) var(--corner-size) no-repeat;
 
+  /* Deep inner shadow + outer glow (visible everywhere) */
   box-shadow:
     inset 0 0 8px rgba(0,0,0,.35),
     inset 0 0 6px var(--inner),
     inset 0 0 1px rgba(255,255,255,.6);
 
-  /* simplified filter for performance */
-  filter: drop-shadow(0 0 10px var(--glow));
+  filter:
+    drop-shadow(0 0 8px var(--glow))
+    drop-shadow(0 0 18px var(--glow));
 
   mix-blend-mode: normal;
 }
 
-/* LAST FROM — deeper cyan */
+
+/* ===== LAST FROM — deeper cyan (strong) ===== */
 .cell.last-from::before{
   content:"";
   position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
@@ -380,12 +381,15 @@ body{
     inset 0 0 6px var(--inner),
     inset 0 0 1px rgba(255,255,255,.6);
 
-  filter: drop-shadow(0 0 10px var(--glow));
+  filter:
+    drop-shadow(0 0 8px var(--glow))
+    drop-shadow(0 0 18px var(--glow));
 
   mix-blend-mode: normal;
 }
 
-/* LAST TO — vivid green */
+
+/* ===== LAST TO — vivid green (very clear) ===== */
 .cell.last-to::before{
   content:"";
   position:absolute; inset:3px; border-radius:6px; pointer-events:none; z-index:3;
@@ -409,7 +413,9 @@ body{
     inset 0 0 6px var(--inner),
     inset 0 0 1px rgba(255,255,255,.6);
 
-  filter: drop-shadow(0 0 10px var(--glow));
+  filter:
+    drop-shadow(0 0 8px var(--glow))
+    drop-shadow(0 0 18px var(--glow));
 
   mix-blend-mode: normal;
 }
@@ -439,8 +445,7 @@ body.ai-thinking #board{
 
 /* ===== Bottom nav ===== */
 #appTabbar{
-  position:fixed;
-  left:0; right:0; bottom:0; z-index:50;
+  position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
   display:grid; grid-template-columns:repeat(5,1fr);
   gap:.2rem;
@@ -478,8 +483,7 @@ body.ai-thinking #board{
 .ai-spinner{
   margin-top:60px;
   display:flex; flex-direction:column; align-items:center; gap:.5rem;
-  background:#fff; padding:.9rem 1.1rem; border-radius:.9rem;
-  box-shadow:0 8px 24px rgba(0,0,0,.18);
+  background:#fff; padding:.9rem 1.1rem; border-radius:.9rem; box-shadow:0 8px 24px rgba(0,0,0,.18);
   pointer-events:auto;
 }
 .ai-dot{
@@ -500,8 +504,7 @@ body.ai-thinking #board{
 .cell.drag-target{ outline:4px solid rgba(132,202,255,.95) }
 .cell.drag-legal::before{
   content:""; position:absolute; width:22%; height:22%;
-  background:var(--legal); border-radius:50%; opacity:.9;
-  box-shadow:0 0 0 6px rgba(0,0,0,.05) inset;
+  background:var(--legal); border-radius:50%; opacity:.9; box-shadow:0 0 0 6px rgba(0,0,0,.05) inset;
 }
 
 /* ===================== MOVE ANIMATIONS ===================== */
@@ -511,17 +514,13 @@ body.ai-thinking #board{
 .piece.anim-hop  { animation:hopIn .30s ease-out }
 
 /* capture ripple */
-.capture-ripple{
-  position:absolute; inset:0; border-radius:4px; pointer-events:none; overflow:hidden;
-}
+.capture-ripple{ position:absolute; inset:0; border-radius:4px; pointer-events:none; overflow:hidden; }
 .capture-ripple::after{
   content:""; position:absolute; top:50%; left:50%;
   width:10px; height:10px; background:rgba(255,0,0,.25); border-radius:50%;
   transform:translate(-50%,-50%) scale(0.2); animation:capRipple .3s ease-out;
 }
-@keyframes capRipple{
-  to{ transform:translate(-50%,-50%) scale(12); opacity:0; }
-}
+@keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(12); opacity:0; } }
 
 /* ===================== END FLASH OVERLAY ===================== */
 #flashOverlay{
@@ -548,8 +547,7 @@ body.ai-thinking #board{
 .flash-actions{ margin-top:12px; display:flex; gap:10px; justify-content:center; }
 .flash-btn{
   background:#fff; color:#0d2d5c; border:none; border-radius:12px;
-  padding:.6rem 1rem; font-weight:800; cursor:pointer;
-  box-shadow:0 6px 16px rgba(0,0,0,.2);
+  padding:.6rem 1rem; font-weight:800; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.2);
 }
 .flash-btn:active{ transform:translateY(1px) }
 

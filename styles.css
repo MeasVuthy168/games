@@ -595,3 +595,116 @@ body.ai-thinking #board{
   display:inline-block; padding:6px 12px; border-radius:999px;
   background:#fff3bf; color:#7c5b00; font-weight:800;
 }
+
+/* =================================================================== */
+/* =================== SHARED MODAL (overlay dialog) ================ */
+/* Base rules for any page using .modal/.modal-backdrop/.modal-card.
+   A page can still layer page-specific tweaks (e.g. index.html's
+   role-picker) in its own <style> block after this stylesheet loads;
+   those later, equally-specific rules win and keep working unchanged. */
+.modal{ position:fixed; inset:0; z-index:1000; display:none; }
+.modal.show{ display:block; }
+.modal-backdrop{ position:absolute; inset:0; background:rgba(13,45,92,.45); }
+.modal-card{
+  position:relative; max-width:420px; margin:14vh auto 0; background:var(--panel);
+  border-radius:1rem; padding:1rem 1.1rem 1.2rem; box-shadow:0 12px 32px rgba(0,0,0,.25);
+  max-height:78vh; overflow-y:auto;
+}
+.modal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem; gap:.5rem; }
+.modal-header h3{ margin:0; font-size:1.05rem; color:var(--blue); }
+.modal-body{ color:var(--ink); }
+
+/* =================================================================== */
+/* =================== CARD LIST (settings-style rows) =============== */
+.card-list{ display:flex; flex-direction:column; gap:.75rem; padding:0 1rem 1.2rem; }
+
+.card{
+  background:var(--panel); border-radius:1rem; box-shadow:var(--shadow);
+  border:1px solid rgba(13,45,92,.06); overflow:hidden;
+}
+button.card{
+  appearance:none; -webkit-appearance:none; margin:0;
+  font:inherit; color:inherit; text-align:start; cursor:pointer;
+  background:var(--panel); border:1px solid rgba(13,45,92,.06);
+}
+
+.card-full{
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  width:100%; padding:.9rem 1rem; margin:0;
+}
+
+/* <details class="card card-full exp"> needs the row layout on its
+   <summary>, not on the details element itself (which stacks summary
+   above the collapsible body). Higher specificity wins regardless of
+   declaration order. */
+details.card.card-full{ display:block; padding:0; }
+details.card.card-full > summary{
+  display:flex; align-items:center; justify-content:space-between; gap:.75rem;
+  padding:.9rem 1rem; cursor:pointer; list-style:none;
+}
+details.card.card-full > summary::-webkit-details-marker{ display:none; }
+details.card.card-full > .card-body{
+  padding:0 1rem 1rem; border-top:1px solid rgba(13,45,92,.08);
+  margin-top:-1px; padding-top:.85rem;
+  display:flex; flex-direction:column; gap:.7rem;
+}
+
+.card-left{ display:flex; flex-direction:column; gap:.15rem; min-width:0; }
+.card-title{ font-weight:800; font-size:1rem; color:var(--ink); }
+.card-sub{ font-size:.82rem; opacity:.65; font-weight:600; }
+.card-right{ display:flex; align-items:center; gap:.6rem; flex:none; color:var(--blue); font-weight:700; }
+
+.card.disabled{ opacity:.5; pointer-events:none; }
+
+.clickable{ cursor:pointer; transition:transform .12s ease, box-shadow .12s ease; }
+.clickable:active{ transform:scale(.98); }
+.clickable:hover{ box-shadow:0 10px 26px rgba(0,0,0,.14); }
+
+/* Disclosure caret ("›"), rotates 90deg when the <details> is open */
+.caret{ display:inline-flex; transition:transform .2s ease; }
+.exp[open] .caret{ transform:rotate(90deg); }
+
+/* Fields / buttons used inside expanded card-body sections */
+.field{ display:flex; flex-direction:column; gap:.3rem; font-weight:700; font-size:.85rem; color:var(--ink); }
+.field input{
+  font:inherit; padding:.55rem .7rem; border-radius:.6rem; border:1px solid #d7dee8;
+  background:#f7f9fc; color:var(--ink);
+}
+.field input:focus{ outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue); }
+
+.radio{ display:flex; align-items:center; gap:.5rem; font-weight:700; padding:.3rem 0; cursor:pointer; }
+.radio input{ width:18px; height:18px; accent-color:var(--blue); }
+
+.row-inline{ display:flex; gap:.6rem; margin-top:.2rem; }
+.primary, .secondary{
+  flex:1; padding:.6rem .8rem; border-radius:.7rem; font-weight:800; font-size:.9rem;
+  border:none; cursor:pointer; transition:transform .12s ease;
+}
+.primary{ background:var(--blue); color:#fff; }
+.secondary{ background:#eef1f5; color:var(--ink); }
+.primary:active, .secondary:active{ transform:scale(.97); }
+
+/* Toggle switch */
+.switch{ position:relative; display:inline-block; width:46px; height:26px; flex:none; }
+.switch input{ position:absolute; inset:0; opacity:0; margin:0; cursor:pointer; }
+.switch .slider{
+  position:absolute; inset:0; background:#d7dee8; border-radius:999px;
+  transition:background .2s ease; pointer-events:none;
+}
+.switch .slider::before{
+  content:""; position:absolute; left:3px; top:3px; width:20px; height:20px;
+  background:#fff; border-radius:50%; box-shadow:0 2px 4px rgba(0,0,0,.25);
+  transition:transform .2s ease;
+}
+.switch input:checked + .slider{ background:var(--blue); }
+.switch input:checked + .slider::before{ transform:translateX(20px); }
+.switch input:focus-visible + .slider{ outline:2px solid var(--blue); outline-offset:2px; }
+
+/* Pill button (e.g. "Test" sound button) */
+.pill{
+  display:inline-flex; align-items:center; justify-content:center;
+  padding:.4rem .9rem; border-radius:999px; border:none;
+  background:#eef4ff; color:var(--blue); font-weight:800; font-size:.85rem;
+  cursor:pointer; transition:transform .12s ease, background .15s ease;
+}
+.pill:active{ transform:scale(.95); background:#e0ebff; }

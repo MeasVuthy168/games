@@ -12,7 +12,8 @@ const DEFAULTS = {
   minutes: 10,
   increment: 5,
   sound: true,
-  hints: true
+  hints: true,
+  aiColor: 'b' // fallback: human plays White, AI plays Black, until the player picks a role
 };
 
 /* ---------------- storage ---------------- */
@@ -49,10 +50,11 @@ function loadSettings() {
       // Two humans, pass-and-play on the same device — no AI.
       merged.aiEnabled = false;
     } else {
-      // Force Makruk AI vs human
+      // Force Makruk AI vs human, but respect the player's chosen color
+      // (set on the home screen's role picker: White / Black / Random).
       merged.aiEnabled = true;
       merged.aiLevel   = 'Master';
-      merged.aiColor   = 'b';    // AI = Black
+      if (merged.aiColor !== 'w' && merged.aiColor !== 'b') merged.aiColor = 'b';
     }
     return merged;
   } catch {
@@ -141,7 +143,7 @@ class Clocks {
 function $(s, r=document){ return r.querySelector(s); }
 
 function showEndFlash(opts){
-  const { type='win' } = opts||{};
+  const { type='win', title:titleText, sub:subText } = opts||{};
   const overlay = $('#flashOverlay');
   const title = $('#flashTitle');
   const sub = $('#flashSub');
@@ -153,13 +155,13 @@ function showEndFlash(opts){
   rip.style.display = 'none';
 
   if (type === 'win'){
-    title.textContent = 'អ្នកឈ្នះ!';
-    sub.textContent   = 'អុកស្លាប់ខាងខ្មៅ (AI)! ល្បែងត្រូវបញ្ចប់។';
+    title.textContent = titleText || 'អ្នកឈ្នះ!';
+    sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
     fw.style.display  = 'block';
     beeper.sfxWin();
   } else if (type === 'lose'){
-    title.textContent = 'អ្នកចាញ់!';
-    sub.textContent   = 'អុកស្លាប់ខាងស! ល្បែងត្រូវបញ្ចប់។';
+    title.textContent = titleText || 'អ្នកចាញ់!';
+    sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
     rip.style.display = 'block';
     beeper.sfxLose();
   } else {
@@ -229,6 +231,29 @@ export function initUI() {
     return false;
   }
 
+  // The human's own color when playing vs AI (AI takes the other one).
+  function humanColor() {
+    if (!settings.aiEnabled) return null;
+    return settings.aiColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+  }
+
+  // Player-name rows are fixed to board geometry (top = Black rank, bottom =
+  // White rank) — only the *labels* change with the chosen role/mode.
+  function applyPlayerLabels() {
+    const elNameTop    = document.getElementById('nameBlack');
+    const elNameBottom = document.getElementById('nameWhite');
+    if (!elNameTop || !elNameBottom) return;
+    if (settings.aiEnabled) {
+      const aiIsWhite = settings.aiColor === COLORS.WHITE;
+      elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ' · ខ្មៅ';
+      elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ' · ស';
+    } else {
+      elNameTop.textContent    = 'អ្នកទី១ · ខ្មៅ (Black)';
+      elNameBottom.textContent = 'អ្នកទី២ · ស (White)';
+    }
+  }
+  applyPlayerLabels();
+
   const clocks = new Clocks((w, b) => {
     if (clockW) clockW.textContent = clocks.format(w);
     if (clockB) clockB.textContent = clocks.format(b);
@@ -261,6 +286,13 @@ export function initUI() {
     span.style.backgroundImage = `url(./assets/pieces/${name})`;
   }
 
+  // Who-plays suffix so the current player's role is always explicit,
+  // regardless of which color they picked (White or Black).
+  function whoSuffix(color) {
+    if (!settings.aiEnabled) return '';
+    return color === settings.aiColor ? ' · វេន Master (AI)' : ' · វេនអ្នក (You)';
+  }
+
   function khTurnLabel() {
     const side = game.turn === COLORS.WHITE ? KH.white : KH.black;
     const st = game.status();
@@ -269,8 +301,29 @@ export function initUI() {
       return `វេនខាង (${side}) · ${KH.checkmate} · ${w} ឈ្នះ`;
     }
     if (st.state === 'stalemate') return KH.stalemate;
-    if (st.state === 'check')     return `វេនខាង (${side}) · ${KH.check}`;
-    return `វេនខាង (${side})`;
+    if (st.state === 'check')     return `វេនខាង (${side}) · ${KH.check}${whoSuffix(game.turn)}`;
+    return `វេនខាង (${side})${whoSuffix(game.turn)}`;
+  }
+
+  // Localized end-of-game announcement, correct for any chosen color/role.
+  function announceCheckmate(matedColor) {
+    const winnerColor = matedColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+    const sideTxt = (c) => c === COLORS.WHITE ? 'ស' : 'ខ្មៅ';
+    if (settings.aiEnabled) {
+      const humanWon = winnerColor !== settings.aiColor;
+      const matedRole = matedColor === settings.aiColor ? ' (Master/AI)' : ' (អ្នក/You)';
+      showEndFlash({
+        type: humanWon ? 'win' : 'lose',
+        title: humanWon ? 'អ្នកឈ្នះ!' : 'អ្នកចាញ់!',
+        sub: `អុកស្លាប់ខាង${sideTxt(matedColor)}${matedRole}! ល្បែងត្រូវបញ្ចប់។`
+      });
+    } else {
+      showEndFlash({
+        type: 'win',
+        title: `ខាង${sideTxt(winnerColor)}ឈ្នះ!`,
+        sub: `អុកស្លាប់ខាង${sideTxt(matedColor)}! ល្បែងត្រូវបញ្ចប់។`
+      });
+    }
   }
 
   /* ====== render with animations ====== */
@@ -375,8 +428,7 @@ export function initUI() {
         render(); saveGameState(game, clocks);
 
         if (res2.status?.state === 'checkmate'){
-          // AI delivered mate → player loses
-          showEndFlash({ type:'lose' });
+          announceCheckmate(res2.status.toMove);
         } else if (res2.status?.state === 'stalemate'){
           showEndFlash({ type:'draw' });
         }
@@ -392,7 +444,7 @@ export function initUI() {
       render(); saveGameState(game, clocks);
 
       if (res.status?.state === 'checkmate'){
-        showEndFlash({ type:'lose' });
+        announceCheckmate(res.status.toMove);
       } else if (res.status?.state === 'stalemate'){
         showEndFlash({ type:'draw' });
       }
@@ -438,9 +490,9 @@ export function initUI() {
     const y = +e.currentTarget.dataset.y;
     const p = game.at(x, y);
 
-    // If AI turn → allow premove selection
+    // If AI turn → allow premove selection for the human's own color
     if (isAITurn() || AILock) {
-      if (p && p.c === COLORS.WHITE){
+      if (p && p.c === humanColor()){
         if (!selected){ selected = {x,y}; showHints(x,y); beeper.select(); return; }
         const ok = legal.some(m => m.x===x && m.y===y);
         if (ok){
@@ -488,8 +540,7 @@ export function initUI() {
       render(); saveGameState(game, clocks);
 
       if (res.status?.state === 'checkmate') {
-        // Player delivered mate vs AI black
-        showEndFlash({ type:'win' });
+        announceCheckmate(res.status.toMove);
       } else if (res.status?.state === 'stalemate') {
         showEndFlash({ type:'draw' });
       } else {
@@ -574,7 +625,7 @@ export function initUI() {
     clocks.switchedByMove(prev);
     render(); saveGameState(game, clocks);
 
-    if (res.status?.state === 'checkmate'){ showEndFlash({type:'win'}); }
+    if (res.status?.state === 'checkmate'){ announceCheckmate(res.status.toMove); }
     else if (res.status?.state === 'stalemate'){ showEndFlash({type:'draw'}); }
     else { thinkAndPlay(); }
   }

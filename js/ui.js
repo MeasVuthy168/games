@@ -39,16 +39,26 @@ function clearGameState() {
 }
 
 function loadSettings() {
+  const mode = new URLSearchParams(location.search).get('mode') || 'ai';
+  const isFriendMode = mode === 'friend';
+
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
-    // Force Makruk AI vs human
-    merged.aiEnabled = true;
-    merged.aiLevel   = 'Master';
-    merged.aiColor   = 'b';    // AI = Black
+    if (isFriendMode) {
+      // Two humans, pass-and-play on the same device — no AI.
+      merged.aiEnabled = false;
+    } else {
+      // Force Makruk AI vs human
+      merged.aiEnabled = true;
+      merged.aiLevel   = 'Master';
+      merged.aiColor   = 'b';    // AI = Black
+    }
     return merged;
   } catch {
-    return { ...DEFAULTS, aiEnabled: true, aiLevel: 'Master', aiColor: 'b' };
+    return isFriendMode
+      ? { ...DEFAULTS, aiEnabled: false }
+      : { ...DEFAULTS, aiEnabled: true, aiLevel: 'Master', aiColor: 'b' };
   }
 }
 
@@ -63,8 +73,9 @@ class AudioBeeper {
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
-      win:     new Audio('assets/sfx/win.mp3'),
-      lose:    new Audio('assets/sfx/lose.mp3')
+      // No dedicated win/lose clips are shipped; reuse existing sfx as stand-ins.
+      win:     new Audio('assets/sfx/check.mp3'),
+      lose:    new Audio('assets/sfx/error.mp3')
     };
     for (const k in this.bank) this.bank[k].preload = 'auto';
   }
@@ -613,9 +624,13 @@ export function initUI() {
   });
 
   btnUndo?.addEventListener('click', () => {
-    if (game.undo()) {
-      selected = null; legal = []; clearHints(); render(); saveGameState(game, clocks);
-    }
+    if (!game.undo()) return;
+    // Playing vs AI: also undo the AI's reply so control returns to the human.
+    if (isAITurn()) game.undo();
+
+    selected = null; legal = []; premove = null; clearHints();
+    clocks.turn = game.turn;
+    render(); saveGameState(game, clocks);
   });
 
   btnPause?.addEventListener('click', () => {

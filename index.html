@@ -46,6 +46,36 @@
       background:#eef4ff; color:#0d2d5c; font-weight:800; font-size:.86rem; margin-inline-start:.35rem;
     }
     .install-btn{ display:none }
+
+    /* Role-selection modal */
+    .modal{ position:fixed; inset:0; z-index:1000; display:none; }
+    .modal.show{ display:block; }
+    .modal-backdrop{ position:absolute; inset:0; background:rgba(13,45,92,.45); }
+    .modal-card{
+      position:relative; max-width:420px; margin:14vh auto 0; background:#fff;
+      border-radius:1rem; padding:1rem 1.1rem 1.2rem; box-shadow:0 12px 32px rgba(0,0,0,.25);
+    }
+    .modal-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:.4rem; }
+    .modal-header h3{ margin:0; font-size:1.05rem; color:#0d2d5c; }
+    .icon-btn{ background:none; border:none; font-size:1.1rem; cursor:pointer; color:#0d2d5c; line-height:1; }
+    .role-hint{ margin:.2rem 0 .8rem; color:#334; opacity:.8; }
+    .role-options{ display:flex; flex-direction:column; gap:.6rem; }
+    .role-opt{
+      display:flex; align-items:center; gap:.7rem; width:100%; text-align:start;
+      padding:.65rem .8rem; border-radius:.75rem; border:2px solid #e6ecf7; background:#f7f9fd;
+      cursor:pointer; font-weight:700; font-size:1rem; color:#0d2d5c;
+    }
+    .role-opt:active{ transform:scale(.98); }
+    .role-opt.last-picked{ border-color:#0d2d5c; background:#eef4ff; }
+    .role-swatch{
+      width:34px; height:34px; border-radius:50%; flex:none;
+      display:flex; align-items:center; justify-content:center; font-size:1.1rem;
+      border:2px solid rgba(13,45,92,.25);
+    }
+    .role-swatch-w{ background:#fdfdfd; }
+    .role-swatch-b{ background:#20242c; }
+    .role-swatch-r{ background:linear-gradient(135deg,#fdfdfd 50%,#20242c 50%); }
+    .role-opt-sub{ display:block; font-weight:600; font-size:.8rem; opacity:.65; margin-top:.1rem; }
   </style>
 </head>
 <body>
@@ -74,9 +104,38 @@
         <a id="btnFriend" class="menu-card" href="play.html?mode=friend">
           <div class="card-emoji">👥</div>
           <span>លេងជាមួយមិត្ត</span>
+          <small class="last-choice" style="display:block">លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass &amp; Play)</small>
         </a>
       </div>
     </main>
+
+    <!-- Role-selection modal -->
+    <div class="modal" id="roleModal" aria-hidden="true">
+      <div class="modal-backdrop" data-close></div>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="roleTitle">
+        <header class="modal-header">
+          <h3 id="roleTitle">ជ្រើសរើសពណ៌របស់អ្នក</h3>
+          <button class="icon-btn" data-close type="button" aria-label="Close">✖</button>
+        </header>
+        <div class="modal-body">
+          <p class="role-hint">អ្នកចង់លេងជាមួយពណ៌អ្វី ប្រឆាំងនឹង Master?</p>
+          <div class="role-options">
+            <button class="role-opt" data-color="w" type="button">
+              <span class="role-swatch role-swatch-w"></span>
+              <span>ស (White) <small class="role-opt-sub">អ្នកចាប់ផ្ដើមមុន</small></span>
+            </button>
+            <button class="role-opt" data-color="b" type="button">
+              <span class="role-swatch role-swatch-b"></span>
+              <span>ខ្មៅ (Black) <small class="role-opt-sub">Master ចាប់ផ្ដើមមុន</small></span>
+            </button>
+            <button class="role-opt" data-color="r" type="button">
+              <span class="role-swatch role-swatch-r">🎲</span>
+              <span>ចៃដន្យ (Random) <small class="role-opt-sub">ចាប់ឆ្នោតពណ៌</small></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Bottom navigation -->
     <footer id="appTabbar" class="bottom-bar">
@@ -125,24 +184,52 @@
     function loadSettings(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)||'null')||{} }catch{ return {} } }
     function saveSettings(s){ localStorage.setItem(LS_KEY, JSON.stringify(s)); }
 
-    /* Show last Master choice (who is White) */
-    (function showLastChoice(){
+    /* Show last real role choice (accurately reflects what will be pre-highlighted) */
+    function showLastChoice(){
       const s = loadSettings();
-      if(!s || !s.aiEnabled) return;
       const wrap = document.getElementById('aiLast');
-      const who = (s.aiColor === 'w') ? 'AI (White)' : 'ខ្ញុំ (White)';
+      if(!s || !s.humanColor){ wrap.style.display = 'none'; return; }
+      const who = (s.humanColor === 'w') ? 'ខ្ញុំ (White)' : 'ខ្ញុំ (Black)';
       wrap.style.display = 'block';
-      wrap.innerHTML = 'កំណត់ចុងក្រោយ៖ Master <span class="pill">' + who + '</span>';
-    })();
+      wrap.innerHTML = 'ជម្រើសចុងក្រោយ៖ Master <span class="pill">' + who + '</span>';
+    }
+    showLastChoice();
 
-    /* One-button Master */
-    document.getElementById('btnVsAI').addEventListener('click', ()=>{
+    /* Role-selection modal: real White / Black / Random choice, wired to aiColor */
+    const roleModal = document.getElementById('roleModal');
+    function openRoleModal(){
       const s = loadSettings();
-      s.aiEnabled = true;
-      // default: user plays White, AI Black. Toggle if you want opposite:
-      s.aiColor = 'b'; // AI color relative to "who is White": if you want AI White, set 'w'
-      saveSettings(s);
-      location.href = 'play.html?mode=ai';
+      for(const btn of roleModal.querySelectorAll('.role-opt')){
+        btn.classList.toggle('last-picked', s.lastRolePick && btn.dataset.color === s.lastRolePick);
+      }
+      roleModal.classList.add('show');
+      roleModal.setAttribute('aria-hidden','false');
+    }
+    function closeRoleModal(){
+      roleModal.classList.remove('show');
+      roleModal.setAttribute('aria-hidden','true');
+    }
+    roleModal.querySelectorAll('[data-close]').forEach(el => el.addEventListener('click', closeRoleModal));
+    roleModal.addEventListener('click', (e)=>{
+      if(e.target.classList.contains('modal-backdrop')) closeRoleModal();
+    });
+
+    roleModal.querySelectorAll('.role-opt').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const pick = btn.dataset.color; // 'w' | 'b' | 'r'
+        const humanColor = (pick === 'r') ? (Math.random() < 0.5 ? 'w' : 'b') : pick;
+        const s = loadSettings();
+        s.aiEnabled   = true;
+        s.humanColor  = humanColor;
+        s.aiColor     = (humanColor === 'w') ? 'b' : 'w';
+        s.lastRolePick = pick;
+        saveSettings(s);
+        location.href = 'play.html?mode=ai';
+      });
+    });
+
+    document.getElementById('btnVsAI').addEventListener('click', ()=>{
+      openRoleModal();
     });
 
     document.getElementById('btnFriend').addEventListener('click', ()=>{

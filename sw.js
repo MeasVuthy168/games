@@ -4,11 +4,11 @@ const CACHE = 'khmer-chess';
 const CORE = [
   './index.html','./play.html','./friends.html','./settings.html','./notifications.html','./profile.html',
   './tournament.html','./rewards.html','./ai-vs-ai.html',
-  './auth.html','./reset-password.html','./chat.html',
+  './auth.html','./reset-password.html','./verify-email.html','./chat.html',
   './styles.css','./js/main.js','./js/ui.js','./js/ai.js','./js/ai-engine.js','./js/ai-worker.js','./js/game.js','./js/pwa.js','./js/settings.js','./js/profile.js',
   './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js',
   './js/tournament.js','./js/rewards.js','./js/tournament-page.js','./js/rewards-page.js','./js/ai-vs-ai.js',
-  './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js',
+  './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/verify-email-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js',
   './manifest.webmanifest',
   './assets/fonts/Krasar-Regular.ttf',
   './assets/board/wood_light.jpg','./assets/board/wood_dark.jpg',

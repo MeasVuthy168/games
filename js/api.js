@@ -84,16 +84,32 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
 
 /* ---------------- auth ---------------- */
 
-export async function signUp({ email, password, displayName }) {
-  const data = await request('/api/auth/signup', { method: 'POST', body: { email, password, displayName }, auth: false });
+export async function signUp({ email, phone, code, password, displayName }) {
+  const data = await request('/api/auth/signup', { method: 'POST', body: { email, phone, code, password, displayName }, auth: false });
   writeAuth(data);
   return data.user;
 }
 
-export async function signIn({ email, password }) {
-  const data = await request('/api/auth/signin', { method: 'POST', body: { email, password }, auth: false });
+export async function sendPhoneCode(phone) {
+  return request('/api/auth/phone/send-code', { method: 'POST', body: { phone }, auth: false });
+}
+
+// `identifier` is either an email or a phone number — the backend tells
+// them apart by whether it contains "@".
+export async function signIn({ identifier, password }) {
+  const isEmail = identifier.includes('@');
+  const body = isEmail ? { email: identifier, password } : { phone: identifier, password };
+  const data = await request('/api/auth/signin', { method: 'POST', body, auth: false });
   writeAuth(data);
   return data.user;
+}
+
+export async function verifyEmail({ email, token }) {
+  return request('/api/auth/verify-email', { method: 'POST', body: { email, token }, auth: false });
+}
+
+export async function resendVerification() {
+  return request('/api/auth/resend-verification', { method: 'POST' });
 }
 
 export async function forgotPassword(email) {

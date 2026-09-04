@@ -292,6 +292,15 @@ export async function initUI() {
   }
   beeper.enabled = !!settings.sound;
 
+  // Online games are played on separate devices, so each player expects
+  // their own pieces at the bottom of their own screen — flip the board
+  // for whoever is playing Black instead of always rendering White's
+  // side down (which is what local same-device pass-and-play still does).
+  const flipped = onlineMode && onlineState.myColor === COLORS.BLACK;
+  function gridSlot(x, y) {
+    return flipped ? (SIZE - 1 - y) * SIZE + (SIZE - 1 - x) : y * SIZE + x;
+  }
+
   // When a real game actually concludes (checkmate/stalemate), this feeds
   // js/history.js's `duration` field. Reset on every fresh game (Reset
   // button); a resumed (reloaded) game just restarts the clock from now.
@@ -337,9 +346,11 @@ export async function initUI() {
     const elNameBottom = document.getElementById('nameWhite');
     if (!elNameTop || !elNameBottom) return;
     if (onlineMode) {
+      // The board is flipped for Black (see `flipped` above) so your own
+      // pieces always end up at the bottom — keep these labels in sync.
       const meIsWhite = onlineState.myColor === COLORS.WHITE;
-      elNameTop.textContent    = (meIsWhite ? onlineState.opponentName : 'អ្នក (You)') + ' · ខ្មៅ';
-      elNameBottom.textContent = (meIsWhite ? 'អ្នក (You)' : onlineState.opponentName) + ' · ស';
+      elNameTop.textContent    = onlineState.opponentName + (meIsWhite ? ' · ខ្មៅ' : ' · ស');
+      elNameBottom.textContent = 'អ្នក (You)' + (meIsWhite ? ' · ស' : ' · ខ្មៅ');
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
       elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ' · ខ្មៅ';
@@ -369,12 +380,17 @@ export async function initUI() {
   // Build board
   elBoard.innerHTML = '';
   const cells = [];
-  for (let y = 0; y < SIZE; y++) {
-    for (let x = 0; x < SIZE; x++) {
+  for (let gy = 0; gy < SIZE; gy++) {
+    for (let gx = 0; gx < SIZE; gx++) {
+      // dataset.x/y always name the real board square this grid slot holds
+      // (flipped or not), so click handlers and game logic never need to
+      // know about the visual flip — only this mapping does.
+      const bx = flipped ? SIZE - 1 - gx : gx;
+      const by = flipped ? SIZE - 1 - gy : gy;
       const c = document.createElement('div');
-      c.className = 'cell ' + ((x + y) % 2 ? 'dark' : 'light');
-      c.dataset.x = x;
-      c.dataset.y = y;
+      c.className = 'cell ' + ((bx + by) % 2 ? 'dark' : 'light');
+      c.dataset.x = bx;
+      c.dataset.y = by;
       elBoard.appendChild(c);
       cells.push(c);
     }
@@ -506,14 +522,17 @@ export async function initUI() {
       for (let x = 0; x < SIZE; x++) {
         const p = game.at(x, y);
         if (!p) continue;
-        const cell = cells[y * SIZE + x];
+        const cell = cells[gridSlot(x, y)];
 
         // compute delta for small animation (skipped entirely when
         // settings.instantMove is on — moves just appear in place)
         let dx = '0px', dy = '0px', klass = '';
         if (last && last.to.x === x && last.to.y === y && !settings.instantMove){
-          dx = (last.from.x - last.to.x) * 12 + 'px';
-          dy = (last.from.y - last.to.y) * 12 + 'px';
+          // flip the animation direction too, so the slide-in matches the
+          // piece's actual on-screen movement rather than its raw board delta
+          const sign = flipped ? -1 : 1;
+          dx = sign * (last.from.x - last.to.x) * 12 + 'px';
+          dy = sign * (last.from.y - last.to.y) * 12 + 'px';
           const isKnight = (p.t === PT.KNIGHT);
           klass = isKnight ? 'anim-hop' : 'anim-slide';
         }
@@ -528,8 +547,8 @@ export async function initUI() {
     }
 
     if (last) {
-      const fromIdx = last.from.y * SIZE + last.from.x;
-      const toIdx   = last.to.y   * SIZE + last.to.x;
+      const fromIdx = gridSlot(last.from.x, last.from.y);
+      const toIdx   = gridSlot(last.to.x, last.to.y);
       cells[fromIdx]?.classList.add('last-from');
       cells[toIdx]?.classList.add('last-to');
       if (last.captured){
@@ -851,13 +870,13 @@ export async function initUI() {
 
   function showHints(x, y) {
     clearHints();
-    const cell = cells[y * SIZE + x];
+    const cell = cells[gridSlot(x, y)];
     cell.classList.add('selected');
     legal = game.legalMoves(x, y);
     if (!hintsEnabled()) return;
     for (const m of legal) {
       const t = game.at(m.x, m.y);
-      const c = cells[m.y * SIZE + m.x];
+      const c = cells[gridSlot(m.x, m.y)];
       c.classList.add(t ? 'hint-capture' : 'hint-move');
     }
   }
@@ -874,8 +893,8 @@ export async function initUI() {
         const ok = legal.some(m => m.x===x && m.y===y);
         if (ok){
           premove = { from:{...selected}, to:{x,y} };
-          cells[selected.y*SIZE+selected.x].classList.add('last-from');
-          cells[y*SIZE+x].classList.add('last-to');
+          cells[gridSlot(selected.x, selected.y)].classList.add('last-from');
+          cells[gridSlot(x, y)].classList.add('last-to');
           beeper.select();
         } else { beeper.error(); }
       } else { beeper.error(); }

@@ -3,11 +3,21 @@
 // backend exactly when those things happen — see ouk-ai-backend's
 // friends.js/chat.js routes.
 import * as Api from './api.js';
+import { notificationsEnabled } from './notif-badge.js';
 
 const LABELS = {
   friend_request: (d) => ({ emoji: '👤', text: `<b>${esc(d.fromDisplayName)}</b> sent you a friend request` }),
   friend_accepted: (d) => ({ emoji: '🤝', text: `<b>${esc(d.byDisplayName)}</b> accepted your friend request` }),
   message: (d) => ({ emoji: '💬', text: `<b>${esc(d.fromDisplayName)}</b>: ${esc(d.preview)}` }),
+  game_invite: (d) => ({ emoji: '♟️', text: `<b>${esc(d.fromDisplayName)}</b> challenged you to a game` }),
+  game_accepted: (d) => ({ emoji: '♟️', text: `<b>${esc(d.byDisplayName)}</b> accepted your challenge` }),
+  game_move: (d) => ({ emoji: '➡️', text: `It's your move against <b>${esc(d.byDisplayName)}</b>` }),
+  game_over: (d) => ({
+    emoji: d.result === 'draw' ? '🤝' : '🏁',
+    text: d.result === 'draw'
+      ? `Your game with <b>${esc(d.byDisplayName)}</b> ended in a draw`
+      : `Game over vs <b>${esc(d.byDisplayName)}</b> — ${esc(d.reason === 'resignation' ? `${d.result} won by resignation` : `${d.result} won`)}`,
+  }),
 };
 
 function esc(s) {
@@ -18,6 +28,9 @@ function esc(s) {
 
 function targetFor(n) {
   if (n.type === 'message') return `chat.html?friend=${n.data.fromUserId}`;
+  if (n.type === 'game_invite' || n.type === 'game_accepted' || n.type === 'game_move' || n.type === 'game_over') {
+    return `play.html?mode=online&gameId=${n.data.gameId}`;
+  }
   return 'friends.html';
 }
 
@@ -44,6 +57,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     note.innerHTML = '<div class="card-left"><div class="card-title">Sign in to see notifications</div><div class="card-sub">Friend requests, accepted friends, and chat messages</div></div><div class="card-right">›</div>';
     note.addEventListener('click', () => { location.href = 'auth.html?next=notifications.html'; });
     root.appendChild(note);
+    return;
+  }
+
+  if (!notificationsEnabled()) {
+    actions.hidden = true;
+    root.innerHTML = '<div class="empty-note">Notifications are turned off. Enable them in Settings to see friend, chat, and game activity.</div>';
     return;
   }
 

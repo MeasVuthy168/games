@@ -13,6 +13,7 @@
   <meta name="theme-color" content="#0d2d5c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <script src="js/pwa.js" defer></script>
+  <script type="module" src="js/notif-badge.js"></script>
 
   <!-- Board textures -->
   <style>
@@ -46,7 +47,7 @@
         </div>
 
         <!-- Controls -->
-        <div class="controls controls-top">
+        <div class="controls controls-top" id="localControls">
           <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
             <img src="assets/ui/reset.png" width="22" height="22" alt="">
             <span>ចាប់ផ្ដើមថ្មី</span>
@@ -63,8 +64,16 @@
           </button>
         </div>
 
+        <div class="controls controls-top" id="onlineControls" hidden>
+          <button id="btnResign" class="btn-icon secondary" title="Resign" type="button">
+            <span>Resign</span>
+          </button>
+        </div>
+
+        <div id="onlineStatusBanner" class="online-status-banner" hidden></div>
+
         <!-- Top clock -->
-        <div class="timers">
+        <div class="timers" id="timersTop">
           <div class="player-row top">
             <div class="player-name" id="nameBlack">ខ្មៅ (Black)</div>
             <div class="clock" id="clockB">10:00.0</div>
@@ -75,14 +84,14 @@
         <div id="board" class="board board-wood no-coords" aria-label="Khmer Chess Board"></div>
 
         <!-- Bottom clock -->
-        <div class="timers">
+        <div class="timers" id="timersBottom">
           <div class="player-row bottom">
             <div class="player-name" id="nameWhite">ស (White)</div>
             <div class="clock" id="clockW">10:00.0</div>
           </div>
         </div>
 
-        <!-- Chat placeholder -->
+        <!-- Chat: real when playing an online friend, placeholder otherwise -->
         <section id="chatCard" class="panel card chat-panel card-full">
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>

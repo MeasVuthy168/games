@@ -5,6 +5,7 @@ import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
+import { notificationsEnabled, setNotificationsEnabled, refreshNotifBadge } from './notif-badge.js';
 
 recordLoginToday();
 
@@ -245,6 +246,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
     Api.setApiBase(apiBaseInput.value);
     apiBaseInput.value = Api.getApiBase();
     alert('Server address saved.');
+  });
+
+  const notifToggle = document.getElementById('notifToggle');
+  if (notifToggle) notifToggle.checked = notificationsEnabled();
+  notifToggle?.addEventListener('change', () => {
+    setNotificationsEnabled(notifToggle.checked);
+    refreshNotifBadge();
   });
 
   applyTranslations();

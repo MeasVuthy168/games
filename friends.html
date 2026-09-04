@@ -10,6 +10,7 @@
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
+  <script type="module" src="js/notif-badge.js"></script>
   <script type="module">
     import { recordLoginToday } from './js/rewards.js';
     recordLoginToday();
@@ -50,8 +51,10 @@
     .btn-decline{ background:#fdeaea; color:#a3312f; }
     .btn-message{ background:#eef4ff; color:var(--blue); }
     .btn-remove{ background:#f2f2f2; color:#555; }
+    .btn-play{ background:#e4f8ea; color:#1c7a3a; }
     .empty-note{ font-size:.82rem; opacity:.6; padding:.3rem 0 .8rem; }
     .section-label{ font-weight:700; font-size:.82rem; opacity:.7; margin:.8rem 0 .4rem; }
+    .person-sub{ font-size:.72rem; opacity:.6; font-weight:600; }
   </style>
 </head>
 <body>
@@ -86,6 +89,9 @@
 
         <div class="section-label" id="incomingLabel" hidden>Friend Requests</div>
         <div id="incomingList"></div>
+
+        <div class="section-label" id="gamesLabel" hidden>Games</div>
+        <div id="gamesList"></div>
 
         <div class="section-label">My Friends</div>
         <div id="friendsList"></div>

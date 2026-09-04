@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     location.reload();
   });
 
-  function personRow({ emoji, name, actions }) {
+  function personRow({ emoji, name, sub, actions }) {
     const row = document.createElement('div');
     row.className = 'person-row';
     const em = document.createElement('div');
@@ -39,6 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const nm = document.createElement('div');
     nm.className = 'person-name';
     nm.textContent = name;
+    if (sub) {
+      const subEl = document.createElement('div');
+      subEl.className = 'person-sub';
+      subEl.textContent = sub;
+      nm.appendChild(document.createElement('br'));
+      nm.appendChild(subEl);
+    }
     const act = document.createElement('div');
     act.className = 'person-actions';
     for (const a of actions) act.appendChild(a);
@@ -57,6 +64,21 @@ document.addEventListener('DOMContentLoaded', () => {
     return b;
   }
 
+  async function challenge(friendId) {
+    try {
+      const res = await Api.challengeFriend(friendId);
+      location.href = `play.html?mode=online&gameId=${res.id}`;
+    } catch (err) {
+      if (err.status === 409) {
+        // Already have a game with this friend — find it and go straight there.
+        const games = await Api.getGames();
+        const existing = games.find(g => g.opponentId === friendId && (g.status === 'pending' || g.status === 'active'));
+        if (existing) { location.href = `play.html?mode=online&gameId=${existing.id}`; return; }
+      }
+      alert(err.message || 'Could not start a game');
+    }
+  }
+
   async function loadFriends() {
     try {
       const friends = await Api.getFriends();
@@ -67,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
           emoji: f.avatarEmoji,
           name: f.displayName,
           actions: [
+            btn('Play', 'btn-play', () => challenge(f.userId)),
             btn('Message', 'btn-message', () => { location.href = `chat.html?friend=${f.userId}`; }),
             btn('Remove', 'btn-remove', async () => {
               if (!confirm(`Remove ${f.displayName} as a friend?`)) return;
@@ -80,6 +103,36 @@ document.addEventListener('DOMContentLoaded', () => {
       friendsList.innerHTML = '';
       friendsEmpty.hidden = false;
       friendsEmpty.textContent = err.message || 'Could not load friends.';
+    }
+  }
+
+  async function loadGames() {
+    try {
+      const games = (await Api.getGames()).filter(g => g.status === 'pending' || g.status === 'active');
+      const gamesList = document.getElementById('gamesList');
+      const gamesLabel = document.getElementById('gamesLabel');
+      gamesList.innerHTML = '';
+      gamesLabel.hidden = games.length === 0;
+      for (const g of games) {
+        const amChallenger = g.myColor === 'w';
+        let sub, actions;
+        if (g.status === 'pending' && amChallenger) {
+          sub = 'Waiting for them to accept';
+          actions = [btn('Cancel', 'btn-decline', async () => { await Api.declineGame(g.id).catch(() => {}); loadGames(); })];
+        } else if (g.status === 'pending') {
+          sub = 'Challenged you to a game';
+          actions = [
+            btn('Accept', 'btn-accept', () => { location.href = `play.html?mode=online&gameId=${g.id}`; }),
+            btn('Decline', 'btn-decline', async () => { await Api.declineGame(g.id); loadGames(); }),
+          ];
+        } else {
+          sub = g.myTurn ? 'Your move' : `Waiting for ${g.opponentName}`;
+          actions = [btn('Continue', 'btn-play', () => { location.href = `play.html?mode=online&gameId=${g.id}`; })];
+        }
+        gamesList.appendChild(personRow({ emoji: g.opponentAvatar, name: g.opponentName, sub, actions }));
+      }
+    } catch (err) {
+      console.error(err);
     }
   }
 
@@ -141,4 +194,5 @@ document.addEventListener('DOMContentLoaded', () => {
 
   loadFriends();
   loadRequests();
+  loadGames();
 });

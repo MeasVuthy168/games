@@ -9,6 +9,7 @@
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
+  <script type="module" src="js/notif-badge.js"></script>
 
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="js/settings.js"></script>
@@ -81,9 +82,14 @@
           <div class="card-right">›</div>
         </div>
 
-        <div class="card card-full disabled">
-          <div class="card-left"><div class="card-title">Notifications</div><div class="card-sub">coming soon</div></div>
-          <div class="card-right">›</div>
+        <div class="card card-full">
+          <div class="card-left">
+            <div class="card-title">Notifications</div>
+            <div class="card-sub">Badge & alerts for friend requests, chat, and games</div>
+          </div>
+          <div class="card-right">
+            <label class="switch"><input type="checkbox" id="notifToggle" /><span class="slider"></span></label>
+          </div>
         </div>
 
         <div class="card card-full">

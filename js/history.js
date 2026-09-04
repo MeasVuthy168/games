@@ -23,16 +23,17 @@ function writeAll(list) {
 
 // entry: { date, opponent, mode, result, moves, duration }
 //   date     — ISO timestamp string (defaults to now)
-//   opponent — display string, e.g. "AI Level 7" or "Local Friend"
-//   mode     — 'ai' | 'friend'
+//   opponent — display string, e.g. "AI Level 7", "Local Friend", or a real display name
+//   mode     — 'ai' | 'friend' | 'online'
 //   result   — 'win' | 'loss' | 'draw' (see js/ui.js for whose perspective)
 //   moves    — half-move count when the game ended
 //   duration — seconds the game lasted
+const MODES = ['ai', 'friend', 'online'];
 export function recordGame(entry) {
   const rec = {
     date: entry?.date || new Date().toISOString(),
     opponent: entry?.opponent || 'Unknown',
-    mode: entry?.mode === 'friend' ? 'friend' : 'ai',
+    mode: MODES.includes(entry?.mode) ? entry.mode : 'ai',
     result: ['win', 'loss', 'draw'].includes(entry?.result) ? entry.result : 'draw',
     moves: Number.isFinite(entry?.moves) ? entry.moves : 0,
     duration: Number.isFinite(entry?.duration) ? entry.duration : 0,

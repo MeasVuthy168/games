@@ -6,6 +6,7 @@ import { DEFAULT_LEVEL } from './ai-engine.js';
 import * as History from './history.js';
 import * as Tournament from './tournament.js';
 import * as Rewards from './rewards.js';
+import * as Api from './api.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
@@ -199,12 +200,14 @@ document.addEventListener('click', (e)=>{
     // initUI) — hand control back to the bracket screen instead of just
     // dismissing the flash and staying on this ad-hoc board.
     if (window.__kcTournamentActive) location.href = 'tournament.html';
+    else if (window.__kcOnlineActive) location.href = 'friends.html';
   }
   if (e.target?.id === 'flashAgain'){
     $('#flashOverlay')?.classList.remove('show');
     $('#flashOverlay')?.setAttribute('aria-hidden','true');
     $('#appTabbar')?.classList.remove('is-hidden');
     if (window.__kcTournamentActive) { location.href = 'tournament.html'; return; }
+    if (window.__kcOnlineActive) { location.href = 'friends.html'; return; }
     // call reset
     $('#btnReset')?.click();
   }
@@ -212,7 +215,7 @@ document.addEventListener('click', (e)=>{
 
 /* ---------------- main UI ---------------- */
 
-export function initUI() {
+export async function initUI() {
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
   const btnReset = document.getElementById('btnReset');
@@ -243,6 +246,31 @@ export function initUI() {
     Number.isInteger(tLevelParam) && tLevelParam >= 1 && tLevelParam <= 10;
   window.__kcTournamentActive = tournamentMode;
 
+  // Online mode: friends.html sends the player here with
+  // ?mode=online&gameId=<id> for a real game against a friend, backed by
+  // ouk-ai-backend's /api/games/* routes (server-authoritative moves — see
+  // applyOnlineGameState/attemptOnlineMove below). Reuses this same
+  // single-game screen rather than a second board implementation.
+  const onlineGameId = urlParams.get('gameId');
+  const onlineMode = urlParams.get('mode') === 'online' && !!onlineGameId;
+  window.__kcOnlineActive = onlineMode;
+  let onlineState = null; // latest {status,myColor,turn,myTurn,board,history,result,opponentId,opponentName,...}
+
+  if (onlineMode) {
+    if (!Api.isSignedIn()) {
+      location.href = `auth.html?next=${encodeURIComponent(location.pathname + location.search)}`;
+      return;
+    }
+    try {
+      const resp = await Api.getGame(onlineGameId);
+      onlineState = resp.game;
+    } catch (err) {
+      alert(err.message || 'Could not load this game.');
+      location.href = 'friends.html';
+      return;
+    }
+  }
+
   const game = new Game();
   const settings = loadSettings();
   if (tournamentMode) {
@@ -253,6 +281,14 @@ export function initUI() {
     settings.aiColor = 'b';
     settings.aiLevel = tLevelParam;
     clearGameState();
+  }
+  if (onlineMode) {
+    // No AI, no local save/resume — this board mirrors server truth only.
+    settings.aiEnabled = false;
+    if (onlineState.board) {
+      game.board = onlineState.board;
+      game.turn = onlineState.turn;
+    }
   }
   beeper.enabled = !!settings.sound;
 
@@ -300,7 +336,11 @@ export function initUI() {
     const elNameTop    = document.getElementById('nameBlack');
     const elNameBottom = document.getElementById('nameWhite');
     if (!elNameTop || !elNameBottom) return;
-    if (settings.aiEnabled) {
+    if (onlineMode) {
+      const meIsWhite = onlineState.myColor === COLORS.WHITE;
+      elNameTop.textContent    = (meIsWhite ? onlineState.opponentName : 'អ្នក (You)') + ' · ខ្មៅ';
+      elNameBottom.textContent = (meIsWhite ? 'អ្នក (You)' : onlineState.opponentName) + ' · ស';
+    } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
       elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ' · ខ្មៅ';
       elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ' · ស';
@@ -310,6 +350,15 @@ export function initUI() {
     }
   }
   applyPlayerLabels();
+
+  // Online games have no server-enforced time control, so a local countdown
+  // would just be misleading — hide the clocks entirely instead of faking one.
+  if (onlineMode) {
+    document.getElementById('timersTop')?.style.setProperty('display', 'none');
+    document.getElementById('timersBottom')?.style.setProperty('display', 'none');
+    document.getElementById('localControls')?.setAttribute('hidden', '');
+    document.getElementById('onlineControls')?.removeAttribute('hidden');
+  }
 
   const clocks = new Clocks((w, b) => {
     if (clockW) clockW.textContent = clocks.format(w);
@@ -345,6 +394,7 @@ export function initUI() {
   // Who-plays suffix so the current player's role is always explicit,
   // regardless of which color they picked (White or Black).
   function whoSuffix(color) {
+    if (onlineMode) return color === onlineState.myColor ? ' · វេនអ្នក (You)' : ` · វេន ${onlineState.opponentName}`;
     if (!settings.aiEnabled) return '';
     return color === settings.aiColor ? ' · វេន Master (AI)' : ' · វេនអ្នក (You)';
   }
@@ -491,6 +541,218 @@ export function initUI() {
 
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
+  }
+
+  /* ====== Online play (real games between friends, server-authoritative) ====== */
+
+  let onlinePollHandle = null;
+  let onlineChatPollHandle = null;
+  let onlineFinished = false;
+
+  function stopOnlinePolling() {
+    if (onlinePollHandle) clearInterval(onlinePollHandle);
+    if (onlineChatPollHandle) clearInterval(onlineChatPollHandle);
+    onlinePollHandle = null;
+    onlineChatPollHandle = null;
+  }
+
+  function renderOnlineBanner() {
+    const banner = document.getElementById('onlineStatusBanner');
+    if (!banner) return;
+    const amChallenger = onlineState.myColor === COLORS.WHITE && onlineState.status === 'pending';
+    if (onlineState.status === 'pending') {
+      banner.hidden = false;
+      elBoard.style.display = 'none';
+      banner.innerHTML = '';
+      if (amChallenger) {
+        banner.textContent = `Waiting for ${onlineState.opponentName} to accept your challenge…`;
+      } else {
+        banner.appendChild(document.createTextNode(`${onlineState.opponentName} challenged you to a game.`));
+        banner.appendChild(document.createElement('br'));
+        const acceptBtn = document.createElement('button');
+        acceptBtn.className = 'primary'; acceptBtn.textContent = 'Accept';
+        acceptBtn.style.margin = '.5rem .3rem 0';
+        acceptBtn.addEventListener('click', async () => {
+          try { await Api.acceptGame(onlineGameId); const { game: g } = await Api.getGame(onlineGameId); applyOnlineGameState(g); }
+          catch (err) { alert(err.message || 'Could not accept'); }
+        });
+        const declineBtn = document.createElement('button');
+        declineBtn.className = 'secondary'; declineBtn.textContent = 'Decline';
+        declineBtn.style.margin = '.5rem .3rem 0';
+        declineBtn.addEventListener('click', async () => {
+          try { await Api.declineGame(onlineGameId); } catch {}
+          location.href = 'friends.html';
+        });
+        banner.appendChild(acceptBtn);
+        banner.appendChild(declineBtn);
+      }
+    } else {
+      banner.hidden = true;
+      elBoard.style.display = '';
+    }
+  }
+
+  // Mirrors server-truth game state into the local board for rendering —
+  // this is display/input-gating only; the server (ouk-ai-backend's
+  // /api/games/:id/move, reusing the exact same rules engine) is what
+  // actually validates and applies every move.
+  function applyOnlineGameState(g) {
+    const prevUpdatedAt = onlineState?.updatedAt;
+    onlineState = g;
+    game.board = g.board;
+    game.turn = g.turn;
+    game.history = [];
+    if (g.history?.length) {
+      const lastMove = g.history[g.history.length - 1];
+      game.history = [{ from: lastMove.from, to: lastMove.to, captured: !!lastMove.captured }];
+    }
+
+    if (g.status === 'active') {
+      renderOnlineBanner();
+      render();
+      setBoardBusy(!g.myTurn);
+    } else if (g.status === 'pending') {
+      renderOnlineBanner();
+    }
+
+    if (g.status === 'finished' && !onlineFinished) {
+      onlineFinished = true;
+      stopOnlinePolling();
+      setBoardBusy(false);
+      render();
+      const myWon = (g.result === 'white' && g.myColor === 'w') || (g.result === 'black' && g.myColor === 'b');
+      const isDraw = g.result === 'draw';
+      showEndFlash({
+        type: isDraw ? 'draw' : (myWon ? 'win' : 'lose'),
+        title: isDraw ? undefined : (myWon ? 'អ្នកឈ្នះ!' : 'អ្នកចាញ់!'),
+        sub: `ល្បែងជាមួយ ${g.opponentName} ត្រូវបញ្ចប់។`,
+      });
+      History.recordGame({
+        date: new Date().toISOString(),
+        opponent: g.opponentName,
+        mode: 'online',
+        result: isDraw ? 'draw' : (myWon ? 'win' : 'loss'),
+        moves: (g.history || []).length,
+        duration: Math.round((Date.now() - gameStartedAt) / 1000),
+      });
+      // Real online wins are intentionally excluded from AI-specific Daily
+      // Rewards objectives — Rewards.notifyGameResult only counts mode:'ai'.
+    } else if (prevUpdatedAt !== g.updatedAt && beeper.enabled && g.history?.length) {
+      const last = g.history[g.history.length - 1];
+      if (last.captured) { beeper.capture(); vibrate([20, 40, 30]); } else beeper.move();
+    }
+  }
+
+  async function attemptOnlineMove(from, to) {
+    setBoardBusy(true);
+    try {
+      const { game: g } = await Api.makeGameMove(onlineGameId, from, to);
+      applyOnlineGameState(g);
+    } catch (err) {
+      beeper.error(); vibrate(40);
+      if (err.status !== 400 && err.status !== 409) alert(err.message || 'Move failed');
+      setBoardBusy(!onlineState.myTurn);
+    }
+  }
+
+  function onOnlineCellTap(e) {
+    if (!onlineState || onlineState.status !== 'active' || !onlineState.myTurn) { beeper.error(); return; }
+    const x = +e.currentTarget.dataset.x;
+    const y = +e.currentTarget.dataset.y;
+    const p = game.at(x, y);
+
+    if (p && p.c === onlineState.myColor) {
+      selected = { x, y }; showHints(x, y);
+      if (beeper.enabled) beeper.select();
+      return;
+    }
+    if (!selected) { if (beeper.enabled) beeper.error(); vibrate(40); return; }
+    const ok = legal.some(m => m.x === x && m.y === y);
+    if (!ok) {
+      selected = null; legal = []; clearHints();
+      if (beeper.enabled) beeper.error(); vibrate(40); return;
+    }
+    const from = { ...selected }, to = { x, y };
+    selected = null; legal = []; clearHints();
+    attemptOnlineMove(from, to);
+  }
+
+  function startOnlinePolling() {
+    onlinePollHandle = setInterval(async () => {
+      if (onlineFinished || document.hidden) return;
+      try {
+        const { game: g } = await Api.getGame(onlineGameId);
+        if (g.updatedAt !== onlineState.updatedAt || g.status !== onlineState.status) applyOnlineGameState(g);
+      } catch { /* transient — try again next tick */ }
+    }, 3000);
+  }
+
+  // Real chat, reusing the same friend-chat backend the Friend tab's
+  // chat.html talks to — the opponent is always a friend (challenges are
+  // friend-gated server-side), so no separate "game chat" concept is needed.
+  function setupOnlineChat(opponentId) {
+    const card = document.getElementById('chatCard');
+    if (!card) return;
+    card.classList.remove('chat-panel');
+    card.innerHTML = `
+      <div class="online-chat">
+        <div class="card-title">សន្ទនា (Chat)</div>
+        <div class="online-chat-msgs" id="onlineChatMsgs"></div>
+        <form class="online-chat-form" id="onlineChatForm">
+          <input type="text" id="onlineChatInput" maxlength="2000" placeholder="Message…" autocomplete="off" />
+          <button type="submit">Send</button>
+        </form>
+      </div>
+    `;
+    const msgsEl = document.getElementById('onlineChatMsgs');
+    let lastTs = null;
+    const seen = new Set();
+
+    function appendMsg(m) {
+      if (seen.has(m.id)) return;
+      seen.add(m.id);
+      const row = document.createElement('div');
+      row.className = 'msg-row' + (m.fromMe ? ' me' : '');
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.textContent = m.body;
+      row.appendChild(bubble);
+      msgsEl.appendChild(row);
+      if (!lastTs || m.createdAt > lastTs) lastTs = m.createdAt;
+    }
+
+    async function loadInitial() {
+      try {
+        const messages = await Api.getMessages(opponentId);
+        for (const m of messages) appendMsg(m);
+        msgsEl.scrollTop = msgsEl.scrollHeight;
+        await Api.markThreadRead(opponentId);
+      } catch { /* chat is a bonus feature here — a failed load shouldn't block the game */ }
+    }
+
+    async function poll() {
+      try {
+        const messages = await Api.getMessages(opponentId, lastTs);
+        if (messages.length) {
+          for (const m of messages) appendMsg(m);
+          msgsEl.scrollTop = msgsEl.scrollHeight;
+          await Api.markThreadRead(opponentId);
+        }
+      } catch { /* try again next tick */ }
+    }
+
+    loadInitial();
+    onlineChatPollHandle = setInterval(poll, 4000);
+
+    document.getElementById('onlineChatForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = document.getElementById('onlineChatInput');
+      const body = input.value.trim();
+      if (!body) return;
+      input.value = '';
+      try { await Api.sendMessage(opponentId, body); await poll(); }
+      catch (err) { alert(err.message || 'Could not send message'); }
+    });
   }
 
   /* ====== AI helpers & logic (with fallback + debug) ====== */
@@ -661,7 +923,7 @@ export function initUI() {
   }
 
   for (const c of cells) {
-    c.addEventListener('click', onCellTap, { passive: true });
+    c.addEventListener('click', onlineMode ? onOnlineCellTap : onCellTap, { passive: true });
   }
 
   /* ========== Drag & Drop (pointer) ========== */
@@ -750,11 +1012,38 @@ export function initUI() {
   function onCellPointerMove(e){ if (dragging && e.pointerId===dragPointerId){ moveGhost(e.clientX, e.clientY); } }
   function onCellPointerUp(e){ if (e.pointerId===dragPointerId){ endDrag(e.clientX, e.clientY); dragPointerId=null; } }
 
-  for (const c of cells){
-    c.addEventListener('pointerdown', onCellPointerDown, { passive:false });
-    c.addEventListener('pointermove', onCellPointerMove, { passive:true });
-    c.addEventListener('pointerup',   onCellPointerUp,   { passive:true });
-    c.addEventListener('pointercancel', onCellPointerUp, { passive:true });
+  if (!onlineMode) {
+    // Tap-to-move only for online games — simpler and fully functional;
+    // drag-and-drop is a nice-to-have that isn't worth the extra
+    // client/server round-trip complexity here.
+    for (const c of cells){
+      c.addEventListener('pointerdown', onCellPointerDown, { passive:false });
+      c.addEventListener('pointermove', onCellPointerMove, { passive:true });
+      c.addEventListener('pointerup',   onCellPointerUp,   { passive:true });
+      c.addEventListener('pointercancel', onCellPointerUp, { passive:true });
+    }
+  }
+
+  if (onlineMode) {
+    renderOnlineBanner();
+    if (onlineState.status === 'active') {
+      render();
+      setBoardBusy(!onlineState.myTurn);
+      startOnlinePolling();
+    } else if (onlineState.status === 'pending') {
+      startOnlinePolling(); // watch for the other side accepting/declining
+    }
+    setupOnlineChat(onlineState.opponentId);
+
+    document.getElementById('btnResign')?.addEventListener('click', async () => {
+      if (onlineState.status !== 'active') return;
+      if (!confirm(`Resign this game against ${onlineState.opponentName}?`)) return;
+      try { await Api.resignGame(onlineGameId); const { game: g } = await Api.getGame(onlineGameId); applyOnlineGameState(g); }
+      catch (err) { alert(err.message || 'Could not resign'); }
+    });
+
+    window.addEventListener('beforeunload', stopOnlinePolling);
+    return game;
   }
 
   // resume or fresh start

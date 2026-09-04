@@ -190,4 +190,35 @@ export async function markAllNotificationsRead() {
   return request('/api/notifications/read-all', { method: 'POST' });
 }
 
+/* ---------------- online games ---------------- */
+
+export async function challengeFriend(friendId) {
+  return request('/api/games/challenge', { method: 'POST', body: { friendId } });
+}
+
+export async function getGames() {
+  const data = await request('/api/games');
+  return data.games;
+}
+
+export async function getGame(id) {
+  return request(`/api/games/${id}`);
+}
+
+export async function acceptGame(id) {
+  return request(`/api/games/${id}/accept`, { method: 'POST' });
+}
+
+export async function declineGame(id) {
+  return request(`/api/games/${id}/decline`, { method: 'POST' });
+}
+
+export async function makeGameMove(id, from, to) {
+  return request(`/api/games/${id}/move`, { method: 'POST', body: { from, to } });
+}
+
+export async function resignGame(id) {
+  return request(`/api/games/${id}/resign`, { method: 'POST' });
+}
+
 export { ApiError };

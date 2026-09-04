@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <script src="js/theme-init.js"></script>
   <title>Friend | Khmer Chess</title>
 
   <!-- PWA -->
@@ -59,12 +60,13 @@
 </head>
 <body>
   <div class="shell">
-    <!-- (top bar removed) -->
+    <header class="topbar">
+      <h1>មិត្តភក្តិ (Friends)</h1>
+      <div class="spacer"></div>
+      <a href="settings.html" class="icon-btn" title="Settings">⚙</a>
+    </header>
 
     <main class="page">
-      <p><strong>លេងជាមួយមិត្តលើឧបករណ៍តែមួយ</strong> — ជំនួសគ្នាកាន់ទូរស័ព្ទ/កុំព្យូទ័រតែមួយ (pass &amp; play), មិនត្រូវការអ៊ីនធឺណិតទេ។</p>
-      <p><a class="btn" href="play.html?mode=friend">👥 លេងលើឧបករណ៍តែមួយ (Play on this device)</a></p>
-
       <section class="online-section" id="signedOutView" hidden>
         <div class="card card-full clickable" id="btnGoSignIn" style="cursor:pointer">
           <div class="card-left">

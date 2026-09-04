@@ -1,5 +1,6 @@
 // js/friends-page.js — controller for friends.html's real online-friends section.
 import * as Api from './api.js';
+import { showToast } from './toast.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   const signedOutView = document.getElementById('signedOutView');
@@ -75,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const existing = games.find(g => g.opponentId === friendId && (g.status === 'pending' || g.status === 'active'));
         if (existing) { location.href = `play.html?mode=online&gameId=${existing.id}`; return; }
       }
-      alert(err.message || 'Could not start a game');
+      showToast(err.message || 'Could not start a game', 'error');
     }
   }
 
@@ -174,7 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
             : [btn('Add Friend', 'btn-accept', async (e) => {
                 e.target.disabled = true;
                 e.target.textContent = 'Sent';
-                try { await Api.sendFriendRequest(u.id); loadRequests(); } catch (err) { alert(err.message); }
+                try { await Api.sendFriendRequest(u.id); loadRequests(); } catch (err) { showToast(err.message, 'error'); }
               })],
         }));
       }

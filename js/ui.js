@@ -8,6 +8,7 @@ import * as Tournament from './tournament.js';
 import * as Rewards from './rewards.js';
 import * as Api from './api.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
+import { showToast } from './toast.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 
@@ -593,7 +594,7 @@ export async function initUI() {
         acceptBtn.style.margin = '.5rem .3rem 0';
         acceptBtn.addEventListener('click', async () => {
           try { await Api.acceptGame(onlineGameId); const { game: g } = await Api.getGame(onlineGameId); applyOnlineGameState(g); }
-          catch (err) { alert(err.message || 'Could not accept'); }
+          catch (err) { showToast(err.message || 'Could not accept', 'error'); }
         });
         const declineBtn = document.createElement('button');
         declineBtn.className = 'secondary'; declineBtn.textContent = 'Decline';
@@ -669,7 +670,7 @@ export async function initUI() {
       applyOnlineGameState(g);
     } catch (err) {
       beeper.error(); vibrate(40);
-      if (err.status !== 400 && err.status !== 409) alert(err.message || 'Move failed');
+      if (err.status !== 400 && err.status !== 409) showToast(err.message || 'Move failed', 'error');
       setBoardBusy(!onlineState.myTurn);
     }
   }
@@ -770,7 +771,7 @@ export async function initUI() {
       if (!body) return;
       input.value = '';
       try { await Api.sendMessage(opponentId, body); await poll(); }
-      catch (err) { alert(err.message || 'Could not send message'); }
+      catch (err) { showToast(err.message || 'Could not send message', 'error'); }
     });
   }
 
@@ -804,7 +805,7 @@ export async function initUI() {
 
       if (!aiMove || !aiMove.from || !aiMove.to) {
         window.AIDebug?.log('[UI] AI returned null → disabling AI');
-        alert('AI error. AI play has been stopped.'); settings.aiEnabled = false; return;
+        showToast('AI error. AI play has been stopped.', 'error'); settings.aiEnabled = false; return;
       }
 
       const from = { x: aiMove.from.x, y: aiMove.from.y };
@@ -848,7 +849,7 @@ export async function initUI() {
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
-      alert('AI error. AI play has been stopped.');
+      showToast('AI error. AI play has been stopped.', 'error');
       settings.aiEnabled = false;
     } finally {
       setBoardBusy(false);
@@ -1058,7 +1059,7 @@ export async function initUI() {
       if (onlineState.status !== 'active') return;
       if (!confirm(`Resign this game against ${onlineState.opponentName}?`)) return;
       try { await Api.resignGame(onlineGameId); const { game: g } = await Api.getGame(onlineGameId); applyOnlineGameState(g); }
-      catch (err) { alert(err.message || 'Could not resign'); }
+      catch (err) { showToast(err.message || 'Could not resign', 'error'); }
     });
 
     window.addEventListener('beforeunload', stopOnlinePolling);

@@ -7,6 +7,7 @@
 // the search goes.
 
 import { LEVELS, DEFAULT_LEVEL } from './ai-engine.js';
+import { showToast } from './toast.js';
 
 const LS_KEY = 'kc_settings_v1';
 
@@ -100,9 +101,9 @@ function ensureDebugPanel() {
         await navigator.clipboard.writeText(
           document.getElementById('aiDebugLog').textContent
         );
-        alert('AI debug log copied');
+        showToast('AI debug log copied', 'success');
       } catch {
-        alert('Copy failed');
+        showToast('Copy failed', 'error');
       }
     };
   }

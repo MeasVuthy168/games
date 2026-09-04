@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <script src="js/theme-init.js"></script>
   <title>Setting | Khmer Chess</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
@@ -44,7 +45,11 @@
 </head>
 <body>
   <div class="shell">
-    <!-- (top bar removed) -->
+    <header class="topbar">
+      <h1>ការកំណត់ (Settings)</h1>
+      <div class="spacer"></div>
+      <a href="profile.html" class="icon-btn" title="Profile">👤</a>
+    </header>
 
     <main class="page settings-page">
       <!-- Profile: links to the real profile screen (profile.html) -->
@@ -58,38 +63,6 @@
       </a>
 
       <div class="card-list">
-        <div class="card card-full" id="accountCard">
-          <div class="card-left">
-            <div class="card-title">Account</div>
-            <div class="card-sub" id="accountSub">Not signed in</div>
-          </div>
-          <div class="card-right"><button class="pill" id="btnAccountAction">Sign In</button></div>
-        </div>
-
-        <div class="card card-full" id="verifyEmailBanner" hidden>
-          <div class="card-left">
-            <div class="card-title">Verify your email</div>
-            <div class="card-sub" id="verifyEmailSub">Confirm your email to secure your account.</div>
-          </div>
-          <div class="card-right"><button class="pill" id="btnResendVerify">Resend</button></div>
-        </div>
-
-        <details class="card card-full exp">
-          <summary>
-            <div class="card-left"><div class="card-title">Server</div><div class="card-sub">Friends/chat backend address (advanced)</div></div>
-            <div class="card-right caret">›</div>
-          </summary>
-          <div class="card-body">
-            <label class="field"><span>API Server URL</span><input type="text" id="apiBaseInput" placeholder="https://ouk-ai-backend.onrender.com" /></label>
-            <div class="row-inline"><button class="primary" id="btnSaveApiBase">Save</button></div>
-          </div>
-        </details>
-
-        <div class="card card-full disabled">
-          <div class="card-left"><div class="card-title">Personal Info</div><div class="card-sub">coming soon</div></div>
-          <div class="card-right">›</div>
-        </div>
-
         <div class="card card-full">
           <div class="card-left">
             <div class="card-title">Notifications</div>
@@ -110,7 +83,6 @@
               <input type="checkbox" id="soundToggle" />
               <span class="slider"></span>
             </label>
-            <button class="pill" id="btnTestBeep" data-i18n="settings.testButton">Test</button>
           </div>
         </div>
 

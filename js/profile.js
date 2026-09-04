@@ -1,13 +1,18 @@
-// js/profile.js — Profile screen controller. Reads through the local
-// modules (coins/history/profile-data) rather than touching localStorage
-// directly, so this screen always agrees with whatever settings.html or a
-// completed game just wrote.
+// js/profile.js — Profile screen controller. When signed in, the real
+// account (displayName/avatarEmoji/avatarUrl, synced via ouk-ai-backend)
+// is the source of truth for identity; signed out, this falls back to the
+// purely local guest profile in profile-data.js. Also hosts account
+// management (sign in/out, email verification, server address, delete
+// account) — moved here from settings.html so Settings stays about app
+// preferences and this page owns "your account."
 
 import { getCoins } from './coins.js';
 import { getHistory, computeWinRate } from './history.js';
 import { getProfile, setProfileName, setProfileAvatar, applyAvatarToElement, BUILTIN_AVATARS } from './profile-data.js';
 import { setLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
+import * as Api from './api.js';
+import { showToast } from './toast.js';
 
 recordLoginToday();
 
@@ -23,6 +28,31 @@ function fmtDuration(sec) {
   return `${m}:${String(r).padStart(2, '0')}`;
 }
 
+// Resize+compress client-side before ever touching localStorage or the
+// network — an unresized phone photo can be several MB, which is both
+// slow to upload and needlessly close to the backend's avatar size cap.
+function resizeImageToDataUrl(file, maxSize = 256, quality = 0.82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Could not read that file'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Could not read that image'));
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = String(reader.result);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setLanguage(loadSettings().language || 'en');
 
@@ -33,8 +63,23 @@ document.addEventListener('DOMContentLoaded', () => {
   const statWinRate = document.getElementById('statWinRate');
   const historyList = document.getElementById('historyList');
 
+  // Signed in → the real account is "the" profile; signed out → the local
+  // guest profile. Both shapes are { name, avatar:{type,value} }.
+  function currentIdentity() {
+    if (Api.isSignedIn()) {
+      const u = Api.getCurrentUser();
+      return {
+        name: u?.displayName || 'Player',
+        avatar: u?.avatarUrl
+          ? { type: 'image', value: u.avatarUrl }
+          : { type: 'emoji', value: u?.avatarEmoji || BUILTIN_AVATARS[0] },
+      };
+    }
+    return getProfile();
+  }
+
   function renderProfile() {
-    const p = getProfile();
+    const p = currentIdentity();
     heroName.textContent = p.name;
     applyAvatarToElement(heroAvatar, p.avatar);
   }
@@ -109,12 +154,21 @@ document.addEventListener('DOMContentLoaded', () => {
   wireCloseHandlers(nameModal);
 
   document.getElementById('btnEditName')?.addEventListener('click', () => {
-    nameInput.value = getProfile().name;
+    nameInput.value = currentIdentity().name;
     showModal(nameModal, true);
     nameInput.focus();
   });
-  document.getElementById('btnSaveName')?.addEventListener('click', () => {
-    setProfileName(nameInput.value);
+  document.getElementById('btnSaveName')?.addEventListener('click', async () => {
+    if (Api.isSignedIn()) {
+      try {
+        await Api.updateProfile({ displayName: nameInput.value });
+      } catch (err) {
+        showToast(err.message || 'Could not update name', 'error');
+        return;
+      }
+    } else {
+      setProfileName(nameInput.value);
+    }
     renderProfile();
     showModal(nameModal, false);
   });
@@ -127,14 +181,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderAvatarGrid() {
     avatarGrid.innerHTML = '';
-    const current = getProfile().avatar;
+    const current = currentIdentity().avatar;
     for (const emoji of BUILTIN_AVATARS) {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'avatar-choice' + (current.type === 'emoji' && current.value === emoji ? ' selected' : '');
       btn.textContent = emoji;
-      btn.addEventListener('click', () => {
-        setProfileAvatar({ type: 'emoji', value: emoji });
+      btn.addEventListener('click', async () => {
+        if (Api.isSignedIn()) {
+          try {
+            await Api.updateProfile({ avatarEmoji: emoji });
+          } catch (err) {
+            showToast(err.message || 'Could not update avatar', 'error');
+            return;
+          }
+        } else {
+          setProfileAvatar({ type: 'emoji', value: emoji });
+        }
         renderProfile();
         renderAvatarGrid();
       });
@@ -147,16 +210,104 @@ document.addEventListener('DOMContentLoaded', () => {
     showModal(avatarModal, true);
   });
 
-  avatarUpload?.addEventListener('change', () => {
+  avatarUpload?.addEventListener('change', async () => {
     const file = avatarUpload.files && avatarUpload.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setProfileAvatar({ type: 'image', value: String(reader.result) });
+    try {
+      const dataUrl = await resizeImageToDataUrl(file);
+      if (Api.isSignedIn()) {
+        await Api.updateProfile({ avatarUrl: dataUrl });
+      } else {
+        setProfileAvatar({ type: 'image', value: dataUrl });
+      }
       renderProfile();
       showModal(avatarModal, false);
+    } catch (err) {
+      showToast(err.message || 'Could not upload photo', 'error');
+    } finally {
       avatarUpload.value = '';
-    };
-    reader.readAsDataURL(file);
+    }
+  });
+
+  /* ---------------- account (sign in/out, verify email, server, delete) ---------------- */
+  const accountSub = document.getElementById('accountSub');
+  const btnAccountAction = document.getElementById('btnAccountAction');
+  const verifyEmailBanner = document.getElementById('verifyEmailBanner');
+  const verifyEmailSub = document.getElementById('verifyEmailSub');
+  const btnResendVerify = document.getElementById('btnResendVerify');
+  const deleteAccountCard = document.getElementById('deleteAccountCard');
+
+  function renderAccount() {
+    if (Api.isSignedIn()) {
+      const u = Api.getCurrentUser();
+      accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
+      btnAccountAction.textContent = 'Sign Out';
+      if (verifyEmailBanner) {
+        const needsVerify = !!u?.email && !u?.emailVerified;
+        verifyEmailBanner.hidden = !needsVerify;
+        if (needsVerify) verifyEmailSub.textContent = `Confirm ${u.email} to secure your account.`;
+      }
+      if (deleteAccountCard) deleteAccountCard.hidden = false;
+    } else {
+      accountSub.textContent = 'Not signed in';
+      btnAccountAction.textContent = 'Sign In';
+      if (verifyEmailBanner) verifyEmailBanner.hidden = true;
+      if (deleteAccountCard) deleteAccountCard.hidden = true;
+    }
+    // Identity source (account vs local guest) depends on sign-in state.
+    renderProfile();
+  }
+  renderAccount();
+  // Refresh from the server once so a link verified elsewhere (another tab,
+  // another device) is reflected here without waiting for the next sign-in.
+  if (Api.isSignedIn()) Api.fetchMe().then(renderAccount).catch(() => {});
+
+  btnAccountAction?.addEventListener('click', () => {
+    if (Api.isSignedIn()) { Api.signOut(); renderAccount(); }
+    else location.href = 'auth.html?next=profile.html';
+  });
+  btnResendVerify?.addEventListener('click', async () => {
+    btnResendVerify.disabled = true;
+    const label = btnResendVerify.textContent;
+    btnResendVerify.textContent = 'Sending…';
+    try {
+      await Api.resendVerification();
+      showToast('Verification email sent — check your inbox.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not resend verification email.', 'error');
+    } finally {
+      btnResendVerify.disabled = false;
+      btnResendVerify.textContent = label;
+    }
+  });
+
+  const apiBaseInput = document.getElementById('apiBaseInput');
+  if (apiBaseInput) apiBaseInput.value = Api.getApiBase();
+  document.getElementById('btnSaveApiBase')?.addEventListener('click', () => {
+    Api.setApiBase(apiBaseInput.value);
+    apiBaseInput.value = Api.getApiBase();
+    showToast('Server address saved.', 'success');
+  });
+
+  /* ---------------- delete account ---------------- */
+  const deleteAccountModal = document.getElementById('deleteAccountModal');
+  const deleteAccountPassword = document.getElementById('deleteAccountPassword');
+  wireCloseHandlers(deleteAccountModal);
+
+  document.getElementById('btnDeleteAccount')?.addEventListener('click', () => {
+    deleteAccountPassword.value = '';
+    showModal(deleteAccountModal, true);
+  });
+  document.getElementById('btnConfirmDeleteAccount')?.addEventListener('click', async () => {
+    const password = deleteAccountPassword.value;
+    if (!password) { showToast('Enter your password to confirm.', 'error'); return; }
+    try {
+      await Api.deleteAccount(password);
+      showModal(deleteAccountModal, false);
+      showToast('Account deleted.', 'success');
+      setTimeout(() => { location.href = 'index.html'; }, 600);
+    } catch (err) {
+      showToast(err.message || 'Could not delete account.', 'error');
+    }
   });
 });

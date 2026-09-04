@@ -227,9 +227,9 @@ export function resetAI() {
 export async function chooseAIMove(game, opts = {}) {
   resetDbg();
 
-  const levelName = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
-  logDbg(`Thinking… level=${levelName} turn=${game.turn}`);
-  updateStatus(`AI thinking… (${levelName})`, '#a60');
+  const level = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
+  logDbg(`Thinking… level=${level} turn=${game.turn}`);
+  updateStatus(`AI thinking… (level ${level})`, '#a60');
   setSpinner(true);
 
   // A previous search should already be resolved (ui.js serializes calls
@@ -246,7 +246,7 @@ export async function chooseAIMove(game, opts = {}) {
         type: 'search',
         board: game.board,
         turn: game.turn,
-        level: levelName,
+        level,
         requestId,
       });
     });
@@ -256,11 +256,11 @@ export async function chooseAIMove(game, opts = {}) {
   }
 }
 
-export function setAIDifficulty(levelName) {
+export function setAIDifficulty(level) {
   return {
     mode: 'Local (Web Worker, alpha-beta)',
-    level: LEVELS[levelName] ? levelName : DEFAULT_LEVEL,
-    levels: Object.keys(LEVELS),
+    level: LEVELS[level] ? level : DEFAULT_LEVEL,
+    levels: Object.keys(LEVELS).map(Number),
     params: LEVELS,
   };
 }

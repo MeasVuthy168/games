@@ -46,14 +46,15 @@
     <!-- (top bar removed) -->
 
     <main class="page settings-page">
-      <!-- Profile -->
-      <section class="profile-bar card card-full">
-        <img id="profImg" class="avatar" src="assets/icons/icon-192.png" alt="user" />
+      <!-- Profile: links to the real profile screen (profile.html) -->
+      <a class="profile-bar card card-full clickable" href="profile.html">
+        <div id="profAvatar" class="avatar avatar-emoji">🐯</div>
         <div class="profile-meta">
-          <div id="profName" class="profile-name">Guest</div>
-          <div class="profile-sub">admin</div>
+          <div id="profName" class="profile-name">Player</div>
+          <div class="profile-sub" data-i18n="profile.tapToView">Tap to view profile</div>
         </div>
-      </section>
+        <div class="card-right">›</div>
+      </a>
 
       <div class="card-list">
         <div class="card card-full disabled">
@@ -68,61 +69,73 @@
 
         <div class="card card-full">
           <div class="card-left">
-            <div class="card-title">Sound</div>
-            <div class="card-sub">Turn game sounds on/off</div>
+            <div class="card-title" data-i18n="settings.sound.title">Sound</div>
+            <div class="card-sub" data-i18n="settings.sound.sub">Turn game sounds on/off</div>
           </div>
           <div class="card-right">
             <label class="switch">
               <input type="checkbox" id="soundToggle" />
               <span class="slider"></span>
             </label>
-            <button class="pill" id="btnTestBeep">Test</button>
+            <button class="pill" id="btnTestBeep" data-i18n="settings.testButton">Test</button>
           </div>
         </div>
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left"><div class="card-title">Timer</div><div class="card-sub">Default time control</div></div>
+            <div class="card-left"><div class="card-title" data-i18n="settings.timer.title">Timer</div><div class="card-sub" data-i18n="settings.timer.sub">Default time control</div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <label class="field"><span>Minutes per side</span><input type="number" id="minutesInput" min="1" max="180" step="1" /></label>
-            <label class="field"><span>Increment (seconds)</span><input type="number" id="incInput" min="0" max="60" step="1" /></label>
-            <div class="row-inline"><button class="primary" id="btnSaveTimer">Save</button><button class="secondary" id="btnResetTimer">Defaults</button></div>
+            <label class="field"><span data-i18n="settings.timer.minutes">Minutes per side</span><input type="number" id="minutesInput" min="1" max="180" step="1" /></label>
+            <label class="field"><span data-i18n="settings.timer.increment">Increment (seconds)</span><input type="number" id="incInput" min="0" max="60" step="1" /></label>
+            <div class="row-inline"><button class="primary" id="btnSaveTimer" data-i18n="settings.save">Save</button><button class="secondary" id="btnResetTimer" data-i18n="settings.defaults">Defaults</button></div>
           </div>
         </details>
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left"><div class="card-title">Theme</div><div class="card-sub">Choose app appearance</div></div>
+            <div class="card-left"><div class="card-title" data-i18n="settings.theme.title">Theme</div><div class="card-sub" data-i18n="settings.theme.sub">Choose app appearance</div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <label class="radio"><input type="radio" name="theme" value="auto" checked /> <span>Auto</span></label>
-            <label class="radio"><input type="radio" name="theme" value="light" /> <span>Light</span></label>
-            <label class="radio"><input type="radio" name="theme" value="dark" /> <span>Dark</span></label>
+            <label class="radio"><input type="radio" name="theme" value="auto" checked /> <span data-i18n="settings.theme.auto">Auto</span></label>
+            <label class="radio"><input type="radio" name="theme" value="light" /> <span data-i18n="settings.theme.light">Light</span></label>
+            <label class="radio"><input type="radio" name="theme" value="dark" /> <span data-i18n="settings.theme.dark">Dark</span></label>
           </div>
         </details>
 
         <div class="card card-full">
-          <div class="card-left"><div class="card-title">Move Hints</div><div class="card-sub">Show green dots for legal moves</div></div>
+          <div class="card-left"><div class="card-title" data-i18n="settings.hints.title">Move Hints</div><div class="card-sub" data-i18n="settings.hints.sub">Show green dots for legal moves</div></div>
           <div class="card-right">
             <label class="switch"><input type="checkbox" id="hintsToggle" /><span class="slider"></span></label>
           </div>
         </div>
 
+        <div class="card card-full">
+          <div class="card-left"><div class="card-title" data-i18n="settings.instantMove.title">Instant Move</div><div class="card-sub" data-i18n="settings.instantMove.sub">Apply moves immediately, without the slide/hop animation</div></div>
+          <div class="card-right">
+            <label class="switch"><input type="checkbox" id="instantMoveToggle" /><span class="slider"></span></label>
+          </div>
+        </div>
+
         <details class="card card-full exp">
           <summary>
-            <div class="card-left"><div class="card-title">AI</div><div class="card-sub">Difficulty & engine debug</div></div>
+            <div class="card-left"><div class="card-title" data-i18n="settings.ai.title">AI</div><div class="card-sub" data-i18n="settings.ai.sub">Difficulty & engine debug</div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <label class="radio"><input type="radio" name="aiLevel" value="Easy" /> <span>Easy</span></label>
-            <label class="radio"><input type="radio" name="aiLevel" value="Medium" /> <span>Medium</span></label>
-            <label class="radio"><input type="radio" name="aiLevel" value="Hard" /> <span>Hard</span></label>
-            <label class="radio"><input type="radio" name="aiLevel" value="Expert" /> <span>Expert</span></label>
+            <label class="field">
+              <span data-i18n="settings.ai.level">AI Level</span>
+              <span class="row-inline" style="align-items:center;margin-top:.1rem">
+                <strong id="aiLevelValue" style="font-size:1.1rem;min-width:1.4em">5</strong>
+                <span class="pill" id="aiLevelBand" data-i18n="settings.band.medium">Medium</span>
+              </span>
+              <input type="range" id="aiLevelRange" min="1" max="10" step="1" />
+            </label>
+            <div class="card-sub">1–2 Easy · 3–5 Medium · 6–8 Hard · 9–10 Expert</div>
             <div class="card-full" style="padding:.4rem 0 0">
-              <div class="card-left"><div class="card-title">AI Debug Mode</div><div class="card-sub">Show search stats panel on the Play screen</div></div>
+              <div class="card-left"><div class="card-title" data-i18n="settings.ai.debug.title">AI Debug Mode</div><div class="card-sub" data-i18n="settings.ai.debug.sub">Show search stats panel on the Play screen</div></div>
               <div class="card-right">
                 <label class="switch"><input type="checkbox" id="aiDebugToggle" /><span class="slider"></span></label>
               </div>
@@ -130,8 +143,49 @@
           </div>
         </details>
 
+        <details class="card card-full exp">
+          <summary>
+            <div class="card-left"><div class="card-title" data-i18n="settings.language.title">Language</div><div class="card-sub" data-i18n="settings.language.sub">App display language</div></div>
+            <div class="card-right caret">›</div>
+          </summary>
+          <div class="card-body">
+            <label class="radio"><input type="radio" name="language" value="en" /> <span data-i18n="settings.language.en">English</span></label>
+            <label class="radio"><input type="radio" name="language" value="km" /> <span data-i18n="settings.language.km">Khmer</span></label>
+          </div>
+        </details>
+
+        <details class="card card-full exp">
+          <summary>
+            <div class="card-left"><div class="card-title" data-i18n="settings.pieceTheme.title">Piece Theme</div><div class="card-sub" data-i18n="settings.pieceTheme.sub">Choose piece art set</div></div>
+            <div class="card-right caret">›</div>
+          </summary>
+          <div class="card-body">
+            <div class="row-inline" style="align-items:center;justify-content:space-between">
+              <button class="secondary" id="pieceThemePrev" data-i18n="settings.theme.prev">‹ Previous</button>
+              <strong id="pieceThemeName">Classic</strong>
+              <button class="secondary" id="pieceThemeNext" data-i18n="settings.theme.next">Next ›</button>
+            </div>
+            <div class="card-sub" data-i18n="settings.theme.onlyOne">Only one option is available today — more are coming later.</div>
+          </div>
+        </details>
+
+        <details class="card card-full exp">
+          <summary>
+            <div class="card-left"><div class="card-title" data-i18n="settings.boardTheme.title">Board Theme</div><div class="card-sub" data-i18n="settings.boardTheme.sub">Choose board skin</div></div>
+            <div class="card-right caret">›</div>
+          </summary>
+          <div class="card-body">
+            <div class="row-inline" style="align-items:center;justify-content:space-between">
+              <button class="secondary" id="boardThemePrev" data-i18n="settings.theme.prev">‹ Previous</button>
+              <strong id="boardThemeName">Wood</strong>
+              <button class="secondary" id="boardThemeNext" data-i18n="settings.theme.next">Next ›</button>
+            </div>
+            <div class="card-sub" data-i18n="settings.theme.onlyOne">Only one option is available today — more are coming later.</div>
+          </div>
+        </details>
+
         <button class="card card-full clickable" id="btnAbout">
-          <div class="card-left"><div class="card-title">About App</div><div class="card-sub">Version & credits</div></div>
+          <div class="card-left"><div class="card-title" data-i18n="settings.about.title">About App</div><div class="card-sub" data-i18n="settings.about.sub">Version & credits</div></div>
           <div class="card-right">›</div>
         </button>
       </div>
@@ -146,10 +200,10 @@
           <button class="icon-btn" data-close>✖</button>
         </header>
         <div class="modal-body">
-          <div class="about-row"><strong>Version:</strong> <span id="aboutVersion">—</span></div>
-          <div class="about-row"><strong>Released Date:</strong> <span id="aboutReleased">—</span></div>
-          <div class="about-row"><strong>Developer:</strong> Meas Vuthy</div>
-          <div class="about-row"><strong>Email:</strong> <a href="mailto:measvuthy21@gmail.com">measvuthy21@gmail.com</a></div>
+          <div class="about-row"><strong data-i18n="settings.about.version">Version:</strong> <span id="aboutVersion">—</span></div>
+          <div class="about-row"><strong data-i18n="settings.about.released">Released Date:</strong> <span id="aboutReleased">—</span></div>
+          <div class="about-row"><strong data-i18n="settings.about.developer">Developer:</strong> Meas Vuthy</div>
+          <div class="about-row"><strong data-i18n="settings.about.email">Email:</strong> <a href="mailto:measvuthy21@gmail.com">measvuthy21@gmail.com</a></div>
         </div>
       </div>
     </div>

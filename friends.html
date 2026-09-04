@@ -16,6 +16,7 @@
   </script>
 
   <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/friends-page.js"></script>
   <style>
     .page{ padding:1rem; line-height:1.6; }
     .page .btn{
@@ -23,6 +24,34 @@
       background:#0d2d5c; color:#fff; text-decoration:none; font-weight:700;
     }
     .page .muted{ opacity:.7; font-size:.92rem; }
+
+    .online-section{ margin-top:1.2rem; }
+    .online-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem; }
+    .online-header h3{ margin:0; font-size:1rem; color:var(--blue); }
+    .signed-in-as{ font-size:.8rem; opacity:.7; }
+    .signed-in-as button{ background:none; border:none; color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; padding:0; margin-left:.4rem; }
+
+    .search-row{ display:flex; gap:.5rem; margin-bottom:.8rem; }
+    .search-row input{ flex:1; padding:.6rem .7rem; border-radius:.6rem; border:1px solid #d7dee8; font:inherit; }
+    .search-row button{ padding:.6rem 1rem; border-radius:.6rem; border:none; background:var(--blue); color:#fff; font-weight:700; cursor:pointer; }
+
+    .person-row{
+      display:flex; align-items:center; gap:.6rem; padding:.6rem .7rem;
+      background:var(--panel); border-radius:.8rem; box-shadow:var(--shadow); margin-bottom:.5rem;
+      border:1px solid rgba(13,45,92,.06);
+    }
+    .person-emoji{ font-size:1.4rem; width:32px; text-align:center; flex:none; }
+    .person-name{ flex:1; font-weight:700; font-size:.92rem; min-width:0; }
+    .person-actions{ display:flex; gap:.4rem; flex:none; }
+    .person-actions button{
+      padding:.4rem .7rem; border-radius:.6rem; border:none; font-weight:700; font-size:.78rem; cursor:pointer;
+    }
+    .btn-accept{ background:var(--blue); color:#fff; }
+    .btn-decline{ background:#fdeaea; color:#a3312f; }
+    .btn-message{ background:#eef4ff; color:var(--blue); }
+    .btn-remove{ background:#f2f2f2; color:#555; }
+    .empty-note{ font-size:.82rem; opacity:.6; padding:.3rem 0 .8rem; }
+    .section-label{ font-weight:700; font-size:.82rem; opacity:.7; margin:.8rem 0 .4rem; }
   </style>
 </head>
 <body>
@@ -32,7 +61,36 @@
     <main class="page">
       <p><strong>លេងជាមួយមិត្តលើឧបករណ៍តែមួយ</strong> — ជំនួសគ្នាកាន់ទូរស័ព្ទ/កុំព្យូទ័រតែមួយ (pass &amp; play), មិនត្រូវការអ៊ីនធឺណិតទេ។</p>
       <p><a class="btn" href="play.html?mode=friend">👥 លេងលើឧបករណ៍តែមួយ (Play on this device)</a></p>
-      <p class="muted">អនឡាញ៖ បញ្ជីមិត្ត និងការអញ្ជើញលេងតាមអ៊ីនធឺណិត (online invitations) កំពុងស្ថិតក្នុងការអភិវឌ្ឍន៍ — coming soon.</p>
+
+      <section class="online-section" id="signedOutView" hidden>
+        <div class="card card-full clickable" id="btnGoSignIn" style="cursor:pointer">
+          <div class="card-left">
+            <div class="card-title">Sign in for real online friends</div>
+            <div class="card-sub">Add friends by email, chat, and get notifications</div>
+          </div>
+          <div class="card-right">›</div>
+        </div>
+      </section>
+
+      <section class="online-section" id="signedInView" hidden>
+        <div class="online-header">
+          <h3>Online Friends</h3>
+          <div class="signed-in-as">Signed in as <strong id="meName"></strong><button id="btnSignOut" type="button">Sign out</button></div>
+        </div>
+
+        <div class="search-row">
+          <input type="text" id="searchInput" placeholder="Search by name or email…" />
+          <button id="btnSearch" type="button">Search</button>
+        </div>
+        <div id="searchResults"></div>
+
+        <div class="section-label" id="incomingLabel" hidden>Friend Requests</div>
+        <div id="incomingList"></div>
+
+        <div class="section-label">My Friends</div>
+        <div id="friendsList"></div>
+        <div class="empty-note" id="friendsEmpty" hidden>No friends yet — search above to add some.</div>
+      </section>
     </main>
 
     <!-- Auto-hide bottom nav -->

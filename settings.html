@@ -57,6 +57,25 @@
       </a>
 
       <div class="card-list">
+        <div class="card card-full" id="accountCard">
+          <div class="card-left">
+            <div class="card-title">Account</div>
+            <div class="card-sub" id="accountSub">Not signed in</div>
+          </div>
+          <div class="card-right"><button class="pill" id="btnAccountAction">Sign In</button></div>
+        </div>
+
+        <details class="card card-full exp">
+          <summary>
+            <div class="card-left"><div class="card-title">Server</div><div class="card-sub">Friends/chat backend address (advanced)</div></div>
+            <div class="card-right caret">›</div>
+          </summary>
+          <div class="card-body">
+            <label class="field"><span>API Server URL</span><input type="text" id="apiBaseInput" placeholder="https://ouk-ai-backend.onrender.com" /></label>
+            <div class="row-inline"><button class="primary" id="btnSaveApiBase">Save</button></div>
+          </div>
+        </details>
+
         <div class="card card-full disabled">
           <div class="card-left"><div class="card-title">Personal Info</div><div class="card-sub">coming soon</div></div>
           <div class="card-right">›</div>

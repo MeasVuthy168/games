@@ -4,6 +4,7 @@ import { pieceThemes, boardThemes } from './themes.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
+import * as Api from './api.js';
 
 recordLoginToday();
 
@@ -217,6 +218,33 @@ document.addEventListener('DOMContentLoaded', ()=>{
   );
   aboutModal.addEventListener('click', (e)=>{
     if(e.target.classList.contains('modal-backdrop')) setModal(false);
+  });
+
+  // ------------------------------ Account ------------------------------
+  const accountSub = document.getElementById('accountSub');
+  const btnAccountAction = document.getElementById('btnAccountAction');
+  function renderAccount() {
+    if (Api.isSignedIn()) {
+      const u = Api.getCurrentUser();
+      accountSub.textContent = `Signed in as ${u?.displayName || u?.email || ''}`;
+      btnAccountAction.textContent = 'Sign Out';
+    } else {
+      accountSub.textContent = 'Not signed in';
+      btnAccountAction.textContent = 'Sign In';
+    }
+  }
+  renderAccount();
+  btnAccountAction?.addEventListener('click', () => {
+    if (Api.isSignedIn()) { Api.signOut(); renderAccount(); }
+    else location.href = 'auth.html?next=settings.html';
+  });
+
+  const apiBaseInput = document.getElementById('apiBaseInput');
+  if (apiBaseInput) apiBaseInput.value = Api.getApiBase();
+  document.getElementById('btnSaveApiBase')?.addEventListener('click', () => {
+    Api.setApiBase(apiBaseInput.value);
+    apiBaseInput.value = Api.getApiBase();
+    alert('Server address saved.');
   });
 
   applyTranslations();

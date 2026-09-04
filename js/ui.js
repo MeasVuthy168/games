@@ -13,7 +13,9 @@ const DEFAULTS = {
   increment: 5,
   sound: true,
   hints: true,
-  aiColor: 'b' // fallback: human plays White, AI plays Black, until the player picks a role
+  aiColor: 'b', // fallback: human plays White, AI plays Black, until the player picks a role
+  aiLevel: 'Medium',
+  aiDebug: false
 };
 
 /* ---------------- storage ---------------- */
@@ -51,16 +53,16 @@ function loadSettings() {
       merged.aiEnabled = false;
     } else {
       // Force Makruk AI vs human, but respect the player's chosen color
-      // (set on the home screen's role picker: White / Black / Random).
+      // (set on the home screen's role picker: White / Black / Random)
+      // and the player's chosen difficulty (Settings → AI).
       merged.aiEnabled = true;
-      merged.aiLevel   = 'Master';
       if (merged.aiColor !== 'w' && merged.aiColor !== 'b') merged.aiColor = 'b';
     }
     return merged;
   } catch {
     return isFriendMode
       ? { ...DEFAULTS, aiEnabled: false }
-      : { ...DEFAULTS, aiEnabled: true, aiLevel: 'Master', aiColor: 'b' };
+      : { ...DEFAULTS, aiEnabled: true, aiColor: 'b' };
   }
 }
 
@@ -214,9 +216,11 @@ export function initUI() {
   const settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
-  window.AIDebug?.log('[UI] init — Makruk AI (remote + fallback)');
+  window.AIDebug?.log('[UI] init — Makruk AI (local engine)');
 
   let AILock = false;
+  let aiGen = 0; // bumped on Restart/Undo so a still-in-flight AI search
+                 // from before that change is ignored when it resolves.
 
   function setBoardBusy(on) {
     AILock = !!on;
@@ -391,12 +395,17 @@ export function initUI() {
 
   async function thinkAndPlay() {
     if (AILock || !isAITurn()) return;
+    const myGen = aiGen;
     setBoardBusy(true);
 
     try {
       const aiOpts = { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
       window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
+
+      // Board was reset/undone while this search was in flight — the move
+      // (if any) no longer applies to the current position. Drop it silently.
+      if (myGen !== aiGen) return;
 
       if (!aiMove || !aiMove.from || !aiMove.to) {
         window.AIDebug?.log('[UI] AI returned null → disabling AI');
@@ -667,6 +676,7 @@ export function initUI() {
   /* -------- controls -------- */
 
   btnReset?.addEventListener('click', () => {
+    aiGen++; AI.resetAI?.(); setBoardBusy(false);
     game.reset();
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
@@ -675,6 +685,7 @@ export function initUI() {
   });
 
   btnUndo?.addEventListener('click', () => {
+    aiGen++; AI.resetAI?.(); setBoardBusy(false);
     if (!game.undo()) return;
     // Playing vs AI: also undo the AI's reply so control returns to the human.
     if (isAITurn()) game.undo();

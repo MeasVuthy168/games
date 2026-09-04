@@ -1,27 +1,30 @@
-// js/ai.js — Remote-first AI with spinner + adaptive retries + DEBUG PANEL + STATUS LINE
+// js/ai.js — thin adapter over the local search running in js/ai-worker.js.
+//
+// Same public contract as before: chooseAIMove(game, opts) / pickAIMove
+// resolve to `{from:{x,y}, to:{x,y}}` (or null if no legal move exists).
+// The actual search never touches the network — js/ai-engine.js runs
+// entirely inside a Web Worker so the board UI never blocks, however deep
+// the search goes.
 
-const REMOTE_AI_URL   = 'https://ouk-ai-backend.onrender.com';
-const REMOTE_ENDPOINT = `${REMOTE_AI_URL}/api/ai/move`;
-const REMOTE_PING     = `${REMOTE_AI_URL}/ping`;
+import { LEVELS, DEFAULT_LEVEL } from './ai-engine.js';
 
-// Try these movetimes in order (strong → faster)
-const MOVETIME_STEPS = [1100, 900, 700, 500];
-const HTTP_TIMEOUT   = 45000;
-const VARIANT        = 'makruk';
+const LS_KEY = 'kc_settings_v1';
 
-// Safe options for Render free tier
-const SAFE_THREADS = 1;
-const SAFE_HASH    = 32;
+function readSettings() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {}; }
+  catch { return {}; }
+}
 
-// Use Makruk start FEN when the board looks empty/uninitialized
-const MAKRUK_START_FEN =
-  'rnsmksnr/8/pppppppp/8/8/PPPPPPPP/8/RNSKMSNR w - - 0 1';
-// ===== TEMP DEBUG PANEL =====
+function debugEnabled() {
+  return !!readSettings().aiDebug;
+}
 
-const ENABLE_DEBUG = true;
+// ===== Debug panel (reused scaffolding: same anchor point, same
+// window.AIDebug interface — now shows search stats instead of an HTTP
+// retry trace) =====
 
 function ensureDebugPanel() {
-  if (!ENABLE_DEBUG) return null;
+  if (!debugEnabled()) return null;
 
   let cardBelow = document.getElementById('chatCard');
   if (!cardBelow) {
@@ -50,7 +53,7 @@ function ensureDebugPanel() {
       padding:8px 10px; background:#e9f1ff;
     `;
     bar.innerHTML =
-      `<strong style="font-weight:700;color:#17355d">AI Debug (temp)</strong>
+      `<strong style="font-weight:700;color:#17355d">AI Debug</strong>
        <div>
          <button id="aiDbgCopy" style="margin-right:6px;padding:4px 8px;border:1px solid #a9bfd9;border-radius:6px;background:#fff">Copy</button>
          <button id="aiDbgToggle" style="padding:4px 8px;border:1px solid #a9bfd9;border-radius:6px;background:#fff">Hide</button>
@@ -65,7 +68,6 @@ function ensureDebugPanel() {
     `;
     pre.textContent = '…';
 
-    // === status line ===
     const status = document.createElement('div');
     status.id = 'aiStatusLine';
     status.style.cssText = `
@@ -73,7 +75,7 @@ function ensureDebugPanel() {
       border-top:1px solid #d9d9d9;
       font-family:ui-sans-serif,system-ui;
     `;
-    status.textContent = 'Initializing AI status...';
+    status.textContent = 'AI idle.';
 
     panel.appendChild(bar);
     panel.appendChild(pre);
@@ -105,26 +107,21 @@ function ensureDebugPanel() {
     };
   }
 
+  host.style.display = '';
   return document.getElementById('aiDebugLog');
 }
 
 function updateStatus(text, color) {
+  if (!debugEnabled()) return;
   let el = document.getElementById('aiStatusLine');
-  if (!el) {
-    ensureDebugPanel();
-    el = document.getElementById('aiStatusLine');
-  }
+  if (!el) { ensureDebugPanel(); el = document.getElementById('aiStatusLine'); }
   if (el) {
     el.textContent = text;
     el.style.color = color || '#222';
-    el.style.background = (color && color.includes('⚠️'))
-      ? '#fff4e0'
-      : '#f0fff0';
   }
 }
 
 function logDbg(...args) {
-  if (!ENABLE_DEBUG) return;
   const pre = ensureDebugPanel();
   if (!pre) return;
   const ts = new Date().toLocaleTimeString();
@@ -134,19 +131,13 @@ function logDbg(...args) {
 
 function resetDbg() {
   const pre = ensureDebugPanel();
-  if (pre) {
-    pre.textContent =
-      `Remote: ${REMOTE_AI_URL}\nEndpoint: /api/ai/move\nVariant: ${VARIANT}\n---`;
-  }
+  if (pre) pre.textContent = 'Local Makruk engine (Web Worker)\n---';
 }
 
-window.AIDebug = {
-  log: logDbg,
-  reset: resetDbg,
-  status: updateStatus
-};
+window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
 
-// ===== Spinner =====
+// ===== Thinking spinner (unchanged behavior — always shown while the
+// worker is searching, independent of the debug flag) =====
 
 function ensureSpinner() {
   let el = document.getElementById('aiSpinner');
@@ -177,169 +168,58 @@ function setSpinner(on) {
   ensureSpinner().style.opacity = on ? '1' : '0';
 }
 
-// ===== Helpers =====
+// ===== Worker lifecycle =====
+//
+// A single persistent worker is reused for the whole game (so its
+// transposition table keeps paying off move to move). `resetAI()` tears it
+// down and spins up a fresh one — called from ui.js on Restart/Undo so a
+// search in flight when the board changes underneath it can never resolve
+// into a stale move, and no lock or pending promise is left behind.
 
-function withTimeout(promise, ms) {
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => reject(new Error('timeout')), ms);
-    promise.then(
-      v => { clearTimeout(t); resolve(v); },
-      e => { clearTimeout(t); reject(e); }
-    );
-  });
-}
+let worker = null;
+let pending = null;   // { requestId, resolve }
+let nextRequestId = 1;
 
-async function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+function ensureWorker() {
+  if (worker) return worker;
+  // Resolve against this module's own URL (not the document's), so the
+  // worker loads correctly regardless of which page imports ai.js.
+  worker = new Worker(new URL('./ai-worker.js', import.meta.url), { type: 'module' });
+  worker.onmessage = (e) => {
+    const { type, requestId, move, stats } = e.data || {};
+    if (type !== 'result' || !pending || pending.requestId !== requestId) return;
+    const { resolve } = pending;
+    pending = null;
 
-async function pingBackend() {
-  try {
-    const r = await withTimeout(fetch(REMOTE_PING, { cache: 'no-store' }), 6000);
-    const ok = r.ok;
-    let j = {};
-    try {
-      j = await r.json();
-    } catch {}
-    logDbg(`PING ${ok ? 'OK' : 'HTTP' + r.status} ->`, JSON.stringify(j));
-    if (ok && (j.ok === true || j.status === 'ok')) {
-      updateStatus('✅ Connected to AI server', 'green');
-      return true;
-    } else {
-      updateStatus('⚠️ Using offline (random) AI — ping failed', 'orange');
-      return false;
+    if (stats && stats.error) {
+      logDbg('Worker error:', stats.error);
+      updateStatus('AI error: ' + stats.error, '#b23');
+      resolve(null);
+      return;
     }
-  } catch (e) {
-    logDbg('PING failed:', e.message || e);
+
+    logDbg(
+      `depth=${stats.depth} nodes=${stats.nodes} time=${stats.timeMs}ms score=${stats.score}`,
+      'move=', move ? `${JSON.stringify(move.from)}->${JSON.stringify(move.to)}` : '(none)'
+    );
     updateStatus(
-      '⚠️ Using offline (random) AI — network error: ' + e.message,
-      'orange'
+      `Last move: depth ${stats.depth}, ${stats.nodes} nodes, ${stats.timeMs}ms, eval ${stats.score}`,
+      '#175'
     );
-    return false;
-  }
+    resolve(move);
+  };
+  worker.onerror = (e) => {
+    logDbg('Worker crashed:', e.message || e);
+    if (pending) { const { resolve } = pending; pending = null; resolve(null); }
+  };
+  return worker;
 }
 
-function getFenFromGame(game) {
-  try {
-    if (typeof game.toFEN === 'function') return game.toFEN();
-    if (typeof game.fen   === 'function') return game.fen();
-    if (typeof game.fen   === 'string')   return game.fen;
-    if (game.state?.fen)  return game.state.fen;
-  } catch {}
-  return '8/8/8/8/8/8/8/8 w - - 0 1';
-}
-
-function isEmptyFen(fen) {
-  return typeof fen === 'string' &&
-    /^8\/8\/8\/8\/8\/8\/8\/8\s[wb]\s/.test(fen);
-}
-
-function uciToMoveObj(uci) {
-  if (typeof uci !== 'string') return null;
-  const m = uci.trim().match(/^([a-h][1-8])([a-h][1-8])([qrbnQRBN])?$/);
-  if (!m) return null;
-
-  const fx = m[1].charCodeAt(0) - 97;
-  const fy = 8 - (m[1].charCodeAt(1) - 48); // '1' -> 7, '8' -> 0
-  const tx = m[2].charCodeAt(0) - 97;
-  const ty = 8 - (m[2].charCodeAt(1) - 48);
-
-  if (((fx | fy | tx | ty) & ~7) !== 0) return null;
-
-  return { from: { x: fx, y: fy }, to: { x: tx, y: ty } };
-}
-
-function extractMoveFromResponse(json) {
-  if (!json) return null;
-  if (typeof json.uci      === 'string') return uciToMoveObj(json.uci);
-  if (typeof json.bestmove === 'string') return uciToMoveObj(json.bestmove);
-  if (typeof json.move     === 'string') return uciToMoveObj(json.move);
-  if (json.move && json.move.from && json.move.to) return json.move;
-
-  if (typeof json.raw === 'string') {
-    const m = json.raw.match(/bestmove\s+([a-h][1-8][a-h][1-8])/i);
-    if (m) return uciToMoveObj(m[1]);
-  }
-
-  return null;
-}
-
-async function callMoveAPI(fen, movetime) {
-  const started = performance.now();
-  logDbg(`POST /api/ai/move mt=${movetime} thr=${SAFE_THREADS} hash=${SAFE_HASH}`);
-
-  const res = await withTimeout(fetch(REMOTE_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      fen,
-      variant: VARIANT,
-      movetime,
-      threads: SAFE_THREADS,
-      hash: SAFE_HASH
-      // NOTE: no "moves" field anymore — FEN alone describes the current position
-    })
-  }), HTTP_TIMEOUT);
-
-  const text = await res.text();
-  if (!res.ok) {
-    logDbg(`HTTP ${res.status}`, text.slice(0, 200));
-    const err = new Error(`HTTP ${res.status}`);
-    err.serverText = text;
-    throw err;
-  }
-
-  let json = {};
-  try {
-    json = JSON.parse(text);
-  } catch {
-    logDbg('Invalid JSON:', text.slice(0, 200));
-    const err = new Error('Invalid JSON from server');
-    err.serverText = text;
-    throw err;
-  }
-
-  // --- FIXED: only treat "(none)" / no_legal_move as "no move" ---
-  const raw = json.raw || '';
-  const noMove =
-    raw.includes('bestmove (none)') ||
-    json.uci === '(none)' ||
-    json.error === 'no_legal_move';
-
-  if (noMove) {
-    logDbg('Engine reported no legal move:', JSON.stringify(json).slice(0, 200));
-    const err = new Error('No move found in response');
-    err.serverText = JSON.stringify(json);
-    throw err;
-  }
-  // ---------------------------------------------------------------
-
-  const mv = extractMoveFromResponse(json);
-  if (!mv) {
-    logDbg('No move in response:', JSON.stringify(json).slice(0, 200));
-    const err = new Error('No move found in response');
-    err.serverText = JSON.stringify(json);
-    throw err;
-  }
-
-  logDbg(`OK in ${(performance.now() - started | 0)}ms →`, json.uci || json.bestmove || '');
-  updateStatus('✅ Connected to AI server', 'green');
-  return mv;
-}
-
-function pickRandomLegal(game) {
-  const legals = [];
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const p = game.at?.(x, y);
-      if (!p || p.c !== game.turn) continue;
-      const ms = game.legalMoves?.(x, y) || [];
-      for (const m of ms) {
-        legals.push({ from: { x, y }, to: { x: m.x, y: m.y } });
-      }
-    }
-  }
-  return legals.length ? legals[(Math.random() * legals.length) | 0] : null;
+// Discard any in-flight search and start clean. Safe to call any time
+// (reset, undo, or if a caller wants to force a fresh worker).
+export function resetAI() {
+  if (worker) { worker.terminate(); worker = null; }
+  if (pending) { const { resolve } = pending; pending = null; resolve(null); }
 }
 
 // ===== Public API =====
@@ -347,127 +227,42 @@ function pickRandomLegal(game) {
 export async function chooseAIMove(game, opts = {}) {
   resetDbg();
 
-  let fen = getFenFromGame(game);
-  logDbg('FEN:', fen);
-  if (isEmptyFen(fen)) {
-    logDbg('Empty FEN detected → using Makruk start FEN.');
-    fen = MAKRUK_START_FEN;
-  }
-
+  const levelName = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
+  logDbg(`Thinking… level=${levelName} turn=${game.turn}`);
+  updateStatus(`AI thinking… (${levelName})`, '#a60');
   setSpinner(true);
+
+  // A previous search should already be resolved (ui.js serializes calls
+  // via its AILock), but guard against overlap defensively.
+  if (pending) { const { resolve } = pending; pending = null; resolve(null); }
+
+  ensureWorker();
+
   try {
-    const alive = await pingBackend();
-    if (!alive) {
-      logDbg('Ping not OK → warmup 500ms');
-      await sleep(500);
-    }
-
-    let lastErr = null;
-
-    for (let i = 0; i < MOVETIME_STEPS.length; i++) {
-      const mt = MOVETIME_STEPS[i];
-      try {
-        if (i > 0) {
-          logDbg('Retry ladder — short pause');
-          await sleep(350);
-        }
-        const mv = await callMoveAPI(fen, mt);
-        setSpinner(false);
-        logDbg('MOVE SELECTED:', JSON.stringify(mv));
-        updateStatus('✅ Connected to AI server', 'green');
-        return mv;
-      } catch (err) {
-        lastErr = err;
-        updateStatus(
-          '⚠️ Using offline (random) AI — ' + (err.message || 'error'),
-          'orange'
-        );
-
-        const server   = (err.serverText || '').toLowerCase();
-        const isTimeout = server.includes('engine timeout');
-        const isBusy    =
-          server.includes('noengine') ||
-          server.includes('pool') ||
-          /503|429/.test(err.message || '');
-        const isNone    =
-          server.includes('bestmove (none)') ||
-          server.includes('"uci":"(none)"') ||
-          server.includes('no_legal_move');
-
-        logDbg(
-          'Attempt failed:',
-          err.message,
-          '| server:',
-          (err.serverText || '').slice(0, 120)
-        );
-
-        if (isNone) {
-          logDbg('Breaking retry ladder (no legal move).');
-          break;
-        }
-        if (!isTimeout && !isBusy) {
-          logDbg('Breaking retry ladder (hard error)');
-          break;
-        }
-      }
-    }
-
+    const move = await new Promise((resolve) => {
+      const requestId = nextRequestId++;
+      pending = { requestId, resolve };
+      worker.postMessage({
+        type: 'search',
+        board: game.board,
+        turn: game.turn,
+        level: levelName,
+        requestId,
+      });
+    });
+    return move;
+  } finally {
     setSpinner(false);
-    logDbg('All retries failed → local fallback');
-    updateStatus('⚠️ Using offline (random) AI — server unreachable', 'orange');
-    return pickRandomLegal(game);
-  } catch (e) {
-    setSpinner(false);
-    logDbg('Unexpected error:', e.message || e);
-    updateStatus('⚠️ Using offline (random) AI — unexpected error', 'orange');
-    return pickRandomLegal(game);
   }
 }
 
-export function setAIDifficulty() {
+export function setAIDifficulty(levelName) {
   return {
-    mode: 'Remote+Adaptive+Fallback',
-    server: REMOTE_AI_URL,
-    movetimes: MOVETIME_STEPS.slice(),
-    httpTimeout: HTTP_TIMEOUT,
-    variant: VARIANT,
-    threads: SAFE_THREADS,
-    hash: SAFE_HASH
+    mode: 'Local (Web Worker, alpha-beta)',
+    level: LEVELS[levelName] ? levelName : DEFAULT_LEVEL,
+    levels: Object.keys(LEVELS),
+    params: LEVELS,
   };
 }
 
 export const pickAIMove = chooseAIMove;
-
-// === periodic backend liveness probe ===
-
-(function aiKeepalive() {
-  const PING_URL = 'https://ouk-ai-backend.onrender.com/ping';
-
-  async function pingOnce() {
-    const t0 = performance.now();
-    try {
-      const r = await fetch(PING_URL, { cache: 'no-store' });
-      const ok = r.ok;
-      const j  = ok ? await r.json() : {};
-      const dt = (performance.now() - t0) | 0;
-      window.AIDebug?.log(
-        `KEEPALIVE ${ok ? 'OK' : 'HTTP' + r.status} in ${dt}ms`,
-        JSON.stringify(j)
-      );
-      if (ok) {
-        window.AIDebug?.status('✅ Connected to AI server', 'green');
-      } else {
-        window.AIDebug?.status('⚠️ Using offline (random) AI — ping failed', 'orange');
-      }
-    } catch (e) {
-      window.AIDebug?.log('KEEPALIVE FAIL:', e?.message || e);
-      window.AIDebug?.status(
-        '⚠️ Using offline (random) AI — network error: ' + (e?.message || e),
-        'orange'
-      );
-    }
-  }
-
-  setInterval(pingOnce, 20000);
-  pingOnce();
-})();

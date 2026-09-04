@@ -816,6 +816,9 @@ const SW_URL = './sw.js';
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
+      // See js/pwa.js for why this only reloads when a controller already
+      // existed (a genuine update), not on a page's very first-ever visit.
+      const hadController = !!navigator.serviceWorker.controller;
       const reg = await navigator.serviceWorker.register(SW_URL, { scope: './', updateViaCache: 'none' });
       reg.update();
       reg.addEventListener('updatefound', () => {
@@ -825,6 +828,7 @@ if ('serviceWorker' in navigator) {
         });
       });
       navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!hadController) return;
         if (!window.__reloadedForSW) { window.__reloadedForSW = true; location.reload(); }
       });
       setInterval(() => reg.update(), 60 * 1000);

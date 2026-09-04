@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Sign In | Khmer Chess</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+  <script type="module">
+    import { recordLoginToday } from './js/rewards.js';
+    recordLoginToday();
+  </script>
+
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/auth-page.js"></script>
+
+  <style>
+    .auth-wrap{ max-width:420px; margin:2rem auto; padding:0 1rem; }
+    .auth-card{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1.3rem 1.2rem; }
+    .auth-title{ font-weight:800; font-size:1.2rem; color:var(--blue); text-align:center; margin:0 0 .3rem; }
+    .auth-sub{ text-align:center; opacity:.7; font-size:.85rem; margin:0 0 1rem; }
+    .auth-tabs{ display:flex; gap:.5rem; margin-bottom:1rem; }
+    .auth-tab{
+      flex:1; padding:.6rem; border-radius:.7rem; border:2px solid #e6ecf7; background:#f7f9fd;
+      font-weight:700; cursor:pointer; color:var(--blue);
+    }
+    .auth-tab.active{ border-color:var(--blue); background:#eef4ff; }
+    .auth-form{ display:flex; flex-direction:column; gap:.7rem; }
+    .auth-form[hidden]{ display:none; }
+    .auth-error{ background:#fdeaea; color:#a3312f; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
+    .auth-ok{ background:#e4f8ea; color:#1c7a3a; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
+    .auth-link{ text-align:center; font-size:.85rem; }
+    .auth-link a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="page settings-page auth-wrap">
+      <div class="auth-card">
+        <h1 class="auth-title">អុកចត្រង្គ</h1>
+        <p class="auth-sub">Sign in to add friends, chat, and get notifications.</p>
+
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabSignIn" type="button">Sign In</button>
+          <button class="auth-tab" id="tabSignUp" type="button">Sign Up</button>
+        </div>
+
+        <div id="authMsg"></div>
+
+        <form class="auth-form" id="formSignIn" onsubmit="return false">
+          <label class="field"><span>Email</span><input type="email" id="siEmail" required autocomplete="email" /></label>
+          <label class="field"><span>Password</span><input type="password" id="siPassword" required autocomplete="current-password" /></label>
+          <button class="primary" type="submit">Sign In</button>
+          <div class="auth-link"><a id="linkForgot">Forgot password?</a></div>
+        </form>
+
+        <form class="auth-form" id="formSignUp" hidden onsubmit="return false">
+          <label class="field"><span>Display name</span><input type="text" id="suName" maxlength="40" required autocomplete="nickname" /></label>
+          <label class="field"><span>Email</span><input type="email" id="suEmail" required autocomplete="email" /></label>
+          <label class="field"><span>Password (min 8 characters)</span><input type="password" id="suPassword" minlength="8" required autocomplete="new-password" /></label>
+          <button class="primary" type="submit">Create Account</button>
+        </form>
+
+        <form class="auth-form" id="formForgot" hidden onsubmit="return false">
+          <p class="card-sub">Enter your email and we'll send a reset link.</p>
+          <label class="field"><span>Email</span><input type="email" id="fpEmail" required autocomplete="email" /></label>
+          <button class="primary" type="submit">Send Reset Link</button>
+          <div class="auth-link"><a id="linkBackToSignIn">Back to sign in</a></div>
+        </form>
+      </div>
+    </main>
+
+    <footer id="appTabbar" class="home-nav">
+      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span></a>
+      <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span></a>
+      <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span></a>
+      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span></a>
+      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span></a>
+    </footer>
+    <div id="bottomSpacer" aria-hidden="true"></div>
+  </div>
+
+  <script>
+    (function(){
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(!bar || !spacer) return;
+      function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
+      if (document.readyState === 'complete') setSpacer(); else window.addEventListener('load', setSpacer);
+      window.addEventListener('resize', setSpacer);
+    })();
+  </script>
+</body>
+</html>

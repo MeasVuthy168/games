@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Chat | Khmer Chess</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+  <script type="module">
+    import { recordLoginToday } from './js/rewards.js';
+    recordLoginToday();
+  </script>
+
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/chat-page.js"></script>
+
+  <style>
+    .chat-list{ padding:1rem; display:flex; flex-direction:column; gap:.6rem; }
+    .conv-row{
+      display:flex; align-items:center; gap:.7rem; padding:.7rem .8rem;
+      background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
+      border:1px solid rgba(13,45,92,.06); cursor:pointer;
+    }
+    .conv-row:active{ transform:scale(.99); }
+    .conv-emoji{ font-size:1.6rem; flex:none; }
+    .conv-meta{ flex:1; min-width:0; }
+    .conv-name{ font-weight:800; font-size:.95rem; }
+    .conv-preview{ font-size:.8rem; opacity:.65; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .conv-badge{
+      background:var(--blue); color:#fff; font-weight:800; font-size:.72rem;
+      border-radius:999px; padding:.15rem .5rem; flex:none;
+    }
+    .empty-note{ padding:1rem; text-align:center; opacity:.6; font-size:.88rem; }
+
+    /* Thread view */
+    .thread-wrap{ display:flex; flex-direction:column; height:calc(100dvh - 130px); }
+    .thread-header{ display:flex; align-items:center; gap:.6rem; padding:.8rem 1rem; border-bottom:1px solid rgba(13,45,92,.08); }
+    .thread-header a{ color:var(--blue); font-weight:800; text-decoration:none; font-size:1.2rem; }
+    .thread-header .thread-name{ font-weight:800; }
+    .thread-msgs{ flex:1; overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:.5rem; }
+    .msg-row{ display:flex; }
+    .msg-row.me{ justify-content:flex-end; }
+    .msg-bubble{
+      max-width:75%; padding:.55rem .8rem; border-radius:1rem; font-size:.9rem; line-height:1.35;
+      background:#eef1f6; color:var(--ink);
+    }
+    .msg-row.me .msg-bubble{ background:var(--blue); color:#fff; }
+    .thread-composer{ display:flex; gap:.5rem; padding:.7rem 1rem; border-top:1px solid rgba(13,45,92,.08); }
+    .thread-composer input{ flex:1; padding:.6rem .8rem; border-radius:1.2rem; border:1px solid #d7dee8; font:inherit; }
+    .thread-composer button{
+      padding:.55rem 1.1rem; border-radius:1.2rem; border:none; background:var(--blue); color:#fff; font-weight:800; cursor:pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="page">
+      <div id="listView"></div>
+      <div id="threadView" hidden></div>
+    </main>
+
+    <footer id="appTabbar" class="home-nav">
+      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span></a>
+      <a class="nav-item active" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span></a>
+      <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span></a>
+      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span></a>
+      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span></a>
+    </footer>
+    <div id="bottomSpacer" aria-hidden="true"></div>
+  </div>
+
+  <script>
+    (function(){
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(!bar || !spacer) return;
+      function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
+      if (document.readyState === 'complete') setSpacer(); else window.addEventListener('load', setSpacer);
+      window.addEventListener('resize', setSpacer);
+    })();
+  </script>
+</body>
+</html>

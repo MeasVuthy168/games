@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>Verify Email | Khmer Chess</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+  <script type="module" src="js/notif-badge.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/verify-email-page.js"></script>
+
+  <style>
+    .auth-wrap{ max-width:420px; margin:2rem auto; padding:0 1rem; }
+    .auth-card{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1.3rem 1.2rem; text-align:center; }
+    .auth-title{ font-weight:800; font-size:1.2rem; color:var(--blue); text-align:center; margin:0 0 .3rem; }
+    .auth-sub{ text-align:center; opacity:.7; font-size:.85rem; margin:0 0 1rem; }
+    .auth-error{ background:#fdeaea; color:#a3312f; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
+    .auth-ok{ background:#e4f8ea; color:#1c7a3a; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <main class="page settings-page auth-wrap">
+      <div class="auth-card">
+        <h1 class="auth-title">Verify Email</h1>
+        <p class="auth-sub" id="verifySub">Confirming your email…</p>
+        <div id="verifyMsg"></div>
+        <p class="auth-sub"><a href="auth.html">Back to sign in</a></p>
+      </div>
+    </main>
+
+    <footer id="appTabbar" class="home-nav">
+      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span></a>
+      <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span></a>
+      <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span></a>
+      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span></a>
+      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span></a>
+    </footer>
+    <div id="bottomSpacer" aria-hidden="true"></div>
+  </div>
+
+  <script>
+    (function(){
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(!bar || !spacer) return;
+      function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
+      if (document.readyState === 'complete') setSpacer(); else window.addEventListener('load', setSpacer);
+      window.addEventListener('resize', setSpacer);
+    })();
+  </script>
+</body>
+</html>

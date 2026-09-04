@@ -224,20 +224,47 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // ------------------------------ Account ------------------------------
   const accountSub = document.getElementById('accountSub');
   const btnAccountAction = document.getElementById('btnAccountAction');
+  const verifyEmailBanner = document.getElementById('verifyEmailBanner');
+  const verifyEmailSub = document.getElementById('verifyEmailSub');
+  const btnResendVerify = document.getElementById('btnResendVerify');
   function renderAccount() {
     if (Api.isSignedIn()) {
       const u = Api.getCurrentUser();
-      accountSub.textContent = `Signed in as ${u?.displayName || u?.email || ''}`;
+      accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
       btnAccountAction.textContent = 'Sign Out';
+      if (verifyEmailBanner) {
+        const needsVerify = !!u?.email && !u?.emailVerified;
+        verifyEmailBanner.hidden = !needsVerify;
+        if (needsVerify) verifyEmailSub.textContent = `Confirm ${u.email} to secure your account.`;
+      }
     } else {
       accountSub.textContent = 'Not signed in';
       btnAccountAction.textContent = 'Sign In';
+      if (verifyEmailBanner) verifyEmailBanner.hidden = true;
     }
   }
   renderAccount();
+  // Refresh from the server once so a link verified elsewhere (another tab,
+  // another device) is reflected here without waiting for the next sign-in.
+  if (Api.isSignedIn()) Api.fetchMe().then(renderAccount).catch(() => {});
+
   btnAccountAction?.addEventListener('click', () => {
     if (Api.isSignedIn()) { Api.signOut(); renderAccount(); }
     else location.href = 'auth.html?next=settings.html';
+  });
+  btnResendVerify?.addEventListener('click', async () => {
+    btnResendVerify.disabled = true;
+    const label = btnResendVerify.textContent;
+    btnResendVerify.textContent = 'Sending…';
+    try {
+      await Api.resendVerification();
+      alert('Verification email sent — check your inbox.');
+    } catch (err) {
+      alert(err.message || 'Could not resend verification email.');
+    } finally {
+      btnResendVerify.disabled = false;
+      btnResendVerify.textContent = label;
+    }
   });
 
   const apiBaseInput = document.getElementById('apiBaseInput');

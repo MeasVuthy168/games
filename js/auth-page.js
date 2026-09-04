@@ -19,6 +19,53 @@ document.addEventListener('DOMContentLoaded', () => {
   const formForgot = document.getElementById('formForgot');
   const authMsg = document.getElementById('authMsg');
 
+  // Sign-up identity: Email (default, verified async via emailed link) or
+  // Phone (verified up front via a Twilio Verify OTP before the account
+  // is even created).
+  const suModeEmail = document.getElementById('suModeEmail');
+  const suModePhone = document.getElementById('suModePhone');
+  const suEmailGroup = document.getElementById('suEmailGroup');
+  const suPhoneGroup = document.getElementById('suPhoneGroup');
+  const suEmail = document.getElementById('suEmail');
+  const suPhone = document.getElementById('suPhone');
+  const suCodeField = document.getElementById('suCodeField');
+  const suCode = document.getElementById('suCode');
+  const btnSendCode = document.getElementById('btnSendCode');
+  let signupMode = 'email';
+
+  function setSignupMode(mode) {
+    signupMode = mode;
+    suModeEmail.classList.toggle('active', mode === 'email');
+    suModePhone.classList.toggle('active', mode === 'phone');
+    suEmailGroup.hidden = mode !== 'email';
+    suPhoneGroup.hidden = mode !== 'phone';
+    suEmail.required = mode === 'email';
+    suPhone.required = mode === 'phone';
+  }
+  setSignupMode('email');
+  suModeEmail.addEventListener('click', () => setSignupMode('email'));
+  suModePhone.addEventListener('click', () => setSignupMode('phone'));
+
+  btnSendCode.addEventListener('click', async () => {
+    showMsg('');
+    const phone = suPhone.value.trim();
+    if (!phone) { showMsg('Enter a phone number first (e.g. +85512345678).'); return; }
+    btnSendCode.disabled = true;
+    const label = btnSendCode.textContent;
+    btnSendCode.textContent = 'Sending…';
+    try {
+      await Api.sendPhoneCode(phone);
+      suCodeField.hidden = false;
+      suCode.required = true;
+      showMsg('Code sent — check your SMS.', 'ok');
+    } catch (err) {
+      showMsg(err.message || 'Could not send code');
+    } finally {
+      btnSendCode.disabled = false;
+      btnSendCode.textContent = label;
+    }
+  });
+
   function showMsg(text, kind) {
     authMsg.innerHTML = '';
     if (!text) return;
@@ -47,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showMsg('');
     try {
       await Api.signIn({
-        email: document.getElementById('siEmail').value,
+        identifier: document.getElementById('siIdentifier').value.trim(),
         password: document.getElementById('siPassword').value,
       });
       location.href = nextUrl();
@@ -62,7 +109,9 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await Api.signUp({
         displayName: document.getElementById('suName').value,
-        email: document.getElementById('suEmail').value,
+        email: signupMode === 'email' ? suEmail.value : undefined,
+        phone: signupMode === 'phone' ? suPhone.value.trim() : undefined,
+        code: signupMode === 'phone' ? suCode.value.trim() : undefined,
         password: document.getElementById('suPassword').value,
       });
       location.href = nextUrl();

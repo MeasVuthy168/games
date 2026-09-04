@@ -35,6 +35,16 @@
     .auth-ok{ background:#e4f8ea; color:#1c7a3a; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
     .auth-link{ text-align:center; font-size:.85rem; }
     .auth-link a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
+    .id-tabs{ display:flex; gap:.4rem; }
+    .id-tab{
+      flex:1; padding:.4rem; border-radius:.6rem; border:2px solid #e6ecf7; background:#f7f9fd;
+      font-weight:700; font-size:.85rem; cursor:pointer; color:var(--blue);
+    }
+    .id-tab.active{ border-color:var(--blue); background:#eef4ff; }
+    .id-group[hidden]{ display:none; }
+    .field-row{ display:flex; gap:.5rem; align-items:flex-end; }
+    .field-row .field{ flex:1; }
+    .field-row button{ white-space:nowrap; }
   </style>
 </head>
 <body>
@@ -52,7 +62,7 @@
         <div id="authMsg"></div>
 
         <form class="auth-form" id="formSignIn" onsubmit="return false">
-          <label class="field"><span>Email</span><input type="email" id="siEmail" required autocomplete="email" /></label>
+          <label class="field"><span>Email or phone number</span><input type="text" id="siIdentifier" required autocomplete="username" /></label>
           <label class="field"><span>Password</span><input type="password" id="siPassword" required autocomplete="current-password" /></label>
           <button class="primary" type="submit">Sign In</button>
           <div class="auth-link"><a id="linkForgot">Forgot password?</a></div>
@@ -60,7 +70,24 @@
 
         <form class="auth-form" id="formSignUp" hidden onsubmit="return false">
           <label class="field"><span>Display name</span><input type="text" id="suName" maxlength="40" required autocomplete="nickname" /></label>
-          <label class="field"><span>Email</span><input type="email" id="suEmail" required autocomplete="email" /></label>
+
+          <div class="id-tabs">
+            <button class="id-tab active" id="suModeEmail" type="button">Email</button>
+            <button class="id-tab" id="suModePhone" type="button">Phone</button>
+          </div>
+
+          <div class="id-group" id="suEmailGroup">
+            <label class="field"><span>Email</span><input type="email" id="suEmail" autocomplete="email" /></label>
+          </div>
+
+          <div class="id-group" id="suPhoneGroup" hidden>
+            <div class="field-row">
+              <label class="field"><span>Phone number</span><input type="tel" id="suPhone" placeholder="+85512345678" autocomplete="tel" /></label>
+              <button class="secondary" id="btnSendCode" type="button">Send code</button>
+            </div>
+            <label class="field" id="suCodeField" hidden><span>Verification code</span><input type="text" id="suCode" inputmode="numeric" autocomplete="one-time-code" /></label>
+          </div>
+
           <label class="field"><span>Password (min 8 characters)</span><input type="password" id="suPassword" minlength="8" required autocomplete="new-password" /></label>
           <button class="primary" type="submit">Create Account</button>
         </form>

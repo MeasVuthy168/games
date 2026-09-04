@@ -4,6 +4,7 @@
 // the thread every few seconds for new rows, which is a real, working
 // (if not push-instant) chat.
 import * as Api from './api.js';
+import { showToast } from './toast.js';
 
 const POLL_MS = 4000;
 
@@ -138,7 +139,7 @@ async function renderThread(friendId) {
       await Api.sendMessage(friendId, body);
       await poll();
     } catch (err) {
-      alert(err.message || 'Could not send message');
+      showToast(err.message || 'Could not send message', 'error');
     } finally {
       input.disabled = false;
       input.focus();

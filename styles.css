@@ -23,6 +23,7 @@
   --ink:#1b1f23;
   --panel:#ffffff;
   --shadow: 0 8px 24px rgba(0,0,0,.12);
+  --bg:#f5f6f7;
 
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
@@ -45,8 +46,31 @@ html, body{ font-family: var(--ui-font); }
 body{
   margin:0;
   color:var(--ink);
-  background:#f5f6f7;
+  background:var(--bg);
   overscroll-behavior-y: none;
+}
+
+/* ===== Dark theme =====
+   Settings > Theme picks 'auto' | 'light' | 'dark', persisted to
+   localStorage('kc_theme') and applied as data-theme on <html> by
+   js/theme-init.js (every page, before first paint) and js/settings.js
+   (the moment the radio changes). 'auto' leaves data-theme unset and
+   follows the OS via the media query below. */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14171c;
+    --panel:#20242d;
+    --ink:#e9edf4;
+    --blue:#4d8dff;
+    --shadow: 0 8px 24px rgba(0,0,0,.45);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14171c;
+  --panel:#20242d;
+  --ink:#e9edf4;
+  --blue:#4d8dff;
+  --shadow: 0 8px 24px rgba(0,0,0,.45);
 }
 
 /* ===== App shell ===== */
@@ -749,3 +773,29 @@ details.card.card-full > .card-body{
 .online-chat-form button{
   padding:.45rem .9rem; border-radius:1rem; border:none; background:var(--blue); color:#fff; font-weight:700; cursor:pointer;
 }
+
+/* ===== Toasts (js/toast.js) ===== */
+.toast-container{
+  position:fixed; left:50%; bottom:calc(env(safe-area-inset-bottom) + 76px);
+  transform:translateX(-50%); z-index:2000;
+  display:flex; flex-direction:column; align-items:center; gap:.5rem;
+  width:100%; padding:0 1rem; pointer-events:none;
+}
+.toast{
+  max-width:420px; width:max-content; margin:0 auto;
+  background:var(--ink); color:var(--panel); font-weight:700; font-size:.85rem;
+  padding:.6rem 1rem; border-radius:.7rem; box-shadow:var(--shadow);
+  opacity:0; transform:translateY(12px);
+  transition:opacity .25s ease, transform .25s ease;
+}
+.toast.show{ opacity:1; transform:translateY(0); }
+.toast-error{ background:#a3312f; color:#fff; }
+.toast-success{ background:#1c7a3a; color:#fff; }
+
+/* ===== Danger actions (e.g. Delete Account) ===== */
+.card-full.danger .card-title{ color:#a3312f; }
+.btn-danger{
+  background:#fdeaea; color:#a3312f; border:none; border-radius:999px;
+  padding:.4rem .9rem; font-weight:800; font-size:.85rem; cursor:pointer;
+}
+.btn-danger:active{ transform:scale(.95); }

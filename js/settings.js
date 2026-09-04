@@ -6,6 +6,7 @@ import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
 import { notificationsEnabled, setNotificationsEnabled, refreshNotifBadge } from './notif-badge.js';
+import { showToast } from './toast.js';
 
 recordLoginToday();
 
@@ -46,15 +47,6 @@ function setTheme(v){
   else root.removeAttribute('data-theme');
 }
 
-function toneTest(){
-  const ctx = new (window.AudioContext||window.webkitAudioContext)();
-  const t0 = ctx.currentTime;
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type='square'; o.frequency.value=700; g.gain.value=0.07;
-  o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0+0.12);
-}
-
 function bandKey(n) {
   const band = levelBand(n).toLowerCase(); // 'easy'|'medium'|'hard'|'expert'
   return `settings.band.${band}`;
@@ -67,12 +59,20 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let s = loadSettings();
   setLanguage(s.language);
 
-  // Profile bar (real local profile — editing happens on profile.html)
+  // Profile bar preview — editing happens on profile.html. When signed in,
+  // the real account's name/photo is the source of truth (kept in sync by
+  // profile.js); signed out, this is the purely local guest profile.
   const profName = document.getElementById('profName');
   const profAvatar = document.getElementById('profAvatar');
-  const profile = getProfile();
-  if (profName) profName.textContent = profile.name;
-  applyAvatarToElement(profAvatar, profile.avatar);
+  if (Api.isSignedIn()) {
+    const u = Api.getCurrentUser();
+    if (profName) profName.textContent = u?.displayName || 'Player';
+    applyAvatarToElement(profAvatar, u?.avatarUrl ? { type: 'image', value: u.avatarUrl } : { type: 'emoji', value: u?.avatarEmoji || '🐯' });
+  } else {
+    const profile = getProfile();
+    if (profName) profName.textContent = profile.name;
+    applyAvatarToElement(profAvatar, profile.avatar);
+  }
 
   // Elements
   const soundToggle = document.getElementById('soundToggle');
@@ -82,7 +82,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const incInput = document.getElementById('incInput');
   const btnSaveTimer = document.getElementById('btnSaveTimer');
   const btnResetTimer = document.getElementById('btnResetTimer');
-  const btnTestBeep = document.getElementById('btnTestBeep');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
   const languageRadios = Array.from(document.querySelectorAll('input[name="language"]'));
   const aiDebugToggle = document.getElementById('aiDebugToggle');
@@ -133,7 +132,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
   instantMoveToggle?.addEventListener('change', ()=>{ s.instantMove=!!instantMoveToggle.checked; saveSettings(s); });
-  btnTestBeep.addEventListener('click', ()=>{ if(soundToggle.checked) toneTest(); });
 
   aiLevelRange?.addEventListener('input', ()=>{
     s.aiLevel = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, parseInt(aiLevelRange.value, 10) || DEFAULT_LEVEL));
@@ -167,7 +165,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const m = Math.max(1, Math.min(180, parseInt(minutesInput.value||'10',10)));
     const inc = Math.max(0, Math.min(60, parseInt(incInput.value||'5',10)));
     s.minutes=m; s.increment=inc; saveSettings(s);
-    alert('Saved. New games will use these timer settings.');
+    showToast('Saved. New games will use these timer settings.', 'success');
   });
 
   btnResetTimer.addEventListener('click', ()=>{
@@ -221,59 +219,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(e.target.classList.contains('modal-backdrop')) setModal(false);
   });
 
-  // ------------------------------ Account ------------------------------
-  const accountSub = document.getElementById('accountSub');
-  const btnAccountAction = document.getElementById('btnAccountAction');
-  const verifyEmailBanner = document.getElementById('verifyEmailBanner');
-  const verifyEmailSub = document.getElementById('verifyEmailSub');
-  const btnResendVerify = document.getElementById('btnResendVerify');
-  function renderAccount() {
-    if (Api.isSignedIn()) {
-      const u = Api.getCurrentUser();
-      accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
-      btnAccountAction.textContent = 'Sign Out';
-      if (verifyEmailBanner) {
-        const needsVerify = !!u?.email && !u?.emailVerified;
-        verifyEmailBanner.hidden = !needsVerify;
-        if (needsVerify) verifyEmailSub.textContent = `Confirm ${u.email} to secure your account.`;
-      }
-    } else {
-      accountSub.textContent = 'Not signed in';
-      btnAccountAction.textContent = 'Sign In';
-      if (verifyEmailBanner) verifyEmailBanner.hidden = true;
-    }
-  }
-  renderAccount();
-  // Refresh from the server once so a link verified elsewhere (another tab,
-  // another device) is reflected here without waiting for the next sign-in.
-  if (Api.isSignedIn()) Api.fetchMe().then(renderAccount).catch(() => {});
-
-  btnAccountAction?.addEventListener('click', () => {
-    if (Api.isSignedIn()) { Api.signOut(); renderAccount(); }
-    else location.href = 'auth.html?next=settings.html';
-  });
-  btnResendVerify?.addEventListener('click', async () => {
-    btnResendVerify.disabled = true;
-    const label = btnResendVerify.textContent;
-    btnResendVerify.textContent = 'Sending…';
-    try {
-      await Api.resendVerification();
-      alert('Verification email sent — check your inbox.');
-    } catch (err) {
-      alert(err.message || 'Could not resend verification email.');
-    } finally {
-      btnResendVerify.disabled = false;
-      btnResendVerify.textContent = label;
-    }
-  });
-
-  const apiBaseInput = document.getElementById('apiBaseInput');
-  if (apiBaseInput) apiBaseInput.value = Api.getApiBase();
-  document.getElementById('btnSaveApiBase')?.addEventListener('click', () => {
-    Api.setApiBase(apiBaseInput.value);
-    apiBaseInput.value = Api.getApiBase();
-    alert('Server address saved.');
-  });
+  // Account, email verification, and the advanced server address now all
+  // live on profile.html (see js/profile.js) — settings.html only shows a
+  // preview card linking there.
 
   const notifToggle = document.getElementById('notifToggle');
   if (notifToggle) notifToggle.checked = notificationsEnabled();

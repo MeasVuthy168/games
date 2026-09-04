@@ -127,8 +127,8 @@ export async function fetchMe() {
   return data.user;
 }
 
-export async function updateProfile({ displayName, avatarEmoji }) {
-  const data = await request('/api/auth/me', { method: 'PATCH', body: { displayName, avatarEmoji } });
+export async function updateProfile({ displayName, avatarEmoji, avatarUrl }) {
+  const data = await request('/api/auth/me', { method: 'PATCH', body: { displayName, avatarEmoji, avatarUrl } });
   const cur = readAuth();
   if (cur) writeAuth({ ...cur, user: data.user });
   return data.user;
@@ -136,6 +136,11 @@ export async function updateProfile({ displayName, avatarEmoji }) {
 
 export async function logoutAllDevices() {
   await request('/api/auth/logout-all', { method: 'POST' });
+  signOut();
+}
+
+export async function deleteAccount(password) {
+  await request('/api/auth/me', { method: 'DELETE', body: { password } });
   signOut();
 }
 

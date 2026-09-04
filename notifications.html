@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <script src="js/theme-init.js"></script>
   <title>Notifications | Khmer Chess</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
@@ -37,7 +38,11 @@
 </head>
 <body>
   <div class="shell">
-    <!-- (top bar removed) -->
+    <header class="topbar">
+      <h1>ការជូនដំណឹង (Notifications)</h1>
+      <div class="spacer"></div>
+      <a href="settings.html" class="icon-btn" title="Settings">⚙</a>
+    </header>
 
     <main class="page">
       <div class="notif-actions" id="notifActions" hidden><button id="btnReadAll">Mark all read</button></div>

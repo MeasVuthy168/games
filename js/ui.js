@@ -2,6 +2,9 @@
 
 import { Game, SIZE, COLORS, PT } from './game.js';
 import * as AI from './ai.js';
+import { DEFAULT_LEVEL } from './ai-engine.js';
+import * as History from './history.js';
+import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 
@@ -14,8 +17,11 @@ const DEFAULTS = {
   sound: true,
   hints: true,
   aiColor: 'b', // fallback: human plays White, AI plays Black, until the player picks a role
-  aiLevel: 'Medium',
-  aiDebug: false
+  aiLevel: DEFAULT_LEVEL,
+  aiDebug: false,
+  instantMove: false,
+  pieceTheme: 0,
+  boardTheme: 0
 };
 
 /* ---------------- storage ---------------- */
@@ -48,6 +54,10 @@ function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+    // Normalize aiLevel to an integer 1-10 — guards against stale settings
+    // saved before the Easy/Medium/Hard/Expert → 1-10 refactor.
+    const lvl = parseInt(merged.aiLevel, 10);
+    merged.aiLevel = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? lvl : DEFAULT_LEVEL;
     if (isFriendMode) {
       // Two humans, pass-and-play on the same device — no AI.
       merged.aiEnabled = false;
@@ -216,6 +226,19 @@ export function initUI() {
   const settings = loadSettings();
   beeper.enabled = !!settings.sound;
 
+  // When a real game actually concludes (checkmate/stalemate), this feeds
+  // js/history.js's `duration` field. Reset on every fresh game (Reset
+  // button); a resumed (reloaded) game just restarts the clock from now.
+  let gameStartedAt = Date.now();
+
+  function applyBoardTheme() {
+    const idx = clampThemeIndex(settings.boardTheme, boardThemes);
+    const theme = boardThemes[idx];
+    document.documentElement.style.setProperty('--board-light-img', `url("./${theme.light}")`);
+    document.documentElement.style.setProperty('--board-dark-img', `url("./${theme.dark}")`);
+  }
+  applyBoardTheme();
+
   window.AIDebug?.log('[UI] init — Makruk AI (local engine)');
 
   let AILock = false;
@@ -284,10 +307,9 @@ export function initUI() {
   }
 
   function setPieceBG(span, p){
-    const map = { K:'king', Q:'queen', M:'queen', B:'bishop', S:'bishop', R:'rook', N:'knight', P:'pawn' };
-    const key  = map[p.t] || 'pawn';
-    const name = `${p.c === 'w' ? 'w' : 'b'}-${key}.png`;
-    span.style.backgroundImage = `url(./assets/pieces/${name})`;
+    const idx = clampThemeIndex(settings.pieceTheme, pieceThemes);
+    const theme = pieceThemes[idx];
+    span.style.backgroundImage = `url(./${pieceImageUrl(theme, p.c, p.t)})`;
   }
 
   // Who-plays suffix so the current player's role is always explicit,
@@ -330,6 +352,51 @@ export function initUI() {
     }
   }
 
+  // One js/history.js entry per real completed game — called only from the
+  // checkmate/stalemate branches below, never on Reset/Undo.
+  function recordGameEnd(kind, matedColor) {
+    const mode = settings.aiEnabled ? 'ai' : 'friend';
+    let result;
+    if (kind === 'stalemate') {
+      result = 'draw';
+    } else {
+      const winnerColor = matedColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+      if (settings.aiEnabled) {
+        result = winnerColor !== settings.aiColor ? 'win' : 'loss';
+      } else {
+        // Friend mode is two humans passing one device — there's no single
+        // "the player" to score against, so this is recorded from White's
+        // (bottom seat's) perspective as a stand-in.
+        result = winnerColor === COLORS.WHITE ? 'win' : 'loss';
+      }
+    }
+    History.recordGame({
+      date: new Date().toISOString(),
+      opponent: settings.aiEnabled ? `AI Level ${settings.aiLevel}` : 'Local Friend',
+      mode,
+      result,
+      moves: game.history.length,
+      duration: Math.round((Date.now() - gameStartedAt) / 1000),
+    });
+  }
+
+  // Shared tail for every place a move can end the game: records history
+  // once, then shows the existing win/lose/draw flash. Returns true if the
+  // game ended (so callers know not to also call thinkAndPlay()).
+  function concludeIfOver(status) {
+    if (status?.state === 'checkmate') {
+      recordGameEnd('checkmate', status.toMove);
+      announceCheckmate(status.toMove);
+      return true;
+    }
+    if (status?.state === 'stalemate') {
+      recordGameEnd('stalemate', null);
+      showEndFlash({ type: 'draw' });
+      return true;
+    }
+    return false;
+  }
+
   /* ====== render with animations ====== */
   function render() {
     for (const c of cells) {
@@ -345,9 +412,10 @@ export function initUI() {
         if (!p) continue;
         const cell = cells[y * SIZE + x];
 
-        // compute delta for small animation
-        let dx = '0px', dy = '0px', klass = 'anim-slide';
-        if (last && last.to.x === x && last.to.y === y){
+        // compute delta for small animation (skipped entirely when
+        // settings.instantMove is on — moves just appear in place)
+        let dx = '0px', dy = '0px', klass = '';
+        if (last && last.to.x === x && last.to.y === y && !settings.instantMove){
           dx = (last.from.x - last.to.x) * 12 + 'px';
           dy = (last.from.y - last.to.y) * 12 + 'px';
           const isKnight = (p.t === PT.KNIGHT);
@@ -355,7 +423,7 @@ export function initUI() {
         }
 
         const s = document.createElement('div');
-        s.className = `piece ${p.c === 'w' ? 'white' : 'black'} ${klass}`;
+        s.className = `piece ${p.c === 'w' ? 'white' : 'black'} ${klass}`.trim();
         s.style.setProperty('--dx', dx);
         s.style.setProperty('--dy', dy);
         setPieceBG(s, p);
@@ -436,11 +504,7 @@ export function initUI() {
         clocks.switchedByMove(prev2);
         render(); saveGameState(game, clocks);
 
-        if (res2.status?.state === 'checkmate'){
-          announceCheckmate(res2.status.toMove);
-        } else if (res2.status?.state === 'stalemate'){
-          showEndFlash({ type:'draw' });
-        }
+        concludeIfOver(res2.status);
         return;
       }
 
@@ -452,11 +516,7 @@ export function initUI() {
       clocks.switchedByMove(prevTurn);
       render(); saveGameState(game, clocks);
 
-      if (res.status?.state === 'checkmate'){
-        announceCheckmate(res.status.toMove);
-      } else if (res.status?.state === 'stalemate'){
-        showEndFlash({ type:'draw' });
-      }
+      concludeIfOver(res.status);
 
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
@@ -548,11 +608,7 @@ export function initUI() {
       selected = null; legal = []; clearHints();
       render(); saveGameState(game, clocks);
 
-      if (res.status?.state === 'checkmate') {
-        announceCheckmate(res.status.toMove);
-      } else if (res.status?.state === 'stalemate') {
-        showEndFlash({ type:'draw' });
-      } else {
+      if (!concludeIfOver(res.status)) {
         thinkAndPlay();
       }
     }
@@ -634,9 +690,7 @@ export function initUI() {
     clocks.switchedByMove(prev);
     render(); saveGameState(game, clocks);
 
-    if (res.status?.state === 'checkmate'){ announceCheckmate(res.status.toMove); }
-    else if (res.status?.state === 'stalemate'){ showEndFlash({type:'draw'}); }
-    else { thinkAndPlay(); }
+    if (!concludeIfOver(res.status)) { thinkAndPlay(); }
   }
 
   function onCellPointerDown(e){
@@ -678,6 +732,7 @@ export function initUI() {
   btnReset?.addEventListener('click', () => {
     aiGen++; AI.resetAI?.(); setBoardBusy(false);
     game.reset();
+    gameStartedAt = Date.now();
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();

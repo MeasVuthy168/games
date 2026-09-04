@@ -708,3 +708,12 @@ details.card.card-full > .card-body{
   cursor:pointer; transition:transform .12s ease, background .15s ease;
 }
 .pill:active{ transform:scale(.95); background:#e0ebff; }
+
+/* Avatar rendering modes — layers on top of a page-local .avatar base
+   (size/border/shadow). Emoji avatars need no extra art assets; uploaded
+   photos are shown as a cover-fit background image. */
+.avatar.avatar-emoji{
+  display:flex; align-items:center; justify-content:center;
+  font-size:2.1rem; line-height:1; background:#eef4ff;
+}
+.avatar.avatar-image{ background-size:cover; background-position:center; }

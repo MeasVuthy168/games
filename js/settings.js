@@ -1,7 +1,16 @@
 // Settings controller
+import { LEVELS, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-engine.js';
+import { pieceThemes, boardThemes } from './themes.js';
+import { getProfile, applyAvatarToElement } from './profile-data.js';
+import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
+
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
-const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true, aiLevel: 'Medium', aiDebug: false };
+const DEFAULTS = {
+  minutes: 10, increment: 5, sound: true, hints: true,
+  aiLevel: DEFAULT_LEVEL, aiDebug: false,
+  language: 'en', pieceTheme: 0, boardTheme: 0, instantMove: false
+};
 
 // About App Information
 const APP_VERSION  = '1.0.3';
@@ -13,7 +22,10 @@ const APP_EMAIL    = 'measvuthy21@gmail.com';
 function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
-    return s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+    const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
+    const lvl = parseInt(merged.aiLevel, 10);
+    merged.aiLevel = (Number.isInteger(lvl) && lvl >= MIN_LEVEL && lvl <= MAX_LEVEL) ? lvl : DEFAULT_LEVEL;
+    return merged;
   } catch {
     return { ...DEFAULTS };
   }
@@ -38,53 +50,113 @@ function toneTest(){
   o.connect(g).connect(ctx.destination); o.start(t0); o.stop(t0+0.12);
 }
 
+function bandKey(n) {
+  const band = levelBand(n).toLowerCase(); // 'easy'|'medium'|'hard'|'expert'
+  return `settings.band.${band}`;
+}
+
 /* ------------------------------ DOM Ready ------------------------------ */
 document.addEventListener('DOMContentLoaded', ()=>{
 
-  // Profile info
-  const profName = document.getElementById('profName');
-  const profImg  = document.getElementById('profImg');
+  // Load settings + language first so applyTranslations() below is correct.
+  let s = loadSettings();
+  setLanguage(s.language);
 
-  const storedName = localStorage.getItem('kc_profile_name');
-  const storedImg  = localStorage.getItem('kc_profile_image'); // optional image path
-  
-  profName.textContent = storedName || 'Guest';
-  if (storedImg) profImg.src = storedImg;
-  profImg.classList.add('avatar'); // make it circular
-  
+  // Profile bar (real local profile — editing happens on profile.html)
+  const profName = document.getElementById('profName');
+  const profAvatar = document.getElementById('profAvatar');
+  const profile = getProfile();
+  if (profName) profName.textContent = profile.name;
+  applyAvatarToElement(profAvatar, profile.avatar);
+
   // Elements
   const soundToggle = document.getElementById('soundToggle');
   const hintsToggle = document.getElementById('hintsToggle');
+  const instantMoveToggle = document.getElementById('instantMoveToggle');
   const minutesInput = document.getElementById('minutesInput');
   const incInput = document.getElementById('incInput');
   const btnSaveTimer = document.getElementById('btnSaveTimer');
   const btnResetTimer = document.getElementById('btnResetTimer');
   const btnTestBeep = document.getElementById('btnTestBeep');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
-  const aiLevelRadios = Array.from(document.querySelectorAll('input[name="aiLevel"]'));
+  const languageRadios = Array.from(document.querySelectorAll('input[name="language"]'));
   const aiDebugToggle = document.getElementById('aiDebugToggle');
-
-  // Load settings
-  let s = loadSettings();
+  const aiLevelRange = document.getElementById('aiLevelRange');
+  const aiLevelValue = document.getElementById('aiLevelValue');
+  const aiLevelBand = document.getElementById('aiLevelBand');
+  const pieceThemeName = document.getElementById('pieceThemeName');
+  const pieceThemePrev = document.getElementById('pieceThemePrev');
+  const pieceThemeNext = document.getElementById('pieceThemeNext');
+  const boardThemeName = document.getElementById('boardThemeName');
+  const boardThemePrev = document.getElementById('boardThemePrev');
+  const boardThemeNext = document.getElementById('boardThemeNext');
 
   // Init UI states
   soundToggle.checked = !!s.sound;
   hintsToggle.checked = s.hints !== false;
+  if (instantMoveToggle) instantMoveToggle.checked = !!s.instantMove;
   minutesInput.value  = s.minutes;
   incInput.value      = s.increment;
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
-  (aiLevelRadios.find(r=>r.value===s.aiLevel)||aiLevelRadios[1]).checked = true;
+  (languageRadios.find(r=>r.value===s.language)||languageRadios[0]).checked = true;
   if (aiDebugToggle) aiDebugToggle.checked = !!s.aiDebug;
+
+  function renderAILevel(){
+    if (!aiLevelRange) return;
+    aiLevelRange.value = s.aiLevel;
+    if (aiLevelValue) aiLevelValue.textContent = String(s.aiLevel);
+    if (aiLevelBand) {
+      aiLevelBand.setAttribute('data-i18n', bandKey(s.aiLevel));
+      aiLevelBand.textContent = t(bandKey(s.aiLevel));
+    }
+  }
+  renderAILevel();
+
+  function renderThemeSteppers(){
+    if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
+    if (boardThemeName) boardThemeName.textContent = boardThemes[s.boardTheme]?.name || boardThemes[0].name;
+    // Only one real theme ships today — Prev/Next are wired but a no-op
+    // until more are registered in js/themes.js.
+    if (pieceThemePrev) pieceThemePrev.disabled = pieceThemes.length <= 1;
+    if (pieceThemeNext) pieceThemeNext.disabled = pieceThemes.length <= 1;
+    if (boardThemePrev) boardThemePrev.disabled = boardThemes.length <= 1;
+    if (boardThemeNext) boardThemeNext.disabled = boardThemes.length <= 1;
+  }
+  renderThemeSteppers();
 
   // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
+  instantMoveToggle?.addEventListener('change', ()=>{ s.instantMove=!!instantMoveToggle.checked; saveSettings(s); });
   btnTestBeep.addEventListener('click', ()=>{ if(soundToggle.checked) toneTest(); });
 
-  aiLevelRadios.forEach(r =>
-    r.addEventListener('change', ()=>{ if(r.checked){ s.aiLevel = r.value; saveSettings(s); } })
-  );
+  aiLevelRange?.addEventListener('input', ()=>{
+    s.aiLevel = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, parseInt(aiLevelRange.value, 10) || DEFAULT_LEVEL));
+    renderAILevel();
+    saveSettings(s);
+  });
   aiDebugToggle?.addEventListener('change', ()=>{ s.aiDebug = !!aiDebugToggle.checked; saveSettings(s); });
+
+  languageRadios.forEach(r =>
+    r.addEventListener('change', ()=>{
+      if(!r.checked) return;
+      s.language = r.value; saveSettings(s);
+      setLanguage(s.language);
+      applyTranslations();
+      renderAILevel(); // band label text depends on language too
+    })
+  );
+
+  function stepTheme(key, themes, delta){
+    if (themes.length <= 1) return; // nothing to step to yet
+    s[key] = (s[key] + delta + themes.length) % themes.length;
+    saveSettings(s);
+    renderThemeSteppers();
+  }
+  pieceThemePrev?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, -1));
+  pieceThemeNext?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, 1));
+  boardThemePrev?.addEventListener('click', ()=> stepTheme('boardTheme', boardThemes, -1));
+  boardThemeNext?.addEventListener('click', ()=> stepTheme('boardTheme', boardThemes, 1));
 
   btnSaveTimer.addEventListener('click', ()=>{
     const m = Math.max(1, Math.min(180, parseInt(minutesInput.value||'10',10)));
@@ -98,14 +170,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
     incInput.value = DEFAULTS.increment;
   });
 
-  themeRadios.forEach(r=> 
+  themeRadios.forEach(r=>
     r.addEventListener('change', ()=>{ if(r.checked) setTheme(r.value); })
   );
 
   /* ------------------------------ About Modal ------------------------------ */
   const aboutModal = document.getElementById('aboutModal');
-  const setModal = (show) => { 
-    show ? aboutModal.classList.add('show') : aboutModal.classList.remove('show'); 
+  const setModal = (show) => {
+    show ? aboutModal.classList.add('show') : aboutModal.classList.remove('show');
   };
 
   const btnAbout = document.getElementById('btnAbout');
@@ -124,4 +196,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   aboutModal.addEventListener('click', (e)=>{
     if(e.target.classList.contains('modal-backdrop')) setModal(false);
   });
+
+  applyTranslations();
 });

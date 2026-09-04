@@ -6,7 +6,7 @@
 //
 // Search: iterative-deepening negamax with alpha-beta pruning, MVV-LVA +
 // killer-move ordering, a position transposition table, and an optional
-// quiescence search on captures (Expert only). Iterative deepening enforces
+// quiescence search on captures (top difficulty levels only). Iterative deepening enforces
 // a hard wall-clock budget — if a depth cannot finish in time, its partial
 // results are discarded and the previous depth's best move is returned, so
 // the caller never blocks indefinitely.
@@ -14,20 +14,47 @@
 import { PT } from './game.js';
 
 // ---------------------------------------------------------------------
-// Difficulty levels
+// Difficulty levels — numeric 1 (weakest/fastest) .. 10 (strongest).
 // ---------------------------------------------------------------------
 // maxDepth   — ceiling on iterative-deepening depth (plies)
-// timeMs     — hard wall-clock budget per move
+// timeMs     — hard wall-clock budget per move (level 10 == old Expert's
+//              budget exactly, so the UI never freezes any longer than it
+//              already did)
 // useTT      — enable the transposition table
 // useKillers — enable killer-move ordering
 // quiescence — extend leaf search across captures (and check evasions)
+// randomize  — pick randomly among near-best root moves (old "Easy" quirk),
+//              kept for the two weakest levels so they aren't perfectly
+//              deterministic
+//
+// This is an interpolation of the previous 4 named tiers (Easy/Medium/
+// Hard/Expert ≈ levels 2/4/6/10 below) into 10 steps — same shape, finer
+// grain.
 export const LEVELS = {
-  Easy:   { maxDepth: 2,  timeMs: 300,  useTT: false, useKillers: false, quiescence: false },
-  Medium: { maxDepth: 4,  timeMs: 800,  useTT: false, useKillers: false, quiescence: false },
-  Hard:   { maxDepth: 6,  timeMs: 1500, useTT: true,  useKillers: true,  quiescence: false },
-  Expert: { maxDepth: 10, timeMs: 3000, useTT: true,  useKillers: true,  quiescence: true  },
+  1:  { maxDepth: 1,  timeMs: 150,  useTT: false, useKillers: false, quiescence: false, randomize: true },
+  2:  { maxDepth: 2,  timeMs: 300,  useTT: false, useKillers: false, quiescence: false, randomize: true },
+  3:  { maxDepth: 3,  timeMs: 500,  useTT: false, useKillers: false, quiescence: false },
+  4:  { maxDepth: 4,  timeMs: 800,  useTT: false, useKillers: false, quiescence: false },
+  5:  { maxDepth: 5,  timeMs: 1100, useTT: true,  useKillers: true,  quiescence: false },
+  6:  { maxDepth: 6,  timeMs: 1500, useTT: true,  useKillers: true,  quiescence: false },
+  7:  { maxDepth: 7,  timeMs: 1900, useTT: true,  useKillers: true,  quiescence: false },
+  8:  { maxDepth: 8,  timeMs: 2300, useTT: true,  useKillers: true,  quiescence: true  },
+  9:  { maxDepth: 9,  timeMs: 2700, useTT: true,  useKillers: true,  quiescence: true  },
+  10: { maxDepth: 10, timeMs: 3000, useTT: true,  useKillers: true,  quiescence: true  },
 };
-export const DEFAULT_LEVEL = 'Medium';
+export const MIN_LEVEL = 1;
+export const MAX_LEVEL = 10;
+export const DEFAULT_LEVEL = 5;
+
+// 1-2 Easy · 3-5 Medium · 6-8 Hard · 9-10 Expert — a short named band next
+// to the number, for UI labels.
+export function levelBand(n) {
+  const lvl = Number(n);
+  if (lvl <= 2) return 'Easy';
+  if (lvl <= 5) return 'Medium';
+  if (lvl <= 8) return 'Hard';
+  return 'Expert';
+}
 
 // ---------------------------------------------------------------------
 // Evaluation weights (centipawn-ish units — tune here)
@@ -349,20 +376,21 @@ function negamax(game, depth, alpha, beta, color, ply, ctx) {
 
 // Iterative-deepening root search. `game` must already be positioned with
 // `game.turn` set to the side to move — that side's best move is returned.
-export function findBestMove(game, levelName, sharedTT) {
-  const level = LEVELS[levelName] || LEVELS[DEFAULT_LEVEL];
+// `level` is a number 1-10 (see LEVELS above).
+export function findBestMove(game, level, sharedTT) {
+  const levelCfg = LEVELS[level] || LEVELS[DEFAULT_LEVEL];
   const color = game.turn;
   const start = Date.now();
 
   const ctx = {
-    deadline: start + level.timeMs,
+    deadline: start + levelCfg.timeMs,
     nodes: 0,
     timeUp: false,
-    tt: level.useTT ? (sharedTT || new Map()) : null,
-    useTT: level.useTT,
-    useKillers: level.useKillers,
+    tt: levelCfg.useTT ? (sharedTT || new Map()) : null,
+    useTT: levelCfg.useTT,
+    useKillers: levelCfg.useKillers,
     killers: [],
-    useQuiescence: level.quiescence,
+    useQuiescence: levelCfg.quiescence,
     maxQPly: 6,
     qRootPly: 0,
   };
@@ -378,7 +406,7 @@ export function findBestMove(game, levelName, sharedTT) {
   let rootBestMoveSig = null;
   let lastCompletedResults = null;
 
-  for (let depth = 1; depth <= level.maxDepth; depth++) {
+  for (let depth = 1; depth <= levelCfg.maxDepth; depth++) {
     ctx.killers = [];
     orderMoves(rootMoves, rootBestMoveSig, null, ctx);
 
@@ -409,9 +437,9 @@ export function findBestMove(game, levelName, sharedTT) {
     if (Date.now() > ctx.deadline) break;
   }
 
-  // Easy: pick randomly among root moves close to the best score, so the
-  // weakest difficulty isn't perfectly deterministic.
-  if (levelName === 'Easy' && lastCompletedResults) {
+  // Weakest levels: pick randomly among root moves close to the best score,
+  // so they aren't perfectly deterministic.
+  if (levelCfg.randomize && lastCompletedResults) {
     const EPS = 40;
     const near = lastCompletedResults.filter(r => r.score >= bestScore - EPS);
     if (near.length > 1) {

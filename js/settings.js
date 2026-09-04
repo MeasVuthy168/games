@@ -1,7 +1,7 @@
 // Settings controller
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
-const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true };
+const DEFAULTS = { minutes: 10, increment: 5, sound: true, hints: true, aiLevel: 'Medium', aiDebug: false };
 
 // About App Information
 const APP_VERSION  = '1.0.3';
@@ -61,6 +61,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnResetTimer = document.getElementById('btnResetTimer');
   const btnTestBeep = document.getElementById('btnTestBeep');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
+  const aiLevelRadios = Array.from(document.querySelectorAll('input[name="aiLevel"]'));
+  const aiDebugToggle = document.getElementById('aiDebugToggle');
 
   // Load settings
   let s = loadSettings();
@@ -71,11 +73,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   minutesInput.value  = s.minutes;
   incInput.value      = s.increment;
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
+  (aiLevelRadios.find(r=>r.value===s.aiLevel)||aiLevelRadios[1]).checked = true;
+  if (aiDebugToggle) aiDebugToggle.checked = !!s.aiDebug;
 
   // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
   btnTestBeep.addEventListener('click', ()=>{ if(soundToggle.checked) toneTest(); });
+
+  aiLevelRadios.forEach(r =>
+    r.addEventListener('change', ()=>{ if(r.checked){ s.aiLevel = r.value; saveSettings(s); } })
+  );
+  aiDebugToggle?.addEventListener('change', ()=>{ s.aiDebug = !!aiDebugToggle.checked; saveSettings(s); });
 
   btnSaveTimer.addEventListener('click', ()=>{
     const m = Math.max(1, Math.min(180, parseInt(minutesInput.value||'10',10)));

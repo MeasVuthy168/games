@@ -179,6 +179,7 @@ function setSpinner(on) {
 let worker = null;
 let pending = null;   // { requestId, resolve }
 let nextRequestId = 1;
+let lastStats = null; // stats from the most recently resolved search — see getLastStats()
 
 function ensureWorker() {
   if (worker) return worker;
@@ -190,6 +191,8 @@ function ensureWorker() {
     if (type !== 'result' || !pending || pending.requestId !== requestId) return;
     const { resolve } = pending;
     pending = null;
+
+    lastStats = stats || null;
 
     if (stats && stats.error) {
       logDbg('Worker error:', stats.error);
@@ -266,3 +269,11 @@ export function setAIDifficulty(level) {
 }
 
 export const pickAIMove = chooseAIMove;
+
+// Search stats (depth/nodes/timeMs/score) from the most recently resolved
+// chooseAIMove() call. Calls are always awaited one at a time (ui.js's
+// AILock, and the AI-vs-AI dev loop alike), so reading this right after an
+// await reliably reflects that call. Used by js/ai-vs-ai.js's dev log.
+export function getLastStats() {
+  return lastStats;
+}

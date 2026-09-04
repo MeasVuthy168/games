@@ -3,8 +3,11 @@ const CACHE = 'khmer-chess';
 
 const CORE = [
   './index.html','./play.html','./friends.html','./settings.html','./notifications.html','./profile.html',
+  './tournament.html','./rewards.html','./ai-vs-ai.html',
   './styles.css','./js/main.js','./js/ui.js','./js/ai.js','./js/ai-engine.js','./js/ai-worker.js','./js/game.js','./js/pwa.js','./js/settings.js','./js/profile.js',
-  './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js','./manifest.webmanifest',
+  './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js',
+  './js/tournament.js','./js/rewards.js','./js/tournament-page.js','./js/rewards-page.js','./js/ai-vs-ai.js',
+  './manifest.webmanifest',
   './assets/fonts/Krasar-Regular.ttf',
   './assets/board/wood_light.jpg','./assets/board/wood_dark.jpg',
   './assets/icons/icon-192.png','./assets/icons/icon-512.png',

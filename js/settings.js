@@ -3,6 +3,9 @@ import { LEVELS, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-eng
 import { pieceThemes, boardThemes } from './themes.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
+import { recordLoginToday } from './rewards.js';
+
+recordLoginToday();
 
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
@@ -188,6 +191,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
       setModal(true);
     });
   }
+
+  // Hidden developer-mode affordance: 5 taps on the version line within 3s
+  // reveals a link to the AI-vs-AI engine test page. Never shown in normal
+  // navigation — see ai-vs-ai.html's own ?dev=1 gate.
+  const aboutVersion = document.getElementById('aboutVersion');
+  const btnDevMode = document.getElementById('btnDevMode');
+  let devTapCount = 0, devTapTimer = null;
+  aboutVersion?.addEventListener('click', () => {
+    devTapCount++;
+    clearTimeout(devTapTimer);
+    devTapTimer = setTimeout(() => { devTapCount = 0; }, 3000);
+    if (devTapCount >= 5 && btnDevMode) {
+      btnDevMode.hidden = false;
+      devTapCount = 0;
+    }
+  });
+  btnDevMode?.addEventListener('click', () => {
+    location.href = 'ai-vs-ai.html?dev=1';
+  });
 
   // Close modal handlers
   aboutModal.querySelectorAll('[data-close]').forEach(el =>

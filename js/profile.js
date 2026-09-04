@@ -7,6 +7,9 @@ import { getCoins } from './coins.js';
 import { getHistory, computeWinRate } from './history.js';
 import { getProfile, setProfileName, setProfileAvatar, applyAvatarToElement, BUILTIN_AVATARS } from './profile-data.js';
 import { setLanguage, applyTranslations, t } from './i18n.js';
+import { recordLoginToday } from './rewards.js';
+
+recordLoginToday();
 
 const LS_KEY = 'kc_settings_v1';
 function loadSettings() {

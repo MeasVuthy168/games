@@ -29,6 +29,10 @@
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
+  <script type="module">
+    import { recordLoginToday } from './js/rewards.js';
+    recordLoginToday();
+  </script>
   <link rel="stylesheet" href="styles.css" />
 
   <style>
@@ -105,6 +109,18 @@
           <div class="card-emoji">👥</div>
           <span>លេងជាមួយមិត្ត</span>
           <small class="last-choice" style="display:block">លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass &amp; Play)</small>
+        </a>
+
+        <a id="btnTournament" class="menu-card" href="tournament.html">
+          <div class="card-emoji">🏆</div>
+          <span>Tournament</span>
+          <small class="last-choice" style="display:block">4-round AI bracket · win coins</small>
+        </a>
+
+        <a id="btnRewards" class="menu-card" href="rewards.html">
+          <div class="card-emoji">🎁</div>
+          <span>Daily Rewards</span>
+          <small class="last-choice" style="display:block">Real objectives from your games</small>
         </a>
       </div>
     </main>

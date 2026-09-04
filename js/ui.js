@@ -4,6 +4,8 @@ import { Game, SIZE, COLORS, PT } from './game.js';
 import * as AI from './ai.js';
 import { DEFAULT_LEVEL } from './ai-engine.js';
 import * as History from './history.js';
+import * as Tournament from './tournament.js';
+import * as Rewards from './rewards.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
@@ -193,11 +195,16 @@ document.addEventListener('click', (e)=>{
     $('#flashOverlay')?.classList.remove('show');
     $('#flashOverlay')?.setAttribute('aria-hidden','true');
     $('#appTabbar')?.classList.remove('is-hidden');
+    // Tournament mode: round is already recorded (see handleTournamentEnd in
+    // initUI) — hand control back to the bracket screen instead of just
+    // dismissing the flash and staying on this ad-hoc board.
+    if (window.__kcTournamentActive) location.href = 'tournament.html';
   }
   if (e.target?.id === 'flashAgain'){
     $('#flashOverlay')?.classList.remove('show');
     $('#flashOverlay')?.setAttribute('aria-hidden','true');
     $('#appTabbar')?.classList.remove('is-hidden');
+    if (window.__kcTournamentActive) { location.href = 'tournament.html'; return; }
     // call reset
     $('#btnReset')?.click();
   }
@@ -222,8 +229,31 @@ export function initUI() {
     stalemate: 'អាប់'
   };
 
+  Rewards.recordLoginToday();
+
+  // Tournament mode: tournament.html sends the player here with
+  // ?mode=ai&tournamentRound=N&aiLevel=L for a single bracket round. This
+  // reuses this same single-game screen/loop rather than a second board
+  // implementation — see handleTournamentEnd() below for how the result is
+  // reported back to js/tournament.js.
+  const urlParams = new URLSearchParams(location.search);
+  const tRoundParam = parseInt(urlParams.get('tournamentRound'), 10);
+  const tLevelParam = parseInt(urlParams.get('aiLevel'), 10);
+  const tournamentMode = Number.isInteger(tRoundParam) && tRoundParam >= 1 &&
+    Number.isInteger(tLevelParam) && tLevelParam >= 1 && tLevelParam <= 10;
+  window.__kcTournamentActive = tournamentMode;
+
   const game = new Game();
   const settings = loadSettings();
+  if (tournamentMode) {
+    // Fixed seat + the round's assigned difficulty, regardless of whatever
+    // role/level the player last picked for ad-hoc games. Always start the
+    // round on a clean board, never a resumed in-progress game.
+    settings.aiEnabled = true;
+    settings.aiColor = 'b';
+    settings.aiLevel = tLevelParam;
+    clearGameState();
+  }
   beeper.enabled = !!settings.sound;
 
   // When a real game actually concludes (checkmate/stalemate), this feeds
@@ -378,6 +408,20 @@ export function initUI() {
       moves: game.history.length,
       duration: Math.round((Date.now() - gameStartedAt) / 1000),
     });
+
+    // Daily Rewards progress: only ever advanced from this real completed-
+    // game path, never from opening rewards.html itself.
+    Rewards.notifyGameResult({ mode, result, aiLevel: settings.aiLevel });
+
+    return result;
+  }
+
+  // Tournament mode: report the round's real result to js/tournament.js
+  // right where the game actually ended (win/loss/draw already resolved by
+  // recordGameEnd above). No-op outside tournament mode.
+  function handleTournamentEnd(result) {
+    if (!tournamentMode) return;
+    Tournament.recordRoundResult(result);
   }
 
   // Shared tail for every place a move can end the game: records history
@@ -385,13 +429,15 @@ export function initUI() {
   // game ended (so callers know not to also call thinkAndPlay()).
   function concludeIfOver(status) {
     if (status?.state === 'checkmate') {
-      recordGameEnd('checkmate', status.toMove);
+      const result = recordGameEnd('checkmate', status.toMove);
       announceCheckmate(status.toMove);
+      handleTournamentEnd(result);
       return true;
     }
     if (status?.state === 'stalemate') {
-      recordGameEnd('stalemate', null);
+      const result = recordGameEnd('stalemate', null);
       showEndFlash({ type: 'draw' });
+      handleTournamentEnd(result);
       return true;
     }
     return false;

@@ -35,6 +35,10 @@
 }
 
 /* === Base =============================================================== */
+/* Author rules elsewhere (e.g. .card-full{display:flex}) otherwise beat the
+   UA stylesheet's [hidden]{display:none} — restore it explicitly so the
+   plain `hidden` attribute always actually hides an element. */
+[hidden]{ display:none !important; }
 *{ box-sizing:border-box }
 html,body{ height:100% }
 html, body{ font-family: var(--ui-font); }

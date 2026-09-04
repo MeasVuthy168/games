@@ -10,6 +10,10 @@
   <meta name="theme-color" content="#0d2d5c" />
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <script src="js/pwa.js" defer></script>
+  <script type="module">
+    import { recordLoginToday } from './js/rewards.js';
+    recordLoginToday();
+  </script>
 
   <link rel="stylesheet" href="styles.css" />
   <style>

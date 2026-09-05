@@ -43,7 +43,11 @@
       background:var(--panel); border-radius:.8rem; box-shadow:var(--shadow); margin-bottom:.5rem;
       border:1px solid rgba(13,45,92,.06);
     }
-    .person-emoji{ font-size:1.4rem; width:32px; text-align:center; flex:none; }
+    .person-emoji{
+      font-size:1.4rem; width:32px; height:32px; text-align:center; flex:none;
+      border-radius:50%; background:#eef4ff; background-size:cover; background-position:center;
+    }
+    .person-emoji.avatar-emoji{ font-size:1.3rem; }
     .person-name{ flex:1; font-weight:700; font-size:.92rem; min-width:0; }
     .person-actions{ display:flex; gap:.4rem; flex:none; }
     .person-actions button{

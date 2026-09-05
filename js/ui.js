@@ -259,6 +259,11 @@ export async function initUI() {
   window.__kcOnlineActive = onlineMode;
   let onlineState = null; // latest {status,myColor,turn,myTurn,board,history,result,opponentId,opponentName,...}
 
+  // Only AI/local-friend games get the page locked (see play.html's
+  // .board-locked CSS) — online games have a real chat form that can sit
+  // below the fold, so that page must stay scrollable to reach it.
+  if (!onlineMode) document.body.classList.add('board-locked');
+
   if (onlineMode) {
     if (!Api.isSignedIn()) {
       location.href = `auth.html?next=${encodeURIComponent(location.pathname + location.search)}`;
@@ -342,36 +347,62 @@ export async function initUI() {
     return settings.aiColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
   }
 
+  // Shows a real uploaded photo when there is one, an emoji otherwise —
+  // same fallback rule as everywhere else in the app (see profile.js).
+  function setAvatar(el, { emoji, url } = {}) {
+    if (!el) return;
+    if (url) { el.style.backgroundImage = `url("${url}")`; el.textContent = ''; }
+    else { el.style.backgroundImage = ''; el.textContent = emoji || '🐯'; }
+  }
+
   // Player-name rows are fixed to board geometry (top = Black rank, bottom =
   // White rank) — only the *labels* change with the chosen role/mode.
   function applyPlayerLabels() {
     const elNameTop    = document.getElementById('nameBlack');
     const elNameBottom = document.getElementById('nameWhite');
+    const elAvatarTop    = document.getElementById('avatarBlack');
+    const elAvatarBottom = document.getElementById('avatarWhite');
+    const elResign = document.getElementById('btnResign');
     if (!elNameTop || !elNameBottom) return;
     if (onlineMode) {
       // The board is flipped for Black (see `flipped` above) so your own
       // pieces always end up at the bottom — keep these labels in sync.
+      // A real online opponent gets their real name + photo instead of a
+      // generic side label, and Resign lives right on their row instead
+      // of its own separate control row above everything.
       const meIsWhite = onlineState.myColor === COLORS.WHITE;
+      const me = Api.getCurrentUser();
       elNameTop.textContent    = onlineState.opponentName + (meIsWhite ? ' · ខ្មៅ' : ' · ស');
       elNameBottom.textContent = 'អ្នក (You)' + (meIsWhite ? ' · ស' : ' · ខ្មៅ');
+      setAvatar(elAvatarTop, { emoji: onlineState.opponentAvatar, url: onlineState.opponentAvatarUrl });
+      setAvatar(elAvatarBottom, { emoji: me?.avatarEmoji, url: me?.avatarUrl });
+      if (elAvatarTop) elAvatarTop.hidden = false;
+      if (elAvatarBottom) elAvatarBottom.hidden = false;
+      if (elResign) elResign.hidden = false;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
       elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ' · ខ្មៅ';
       elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ' · ស';
+      if (elAvatarTop) elAvatarTop.hidden = true;
+      if (elAvatarBottom) elAvatarBottom.hidden = true;
+      if (elResign) elResign.hidden = true;
     } else {
       elNameTop.textContent    = 'អ្នកទី១ · ខ្មៅ (Black)';
       elNameBottom.textContent = 'អ្នកទី២ · ស (White)';
+      if (elAvatarTop) elAvatarTop.hidden = true;
+      if (elAvatarBottom) elAvatarBottom.hidden = true;
+      if (elResign) elResign.hidden = true;
     }
   }
   applyPlayerLabels();
 
   // Online games have no server-enforced time control, so a local countdown
-  // would just be misleading — hide the clocks entirely instead of faking one.
+  // would just be misleading — hide just the clock, not the whole row
+  // (which now also carries the real name/photo and, on top, Resign).
   if (onlineMode) {
-    document.getElementById('timersTop')?.style.setProperty('display', 'none');
-    document.getElementById('timersBottom')?.style.setProperty('display', 'none');
+    document.getElementById('clockB')?.style.setProperty('display', 'none');
+    document.getElementById('clockW')?.style.setProperty('display', 'none');
     document.getElementById('localControls')?.setAttribute('hidden', '');
-    document.getElementById('onlineControls')?.removeAttribute('hidden');
   }
 
   const clocks = new Clocks((w, b) => {
@@ -520,6 +551,11 @@ export async function initUI() {
     }
 
     const last = game.history[game.history.length - 1];
+    // Real on-screen cell size, so the slide-in travels the piece's actual
+    // move distance instead of a fixed small offset — a 12px nudge read as
+    // an instant snap regardless of how far the piece actually moved,
+    // which is what made every move look too fast.
+    const cellPx = cells[0]?.getBoundingClientRect().width || 44;
 
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
@@ -534,8 +570,8 @@ export async function initUI() {
           // flip the animation direction too, so the slide-in matches the
           // piece's actual on-screen movement rather than its raw board delta
           const sign = flipped ? -1 : 1;
-          dx = sign * (last.from.x - last.to.x) * 12 + 'px';
-          dy = sign * (last.from.y - last.to.y) * 12 + 'px';
+          dx = sign * (last.from.x - last.to.x) * cellPx + 'px';
+          dy = sign * (last.from.y - last.to.y) * cellPx + 'px';
           const isKnight = (p.t === PT.KNIGHT);
           klass = isKnight ? 'anim-hop' : 'anim-slide';
         }

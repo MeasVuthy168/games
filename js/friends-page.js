@@ -2,6 +2,7 @@
 import * as Api from './api.js';
 import { showToast } from './toast.js';
 import { initTranslations, t } from './i18n.js';
+import { applyAvatarToElement } from './profile-data.js';
 
 document.addEventListener('DOMContentLoaded', () => {
   initTranslations();
@@ -33,12 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
     location.reload();
   });
 
-  function personRow({ emoji, name, sub, actions }) {
+  function personRow({ emoji, avatarUrl, name, sub, actions }) {
     const row = document.createElement('div');
     row.className = 'person-row';
     const em = document.createElement('div');
-    em.className = 'person-emoji';
-    em.textContent = emoji || '🐯';
+    em.className = 'person-emoji avatar avatar-emoji';
+    applyAvatarToElement(em, avatarUrl ? { type: 'image', value: avatarUrl } : { type: 'emoji', value: emoji || '🐯' });
     const nm = document.createElement('div');
     nm.className = 'person-name';
     nm.textContent = name;
@@ -90,6 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const f of friends) {
         friendsList.appendChild(personRow({
           emoji: f.avatarEmoji,
+          avatarUrl: f.avatarUrl,
           name: f.displayName,
           actions: [
             btn(t('friends.play'), 'btn-play', () => challenge(f.userId)),
@@ -132,7 +134,7 @@ document.addEventListener('DOMContentLoaded', () => {
           sub = g.myTurn ? t('friends.yourMove') : t('friends.waitingFor', { name: g.opponentName });
           actions = [btn(t('friends.continue'), 'btn-play', () => { location.href = `play.html?mode=online&gameId=${g.id}`; })];
         }
-        gamesList.appendChild(personRow({ emoji: g.opponentAvatar, name: g.opponentName, sub, actions }));
+        gamesList.appendChild(personRow({ emoji: g.opponentAvatar, avatarUrl: g.opponentAvatarUrl, name: g.opponentName, sub, actions }));
       }
     } catch (err) {
       console.error(err);
@@ -147,6 +149,7 @@ document.addEventListener('DOMContentLoaded', () => {
       for (const r of incoming) {
         incomingList.appendChild(personRow({
           emoji: r.avatarEmoji,
+          avatarUrl: r.avatarUrl,
           name: r.displayName,
           actions: [
             btn(t('friends.accept'), 'btn-accept', async () => { await Api.acceptFriendRequest(r.requestId); loadRequests(); loadFriends(); }),
@@ -171,6 +174,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const already = existingFriends.has(u.id);
         searchResults.appendChild(personRow({
           emoji: u.avatarEmoji,
+          avatarUrl: u.avatarUrl,
           name: `${u.displayName} (${u.email})`,
           actions: already
             ? [btn(t('friends.alreadyFriend'), 'btn-remove', () => {})]

@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <script src="js/theme-init.js"></script>
+  <script src="js/topbar-back.js" defer></script>
   <title>Notifications | Khmer Chess</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
@@ -19,16 +20,22 @@
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="js/notifications-page.js"></script>
   <style>
-    .notif-actions{ display:flex; justify-content:flex-end; padding:0 1rem; }
-    .notif-actions button{ background:none; border:none; color:var(--blue); font-weight:700; font-size:.82rem; cursor:pointer; text-decoration:underline; }
     .notif-list{ padding:.5rem 1rem 1rem; display:flex; flex-direction:column; gap:.5rem; }
+    .notif-row-wrap{ position:relative; overflow:hidden; border-radius:.9rem; }
     .notif-row{
       display:flex; align-items:center; gap:.7rem; padding:.7rem .8rem;
       background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
       border:1px solid rgba(13,45,92,.06); cursor:pointer;
+      touch-action:pan-y; will-change:transform; position:relative;
     }
     .notif-row.unread{ border-color:rgba(13,45,92,.35); background:#f5f8ff; }
+    .notif-row.swipe-read{ background:#e4f8ea !important; }
+    .notif-row.swipe-delete{ background:#fdeaea !important; }
     .notif-emoji{ font-size:1.3rem; flex:none; }
+    .notif-count{
+      font-weight:800; font-size:.7rem; color:#fff; background:var(--blue);
+      border-radius:999px; padding:.05rem .45rem; margin-inline-start:.35rem; flex:none;
+    }
     .notif-text{ flex:1; min-width:0; font-size:.88rem; }
     .notif-text b{ color:var(--ink); }
     .notif-time{ font-size:.7rem; opacity:.6; flex:none; }
@@ -39,13 +46,19 @@
 <body>
   <div class="shell">
     <header class="topbar">
+      <button class="icon-btn topbar-back" type="button" aria-label="Back">‹</button>
       <h1>ការជូនដំណឹង (Notifications)</h1>
       <div class="spacer"></div>
-      <a href="settings.html" class="icon-btn" title="Settings">⚙</a>
+      <div class="topbar-menu" id="notifMenu" hidden>
+        <button class="icon-btn" id="btnNotifMenu" type="button" aria-label="More options">⋮</button>
+        <div class="topbar-menu-list" id="notifMenuList" hidden>
+          <button type="button" id="btnMarkAllRead">Mark all read</button>
+          <button type="button" id="btnDeleteAll" class="danger">Delete all</button>
+        </div>
+      </div>
     </header>
 
     <main class="page">
-      <div class="notif-actions" id="notifActions" hidden><button id="btnReadAll">Mark all read</button></div>
       <div id="notifRoot"><p>No notifications yet.</p></div>
     </main>
 

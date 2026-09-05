@@ -229,12 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ---------------- account (sign in/out, verify email, server, delete) ---------------- */
+  /* ---------------- account (sign in/out, switch, verify email, server, delete) ---------------- */
   const accountSub = document.getElementById('accountSub');
   const btnAccountAction = document.getElementById('btnAccountAction');
+  const btnSwitchAccount = document.getElementById('btnSwitchAccount');
   const verifyEmailBanner = document.getElementById('verifyEmailBanner');
   const verifyEmailSub = document.getElementById('verifyEmailSub');
   const btnResendVerify = document.getElementById('btnResendVerify');
+  const changePasswordCard = document.getElementById('changePasswordCard');
   const deleteAccountCard = document.getElementById('deleteAccountCard');
 
   function renderAccount() {
@@ -242,16 +244,20 @@ document.addEventListener('DOMContentLoaded', () => {
       const u = Api.getCurrentUser();
       accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
       btnAccountAction.textContent = 'Sign Out';
+      if (btnSwitchAccount) btnSwitchAccount.hidden = false;
       if (verifyEmailBanner) {
         const needsVerify = !!u?.email && !u?.emailVerified;
         verifyEmailBanner.hidden = !needsVerify;
         if (needsVerify) verifyEmailSub.textContent = `Confirm ${u.email} to secure your account.`;
       }
+      if (changePasswordCard) changePasswordCard.hidden = false;
       if (deleteAccountCard) deleteAccountCard.hidden = false;
     } else {
       accountSub.textContent = 'Not signed in';
       btnAccountAction.textContent = 'Sign In';
+      if (btnSwitchAccount) btnSwitchAccount.hidden = true;
       if (verifyEmailBanner) verifyEmailBanner.hidden = true;
+      if (changePasswordCard) changePasswordCard.hidden = true;
       if (deleteAccountCard) deleteAccountCard.hidden = true;
     }
     // Identity source (account vs local guest) depends on sign-in state.
@@ -265,6 +271,12 @@ document.addEventListener('DOMContentLoaded', () => {
   btnAccountAction?.addEventListener('click', () => {
     if (Api.isSignedIn()) { Api.signOut(); renderAccount(); }
     else location.href = 'auth.html?next=profile.html';
+  });
+  // Real switch: sign out of this account and land back here already on
+  // the sign-in form, ready to authenticate as a different one.
+  btnSwitchAccount?.addEventListener('click', () => {
+    Api.signOut();
+    location.href = 'auth.html?next=profile.html';
   });
   btnResendVerify?.addEventListener('click', async () => {
     btnResendVerify.disabled = true;
@@ -287,6 +299,23 @@ document.addEventListener('DOMContentLoaded', () => {
     Api.setApiBase(apiBaseInput.value);
     apiBaseInput.value = Api.getApiBase();
     showToast('Server address saved.', 'success');
+  });
+
+  /* ---------------- change password ---------------- */
+  const currentPasswordInput = document.getElementById('currentPasswordInput');
+  const newPasswordInput = document.getElementById('newPasswordInput');
+  document.getElementById('btnChangePassword')?.addEventListener('click', async () => {
+    const currentPassword = currentPasswordInput.value;
+    const newPassword = newPasswordInput.value;
+    if (newPassword.length < 8) { showToast('New password must be at least 8 characters', 'error'); return; }
+    try {
+      await Api.changePassword({ currentPassword, newPassword });
+      currentPasswordInput.value = '';
+      newPasswordInput.value = '';
+      showToast('Password updated.', 'success');
+    } catch (err) {
+      showToast(err.message || 'Could not update password.', 'error');
+    }
   });
 
   /* ---------------- delete account ---------------- */

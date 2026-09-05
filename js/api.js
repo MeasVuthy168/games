@@ -144,6 +144,12 @@ export async function deleteAccount(password) {
   signOut();
 }
 
+export async function changePassword({ currentPassword, newPassword }) {
+  const data = await request('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
+  writeAuth(data);
+  return data.user;
+}
+
 /* ---------------- users / friends ---------------- */
 
 export async function searchUsers(q) {
@@ -209,6 +215,14 @@ export async function markNotificationRead(id) {
 
 export async function markAllNotificationsRead() {
   return request('/api/notifications/read-all', { method: 'POST' });
+}
+
+export async function deleteNotification(id) {
+  return request(`/api/notifications/${id}`, { method: 'DELETE' });
+}
+
+export async function deleteAllNotifications() {
+  return request('/api/notifications', { method: 'DELETE' });
 }
 
 /* ---------------- online games ---------------- */

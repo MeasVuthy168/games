@@ -96,11 +96,11 @@
 
         <details class="card card-full exp" id="changePasswordCard" hidden>
           <summary>
-            <div class="card-left"><div class="card-title">Password</div><div class="card-sub">Change your password</div></div>
+            <div class="card-left"><div class="card-title" id="passwordCardTitle">Password</div><div class="card-sub" id="passwordCardSub">Change your password</div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <label class="field"><span>Current password</span><input type="password" id="currentPasswordInput" autocomplete="current-password" /></label>
+            <label class="field" id="currentPasswordField"><span>Current password</span><input type="password" id="currentPasswordInput" autocomplete="current-password" /></label>
             <label class="field"><span>New password (min 8 characters)</span><input type="password" id="newPasswordInput" minlength="8" autocomplete="new-password" /></label>
             <div class="row-inline"><button class="primary" id="btnChangePassword">Update Password</button></div>
           </div>
@@ -161,8 +161,8 @@
           <button class="icon-btn" data-close>✖</button>
         </header>
         <div class="modal-body">
-          <p class="card-sub">This permanently erases your account, friends, chats, and games. This cannot be undone. Enter your password to confirm.</p>
-          <label class="field"><span>Password</span><input type="password" id="deleteAccountPassword" autocomplete="current-password" /></label>
+          <p class="card-sub" id="deleteAccountSub">This permanently erases your account, friends, chats, and games. This cannot be undone. Enter your password to confirm.</p>
+          <label class="field" id="deleteAccountPasswordField"><span>Password</span><input type="password" id="deleteAccountPassword" autocomplete="current-password" /></label>
           <div class="row-inline" style="margin-top:.8rem">
             <button class="btn-danger" id="btnConfirmDeleteAccount">Delete my account</button>
             <button class="secondary" data-close>Cancel</button>

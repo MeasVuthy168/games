@@ -180,6 +180,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSwitchAccount = document.getElementById('btnSwitchAccount');
   const changePasswordCard = document.getElementById('changePasswordCard');
   const deleteAccountCard = document.getElementById('deleteAccountCard');
+  const passwordCardTitle = document.getElementById('passwordCardTitle');
+  const passwordCardSub = document.getElementById('passwordCardSub');
+  const currentPasswordField = document.getElementById('currentPasswordField');
+  const deleteAccountPasswordField = document.getElementById('deleteAccountPasswordField');
+  const deleteAccountSub = document.getElementById('deleteAccountSub');
 
   function renderAccount() {
     if (Api.isSignedIn()) {
@@ -189,6 +194,19 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnSwitchAccount) btnSwitchAccount.hidden = false;
       if (changePasswordCard) changePasswordCard.hidden = false;
       if (deleteAccountCard) deleteAccountCard.hidden = false;
+      // A Google-only account (no password ever set) skips the "current
+      // password" step everywhere — this is the first password it'll ever
+      // have, and being signed in is already proof of identity for delete.
+      const hasPassword = u?.hasPassword !== false;
+      if (currentPasswordField) currentPasswordField.hidden = !hasPassword;
+      if (passwordCardTitle) passwordCardTitle.textContent = hasPassword ? 'Password' : 'Set Password';
+      if (passwordCardSub) passwordCardSub.textContent = hasPassword
+        ? 'Change your password'
+        : 'Create a password so you can also sign in without Google';
+      if (deleteAccountPasswordField) deleteAccountPasswordField.hidden = !hasPassword;
+      if (deleteAccountSub) deleteAccountSub.textContent = hasPassword
+        ? 'This permanently erases your account, friends, chats, and games. This cannot be undone. Enter your password to confirm.'
+        : 'This permanently erases your account, friends, chats, and games. This cannot be undone.';
     } else {
       accountSub.textContent = 'Not signed in';
       btnAccountAction.textContent = 'Sign In';
@@ -251,7 +269,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('btnConfirmDeleteAccount')?.addEventListener('click', async () => {
     const password = deleteAccountPassword.value;
-    if (!password) { showToast('Enter your password to confirm.', 'error'); return; }
+    const hasPassword = Api.getCurrentUser()?.hasPassword !== false;
+    if (hasPassword && !password) { showToast('Enter your password to confirm.', 'error'); return; }
     try {
       await Api.deleteAccount(password);
       showModal(deleteAccountModal, false);

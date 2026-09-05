@@ -8,10 +8,12 @@
 // password/server-address UI here anymore.
 
 import { getProfile, setProfileName, setProfileAvatar, applyAvatarToElement, BUILTIN_AVATARS } from './profile-data.js';
-import { setLanguage, applyTranslations } from './i18n.js';
+import { setLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
 import { showToast } from './toast.js';
+import { getCoins } from './coins.js';
+import { getHistory, computeWinRate } from './history.js';
 
 recordLoginToday();
 
@@ -46,8 +48,15 @@ function resizeImageToDataUrl(file, maxSize = 256, quality = 0.82) {
   });
 }
 
+function fmtDuration(sec) {
+  const s = Math.max(0, sec | 0);
+  const m = Math.floor(s / 60), r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-  setLanguage(loadSettings().language || 'en');
+  const settings = loadSettings();
+  setLanguage(settings.language || 'en');
 
   const heroAvatar  = document.getElementById('heroAvatar');
   const heroName    = document.getElementById('heroName');
@@ -75,6 +84,66 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderProfile();
   applyTranslations();
+
+  /* ---------------- coins / AI level / win rate + history ---------------- */
+  // Local-device stats only (see api.js's header comment) — coins/history
+  // never sync per-account, so this is the same regardless of which
+  // account is signed in. Moved here from settings.html per user request.
+  const statCoins = document.getElementById('statCoins');
+  const statAILevel = document.getElementById('statAILevel');
+  const statWinRate = document.getElementById('statWinRate');
+  const historyList = document.getElementById('historyList');
+
+  function renderStats() {
+    if (statCoins) statCoins.textContent = String(getCoins());
+    const lvl = parseInt(settings.aiLevel, 10);
+    if (statAILevel) statAILevel.textContent = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? String(lvl) : '5';
+    if (statWinRate) {
+      const rate = computeWinRate();
+      statWinRate.textContent = rate === null ? t('profile.notRated') : `${rate}%`;
+    }
+  }
+
+  function renderHistory() {
+    if (!historyList) return;
+    const games = getHistory();
+    historyList.innerHTML = '';
+    if (games.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'card-sub';
+      empty.textContent = t('profile.history.empty');
+      historyList.appendChild(empty);
+      return;
+    }
+    for (const g of games) {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      const opp = document.createElement('div');
+      opp.className = 'history-opponent';
+      opp.textContent = g.opponent;
+      const date = document.createElement('div');
+      date.className = 'history-date';
+      const d = new Date(g.date);
+      const when = isNaN(d.getTime()) ? g.date : d.toLocaleString();
+      date.textContent = `${when} · ${g.moves} ${t('profile.history.moves')} · ${fmtDuration(g.duration)}`;
+      meta.appendChild(opp);
+      meta.appendChild(date);
+
+      const badge = document.createElement('div');
+      badge.className = `history-badge ${g.result}`;
+      badge.textContent = t(`profile.history.${g.result}`);
+
+      row.appendChild(meta);
+      row.appendChild(badge);
+      historyList.appendChild(row);
+    }
+  }
+
+  renderStats();
+  renderHistory();
 
   /* ---------------- shared modal helpers ---------------- */
   function showModal(modal, show) {

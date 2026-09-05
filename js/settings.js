@@ -1,8 +1,6 @@
 // Settings controller
 import { LEVELS, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-engine.js';
 import { pieceThemes, boardThemes } from './themes.js';
-import { getCoins } from './coins.js';
-import { getHistory, computeWinRate } from './history.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
@@ -54,12 +52,6 @@ function bandKey(n) {
   return `settings.band.${band}`;
 }
 
-function fmtDuration(sec) {
-  const s = Math.max(0, sec | 0);
-  const m = Math.floor(s / 60), r = s % 60;
-  return `${m}:${String(r).padStart(2, '0')}`;
-}
-
 /* ------------------------------ DOM Ready ------------------------------ */
 document.addEventListener('DOMContentLoaded', ()=>{
 
@@ -81,64 +73,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (profName) profName.textContent = profile.name;
     applyAvatarToElement(profAvatar, profile.avatar);
   }
-
-  // Coins / AI level / win rate + game history — moved here from
-  // profile.html so Profile stays focused on identity/account.
-  const statCoins = document.getElementById('statCoins');
-  const statAILevel = document.getElementById('statAILevel');
-  const statWinRate = document.getElementById('statWinRate');
-  const historyList = document.getElementById('historyList');
-
-  function renderStats() {
-    if (statCoins) statCoins.textContent = String(getCoins());
-    const lvl = parseInt(s.aiLevel, 10);
-    if (statAILevel) statAILevel.textContent = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? String(lvl) : '5';
-    if (statWinRate) {
-      const rate = computeWinRate();
-      statWinRate.textContent = rate === null ? t('profile.notRated') : `${rate}%`;
-    }
-  }
-
-  function renderHistory() {
-    if (!historyList) return;
-    const games = getHistory();
-    historyList.innerHTML = '';
-    if (games.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'card-sub';
-      empty.textContent = t('profile.history.empty');
-      historyList.appendChild(empty);
-      return;
-    }
-    for (const g of games) {
-      const row = document.createElement('div');
-      row.className = 'history-row';
-
-      const meta = document.createElement('div');
-      meta.className = 'history-meta';
-      const opp = document.createElement('div');
-      opp.className = 'history-opponent';
-      opp.textContent = g.opponent;
-      const date = document.createElement('div');
-      date.className = 'history-date';
-      const d = new Date(g.date);
-      const when = isNaN(d.getTime()) ? g.date : d.toLocaleString();
-      date.textContent = `${when} · ${g.moves} ${t('profile.history.moves')} · ${fmtDuration(g.duration)}`;
-      meta.appendChild(opp);
-      meta.appendChild(date);
-
-      const badge = document.createElement('div');
-      badge.className = `history-badge ${g.result}`;
-      badge.textContent = t(`profile.history.${g.result}`);
-
-      row.appendChild(meta);
-      row.appendChild(badge);
-      historyList.appendChild(row);
-    }
-  }
-
-  renderStats();
-  renderHistory();
 
   // Elements
   const soundToggle = document.getElementById('soundToggle');
@@ -213,8 +147,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       setLanguage(s.language);
       applyTranslations();
       renderAILevel(); // band label text depends on language too
-      renderStats();
-      renderHistory();
     })
   );
 

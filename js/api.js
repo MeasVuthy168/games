@@ -149,8 +149,8 @@ export async function logoutAllDevices() {
   signOut();
 }
 
-export async function deleteAccount(password) {
-  await request('/api/auth/me', { method: 'DELETE', body: { password } });
+export async function deleteAccount() {
+  await request('/api/auth/me', { method: 'DELETE' });
   signOut();
 }
 

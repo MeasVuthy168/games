@@ -44,7 +44,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
     function initGoogle() {
-      google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential });
+      // itp_support tells GSI to route the credential back through an
+      // intermediate iframe instead of relying on a cross-site cookie —
+      // without it, Safari's Intelligent Tracking Prevention silently
+      // drops the callback after the account picker closes (the picker
+      // itself still renders fine, since that part doesn't need cookies),
+      // which is exactly what "sign-in does nothing on iOS" looks like.
+      google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential, itp_support: true });
       google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', width: 280 });
       document.getElementById('googleSignInSection').hidden = false;
     }

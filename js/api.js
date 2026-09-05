@@ -94,6 +94,16 @@ export async function sendPhoneCode(phone) {
   return request('/api/auth/phone/send-code', { method: 'POST', body: { phone }, auth: false });
 }
 
+export async function sendEmailCode(email) {
+  return request('/api/auth/email/send-code', { method: 'POST', body: { email }, auth: false });
+}
+
+export async function googleAuth(credential) {
+  const data = await request('/api/auth/google', { method: 'POST', body: { credential }, auth: false });
+  writeAuth(data);
+  return data.user;
+}
+
 // `identifier` is either an email or a phone number — the backend tells
 // them apart by whether it contains "@".
 export async function signIn({ identifier, password }) {

@@ -2,8 +2,10 @@
 // emailed verification link (from js/auth-page.js's signup or
 // js/settings.js's resend button) points to: ?token=...&email=...
 import * as Api from './api.js';
+import { initTranslations } from './i18n.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initTranslations();
   const params = new URLSearchParams(location.search);
   const token = params.get('token') || '';
   const email = params.get('email') || '';

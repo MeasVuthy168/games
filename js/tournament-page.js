@@ -2,12 +2,14 @@
 import * as Tournament from './tournament.js';
 import { levelBand } from './ai-engine.js';
 import { recordLoginToday } from './rewards.js';
+import { initTranslations } from './i18n.js';
 
 recordLoginToday();
 
 const RESULT_LABEL = { win: 'Won', loss: 'Lost', draw: 'Draw' };
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   const tournEmoji  = document.getElementById('tournEmoji');
   const tournStatus = document.getElementById('tournStatus');
   const tournSub    = document.getElementById('tournSub');

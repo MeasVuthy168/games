@@ -1,11 +1,15 @@
 // js/i18n.js — small, real i18n system: a translations table plus a
-// data-i18n attribute pass. Only settings.html and profile.html are wired
-// up to it in this build (see the session report for exactly what is/isn't
-// translated) — this module itself is page-agnostic and can be applied to
-// the rest of the app later without changes here.
+// data-i18n attribute pass. Every page calls initTranslations() (below) on
+// load so the saved language actually applies everywhere, not just on
+// whichever page you last changed it from.
 
 export const translations = {
   en: {
+    'nav.home': 'Home',
+    'nav.friend': 'Friend',
+    'nav.play': 'Play',
+    'nav.setting': 'Setting',
+    'nav.notification': 'Notification',
     'settings.sound.title': 'Sound',
     'settings.sound.sub': 'Turn game sounds on/off',
     'settings.testButton': 'Test',
@@ -74,8 +78,61 @@ export const translations = {
     'profile.uploadPhoto': 'Upload photo…',
     'profile.namePlaceholder': 'Your name',
     'profile.back': 'Back',
+    'friends.signedOut.title': 'Sign in for real online friends',
+    'friends.signedOut.sub': 'Add friends by email, chat, and get notifications',
+    'friends.onlineFriends': 'Online Friends',
+    'friends.signedInAs': 'Signed in as',
+    'friends.signOut': 'Sign out',
+    'friends.searchPlaceholder': 'Search by name or email…',
+    'friends.search': 'Search',
+    'friends.requests': 'Friend Requests',
+    'friends.games': 'Games',
+    'friends.myFriends': 'My Friends',
+    'friends.empty': 'No friends yet — search above to add some.',
+    'friends.play': 'Play',
+    'friends.message': 'Message',
+    'friends.remove': 'Remove',
+    'friends.accept': 'Accept',
+    'friends.decline': 'Decline',
+    'friends.cancel': 'Cancel',
+    'friends.continue': 'Continue',
+    'friends.addFriend': 'Add Friend',
+    'friends.sent': 'Sent',
+    'friends.alreadyFriend': 'Friend ✓',
+    'friends.waitingAccept': 'Waiting for them to accept',
+    'friends.challengedYou': 'Challenged you to a game',
+    'friends.yourMove': 'Your move',
+    'friends.waitingFor': 'Waiting for {name}',
+    'friends.removeConfirm': 'Remove {name} as a friend?',
+    'friends.noMatches': 'No matching users.',
+    'friends.searchFailed': 'Search failed',
+    'friends.couldNotLoad': 'Could not load friends.',
+    'friends.you': 'You',
+    'home.install': '📲 Install App',
+    'home.vsAI': 'Play vs AI (Master)',
+    'home.vsFriend': 'Play with a Friend',
+    'home.vsFriendSub': 'Pass & Play on one device',
+    'home.online': 'Play Friends (Online)',
+    'home.onlineSub': 'Play friends online, anywhere',
+    'home.tournament': 'Tournament',
+    'home.tournamentSub': '4-round AI bracket · win coins',
+    'home.rewards': 'Daily Rewards',
+    'home.rewardsSub': 'Real objectives from your games',
+    'home.roleTitle': 'Choose your color',
+    'home.roleHint': 'Which color do you want to play against Master?',
+    'home.roleWhite': 'White',
+    'home.roleWhiteSub': 'You move first',
+    'home.roleBlack': 'Black',
+    'home.roleBlackSub': 'Master moves first',
+    'home.roleRandom': 'Random',
+    'home.roleRandomSub': 'Randomly assigned',
   },
   km: {
+    'nav.home': 'ទំព័រដើម',
+    'nav.friend': 'មិត្តភក្តិ',
+    'nav.play': 'លេង',
+    'nav.setting': 'កំណត់',
+    'nav.notification': 'ជូនដំណឹង',
     'settings.sound.title': 'សំឡេង',
     'settings.sound.sub': 'បើក/បិទសំឡេងក្នុងល្បែង',
     'settings.testButton': 'សាកល្បង',
@@ -144,6 +201,54 @@ export const translations = {
     'profile.uploadPhoto': 'ផ្ទុករូបភាព…',
     'profile.namePlaceholder': 'ឈ្មោះរបស់អ្នក',
     'profile.back': 'ត្រឡប់ក្រោយ',
+    'friends.signedOut.title': 'ចូលគណនីដើម្បីមានមិត្តភក្តិអនឡាញពិតប្រាកដ',
+    'friends.signedOut.sub': 'បន្ថែមមិត្តភក្តិតាមអ៊ីមែល ជជែក និងទទួលការជូនដំណឹង',
+    'friends.onlineFriends': 'មិត្តភក្តិអនឡាញ',
+    'friends.signedInAs': 'បានចូលគណនីជា',
+    'friends.signOut': 'ចាកចេញ',
+    'friends.searchPlaceholder': 'ស្វែងរកតាមឈ្មោះ ឬអ៊ីមែល…',
+    'friends.search': 'ស្វែងរក',
+    'friends.requests': 'សំណើមិត្តភក្តិ',
+    'friends.games': 'ល្បែង',
+    'friends.myFriends': 'មិត្តភក្តិរបស់ខ្ញុំ',
+    'friends.empty': 'មិនទាន់មានមិត្តភក្តិទេ — ស្វែងរកខាងលើដើម្បីបន្ថែម។',
+    'friends.play': 'លេង',
+    'friends.message': 'សារ',
+    'friends.remove': 'លុប',
+    'friends.accept': 'យល់ព្រម',
+    'friends.decline': 'បដិសេធ',
+    'friends.cancel': 'បោះបង់',
+    'friends.continue': 'បន្ត',
+    'friends.addFriend': 'បន្ថែមមិត្តភក្តិ',
+    'friends.sent': 'បានផ្ញើ',
+    'friends.alreadyFriend': 'មិត្តភក្តិ ✓',
+    'friends.waitingAccept': 'កំពុងរង់ចាំគេយល់ព្រម',
+    'friends.challengedYou': 'បានប្រកួតជាមួយអ្នក',
+    'friends.yourMove': 'វេនរបស់អ្នក',
+    'friends.waitingFor': 'កំពុងរង់ចាំ {name}',
+    'friends.removeConfirm': 'លុប {name} ចេញពីមិត្តភក្តិ?',
+    'friends.noMatches': 'រកមិនឃើញអ្នកប្រើដូច។',
+    'friends.searchFailed': 'ស្វែងរកបរាជ័យ',
+    'friends.couldNotLoad': 'មិនអាចផ្ទុកមិត្តភក្តិបានទេ។',
+    'friends.you': 'អ្នក',
+    'home.install': '📲 ធ្វើការតំឡើងកម្មវិធី (Install App)',
+    'home.vsAI': 'លេងជាមួយ AI (Master)',
+    'home.vsFriend': 'លេងជាមួយមិត្ត',
+    'home.vsFriendSub': 'លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass & Play)',
+    'home.online': 'លេងជាមួយមិត្តភក្តិ (Online)',
+    'home.onlineSub': 'ប្រកួតជាមួយមិត្តតាមអនឡាញ គ្រប់ទីកន្លែង',
+    'home.tournament': 'ការប្រកួត (Tournament)',
+    'home.tournamentSub': '៤ជុំ ប្រកួតជាមួយ AI · ឈ្នះកាក់',
+    'home.rewards': 'រង្វាន់ប្រចាំថ្ងៃ',
+    'home.rewardsSub': 'គោលដៅពិតប្រាកដពីល្បែងរបស់អ្នក',
+    'home.roleTitle': 'ជ្រើសរើសពណ៌របស់អ្នក',
+    'home.roleHint': 'អ្នកចង់លេងជាមួយពណ៌អ្វី ប្រឆាំងនឹង Master?',
+    'home.roleWhite': 'ស (White)',
+    'home.roleWhiteSub': 'អ្នកចាប់ផ្ដើមមុន',
+    'home.roleBlack': 'ខ្មៅ (Black)',
+    'home.roleBlackSub': 'Master ចាប់ផ្ដើមមុន',
+    'home.roleRandom': 'ចៃដន្យ (Random)',
+    'home.roleRandomSub': 'ចាប់ឆ្នោតពណ៌',
   },
 };
 
@@ -158,11 +263,13 @@ export function getLanguage() {
   return currentLang;
 }
 
-export function t(key) {
+export function t(key, params) {
   const dict = translations[currentLang] || translations.en;
-  if (key in dict) return dict[key];
-  if (key in translations.en) return translations.en[key];
-  return key;
+  let str = key in dict ? dict[key] : (key in translations.en ? translations.en[key] : key);
+  if (params) {
+    for (const [k, v] of Object.entries(params)) str = str.replaceAll(`{${k}}`, v);
+  }
+  return str;
 }
 
 // Walks `root` for [data-i18n] (textContent) and [data-i18n-placeholder]
@@ -174,4 +281,20 @@ export function applyTranslations(root = document) {
   root.querySelectorAll('[data-i18n-placeholder]').forEach((el) => {
     el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
   });
+}
+
+// One-call setup for every page: reads the language saved from
+// settings.html (previously only settings.js and profile.js ever called
+// setLanguage()/applyTranslations() at all, so every other page always
+// rendered in the default regardless of what was picked) and applies it.
+// Call again after anything re-renders dynamic (JS-generated) text.
+const SETTINGS_LS_KEY = 'kc_settings_v1';
+function readSavedLanguage() {
+  try { return JSON.parse(localStorage.getItem(SETTINGS_LS_KEY) || 'null')?.language || 'en'; }
+  catch { return 'en'; }
+}
+export function initTranslations(root = document) {
+  setLanguage(readSavedLanguage());
+  applyTranslations(root);
+  return currentLang;
 }

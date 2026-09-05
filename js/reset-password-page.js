@@ -2,8 +2,10 @@
 // page the emailed reset link (from js/auth-page.js's forgot-password
 // flow) points to: ?token=...&email=...
 import * as Api from './api.js';
+import { initTranslations } from './i18n.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   const params = new URLSearchParams(location.search);
   const token = params.get('token') || '';
   const email = params.get('email') || '';

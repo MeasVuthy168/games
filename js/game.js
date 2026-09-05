@@ -1,26 +1,37 @@
-// game.js — Makruk (Thai Chess) core engine
+// game.js — Ouk Chaktrang (Cambodian Chess) core engine
 // Exports: SIZE, COLORS, PT, Game, initialPosition, piece, toFen
 //
-// Rules implemented to match Fairy-Stockfish "makruk":
+// Board/piece-letter layout inherited from Fairy-Stockfish "makruk" (same
+// 8×8 board and starting FEN), with movement rules corrected to genuine
+// Ouk Chaktrang:
 // - Board: 8×8, ranks 8→1 from top to bottom.
 // - Back ranks (both sides): R N S M K S N R
-//   (Rook, Knight, Khon, Met, King, Khon, Knight, Rook)
+//   (Rook, Knight, Khon, Neang, King, Khon, Knight, Rook)
 // - Pawns: on ranks 3 (white) and 6 (black), no double step, no en passant.
-// - King: 1 step any direction.
-// - Met (M/m): 1 step diagonally (Ferz-like).
-// - Khon (S/s): 1 step diagonally + 1 step straight forward.
+// - King: 1 step any direction. On its FIRST move only (per piece, tracked
+//   via .moved), it may instead leap like a knight (2+1 squares), jumping
+//   over any pieces in between; that privilege is gone forever once this
+//   specific king has moved.
+// - Neang / Met (M/m): 1 step diagonally (Ferz-like). On its FIRST move
+//   only (per piece), it may instead advance 2 squares straight forward as
+//   a quiet move — both the square passed over and the landing square must
+//   be empty (it cannot jump over a piece or capture with this move); that
+//   privilege is gone forever once this specific neang has moved.
+// - Khon (S/s): 1 step diagonally (any of the 4 diagonals) + 1 step
+//   straight forward only — never straight backward.
 // - Rook: sliders orthogonal.
 // - Knight: standard knight jump.
 // - Pawn: 1 forward if empty, capture diagonally forward.
-// - Promotion: Pawn → Met (M/m) upon entering last 3 ranks
-//   (White: y <= 2, Black: y >= 5).
+// - Promotion: Pawn → Neang/Met (M/m) upon entering last 3 ranks
+//   (White: y <= 2, Black: y >= 5) — i.e. the 6th rank counted from its
+//   own starting side.
 //
 // Important: piece letters follow Fairy-Stockfish makruk:
 //   p = pawn
 //   r = rook
 //   n = knight
 //   s = khon
-//   m = met
+//   m = met (Neang / Queen)
 //   k = king
 
 export const SIZE   = 8;
@@ -34,6 +45,13 @@ export const PT = {
   KNIGHT: 'N',
   PAWN:   'P',
 };
+
+// Knight-shaped (2+1) jump offsets — shared by the Knight's normal move
+// and the King's Ouk Chaktrang first-move-only leap.
+const KNIGHT_JUMPS = [
+  [1, -2], [2, -1], [2, 1], [1, 2],
+  [-1, 2], [-2, 1], [-2, -1], [-1, -2],
+];
 
 // Standard Makruk start FEN used by Fairy-Stockfish
 export const MAKRUK_START_FEN =
@@ -233,15 +251,37 @@ export class Game {
             if (dx || dy) tryAdd(x + dx, y + dy, 'both');
           }
         }
+        // Ouk Chaktrang special: on its first move only, the King may
+        // leap like a knight instead, jumping over any pieces in between
+        // (same as the Knight's own jump — tryAdd only checks the landing
+        // square, so intervening pieces are never consulted here).
+        if (!p.moved) {
+          for (const [dx, dy] of KNIGHT_JUMPS) {
+            tryAdd(x + dx, y + dy, 'both');
+          }
+        }
         break;
       }
 
       case PT.MET: {
-        // Met: 1-step diagonally (Ferz)
+        // Met/Neang: 1-step diagonally (Ferz)
         tryAdd(x - 1, y - 1, 'both');
         tryAdd(x + 1, y - 1, 'both');
         tryAdd(x - 1, y + 1, 'both');
         tryAdd(x + 1, y + 1, 'both');
+        // Ouk Chaktrang special: on its first move only, the Neang may
+        // instead advance 2 squares straight forward as a quiet move —
+        // it does not jump like a pawn's double-step elsewhere would;
+        // both the passed-over square and the landing square must be
+        // empty, and this move can never capture.
+        if (!p.moved) {
+          const d = this.pawnDir(p.c);
+          const midY = y + d;
+          const farY = y + d * 2;
+          if (this.inBounds(x, farY) && !this.at(x, midY) && !this.at(x, farY)) {
+            out.push({ x, y: farY });
+          }
+        }
         break;
       }
 
@@ -265,11 +305,7 @@ export class Game {
       }
 
       case PT.KNIGHT: {
-        const jumps = [
-          [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2],
-        ];
-        for (const [dx, dy] of jumps) {
+        for (const [dx, dy] of KNIGHT_JUMPS) {
           tryAdd(x + dx, y + dy, 'both');
         }
         break;
@@ -277,7 +313,7 @@ export class Game {
 
       case PT.PAWN: {
         const d = this.pawnDir(p.c);
-        // quiet forward move (no double step in Makruk)
+        // quiet forward move (no double step)
         if (this.inBounds(x, y + d) && !this.at(x, y + d)) {
           out.push({ x, y: y + d });
         }
@@ -323,6 +359,11 @@ export class Game {
             if (dx || dy) addStep(x + dx, y + dy);
           }
         }
+        // Mirrors the first-move leap in pseudoMoves(): while unmoved, the
+        // King also threatens (and can capture on) its knight-jump squares.
+        if (!p.moved) {
+          for (const [dx, dy] of KNIGHT_JUMPS) addStep(x + dx, y + dy);
+        }
         break;
 
       case PT.MET:
@@ -350,11 +391,7 @@ export class Game {
         break;
 
       case PT.KNIGHT: {
-        const jumps = [
-          [1, -2], [2, -1], [2, 1], [1, 2],
-          [-1, 2], [-2, 1], [-2, -1], [-1, -2],
-        ];
-        for (const [dx, dy] of jumps) addStep(x + dx, y + dy);
+        for (const [dx, dy] of KNIGHT_JUMPS) addStep(x + dx, y + dy);
         break;
       }
 

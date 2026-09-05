@@ -15,13 +15,22 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
+  // The backend (a free-tier Render service) spins down after inactivity
+  // and can take 30-60+ seconds to wake back up on its first request. Ping
+  // it as soon as this page loads — while the user is still picking a
+  // Google account — so it's hopefully already warm by the time the real
+  // sign-in request goes out. Without this (and the loading message
+  // below), a cold start looks exactly like sign-in silently doing
+  // nothing at all.
+  fetch(`${Api.getApiBase()}/ping`).catch(() => {});
+
   const authMsg = document.getElementById('authMsg');
 
   function showMsg(text, kind) {
     authMsg.innerHTML = '';
     if (!text) return;
     const el = document.createElement('div');
-    el.className = kind === 'ok' ? 'auth-ok' : 'auth-error';
+    el.className = kind === 'ok' ? 'auth-ok' : kind === 'loading' ? 'auth-loading' : 'auth-error';
     el.textContent = text;
     authMsg.appendChild(el);
   }
@@ -35,11 +44,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const googleClientId = document.querySelector('meta[name="google-signin-client-id"]')?.content?.trim();
   if (googleClientId) {
     async function handleGoogleCredential(response) {
-      showMsg('');
+      // Visible feedback from the moment Google hands back a credential —
+      // otherwise a slow/cold backend looks identical to sign-in doing
+      // nothing, which is exactly what was being reported.
+      showMsg('Signing in…', 'loading');
+      const slowNotice = setTimeout(() => {
+        showMsg('Still signing in — the server is waking up, this can take up to a minute the first time…', 'loading');
+      }, 4000);
       try {
         await Api.googleAuth(response.credential);
+        clearTimeout(slowNotice);
         location.href = nextUrl();
       } catch (err) {
+        clearTimeout(slowNotice);
         showMsg(err.message || 'Google sign-in failed');
       }
     }

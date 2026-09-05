@@ -22,6 +22,14 @@
       --board-light-img: url("assets/board/wood_light.jpg");
       --board-dark-img:  url("assets/board/wood_dark.jpg");
     }
+    /* AI/local-friend games have no chat form below the board, so the
+       page never needs to scroll at all — locking it stops an accidental
+       drag near the board's edge from nudging the whole page instead of
+       just interacting with the board. Online games DO have a real chat
+       form that can sit below the fold, so js/ui.js only adds this class
+       when it's NOT an online game (see applyPlayerLabels() area). */
+    html.board-locked, body.board-locked{ height:100%; overflow:hidden; }
+    body.board-locked .app{ height:100dvh; min-height:0; }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -65,19 +73,17 @@
           </button>
         </div>
 
-        <div class="controls controls-top" id="onlineControls" hidden>
-          <button id="btnResign" class="btn-icon secondary" title="Resign" type="button">
-            <span>Resign</span>
-          </button>
-        </div>
-
         <div id="onlineStatusBanner" class="online-status-banner" hidden></div>
 
         <!-- Top clock -->
         <div class="timers" id="timersTop">
           <div class="player-row top">
+            <div class="player-avatar" id="avatarBlack" hidden></div>
             <div class="player-name" id="nameBlack">ខ្មៅ (Black)</div>
             <div class="clock" id="clockB">10:00.0</div>
+            <button id="btnResign" class="btn-icon secondary" title="Resign" type="button" hidden>
+              <span>Resign</span>
+            </button>
           </div>
         </div>
 
@@ -87,6 +93,7 @@
         <!-- Bottom clock -->
         <div class="timers" id="timersBottom">
           <div class="player-row bottom">
+            <div class="player-avatar" id="avatarWhite" hidden></div>
             <div class="player-name" id="nameWhite">ស (White)</div>
             <div class="clock" id="clockW">10:00.0</div>
           </div>

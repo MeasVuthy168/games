@@ -713,6 +713,7 @@ export async function initUI() {
   function setupOnlineChat(opponentId) {
     const card = document.getElementById('chatCard');
     if (!card) return;
+    card.hidden = false;
     card.classList.remove('chat-panel');
     card.innerHTML = `
       <div class="online-chat">

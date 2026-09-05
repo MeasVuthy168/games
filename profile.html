@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <script src="js/theme-init.js"></script>
+  <script src="js/topbar-back.js" defer></script>
   <title>Profile | Khmer Chess</title>
 
   <link rel="manifest" href="manifest.webmanifest" />
@@ -75,9 +76,9 @@
 <body>
   <div class="shell">
     <header class="topbar">
+      <button class="icon-btn topbar-back" type="button" aria-label="Back">‹</button>
       <h1>គណនី (Profile)</h1>
       <div class="spacer"></div>
-      <a href="settings.html" class="icon-btn" title="Settings">⚙</a>
     </header>
 
     <main class="page settings-page">
@@ -98,7 +99,10 @@
             <div class="card-title">Account</div>
             <div class="card-sub" id="accountSub">Not signed in</div>
           </div>
-          <div class="card-right"><button class="pill" id="btnAccountAction">Sign In</button></div>
+          <div class="card-right">
+            <button class="pill" id="btnSwitchAccount" hidden>Switch</button>
+            <button class="pill" id="btnAccountAction">Sign In</button>
+          </div>
         </div>
 
         <div class="card card-full" id="verifyEmailBanner" hidden>
@@ -117,6 +121,18 @@
           <div class="card-body">
             <label class="field"><span>API Server URL</span><input type="text" id="apiBaseInput" placeholder="https://ouk-ai-backend.onrender.com" /></label>
             <div class="row-inline"><button class="primary" id="btnSaveApiBase">Save</button></div>
+          </div>
+        </details>
+
+        <details class="card card-full exp" id="changePasswordCard" hidden>
+          <summary>
+            <div class="card-left"><div class="card-title">Password</div><div class="card-sub">Change your password</div></div>
+            <div class="card-right caret">›</div>
+          </summary>
+          <div class="card-body">
+            <label class="field"><span>Current password</span><input type="password" id="currentPasswordInput" autocomplete="current-password" /></label>
+            <label class="field"><span>New password (min 8 characters)</span><input type="password" id="newPasswordInput" minlength="8" autocomplete="new-password" /></label>
+            <div class="row-inline"><button class="primary" id="btnChangePassword">Update Password</button></div>
           </div>
         </details>
 
@@ -145,22 +161,6 @@
       </div>
 
       <div class="card-list">
-        <div class="card card-full disabled">
-          <div class="card-left">
-            <div class="card-title" data-i18n="profile.password.title">Password</div>
-            <div class="card-sub" data-i18n="profile.password.sub">Requires an online account — not available yet</div>
-          </div>
-          <div class="card-right">›</div>
-        </div>
-
-        <div class="card card-full disabled">
-          <div class="card-left">
-            <div class="card-title" data-i18n="profile.switchAccount.title">Switch Account</div>
-            <div class="card-sub" data-i18n="profile.switchAccount.sub">Requires an online account — not available yet</div>
-          </div>
-          <div class="card-right">›</div>
-        </div>
-
         <details class="card card-full exp" open>
           <summary>
             <div class="card-left">

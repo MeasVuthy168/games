@@ -28,12 +28,6 @@
 </head>
 <body>
   <div id="app" class="app">
-    <header class="topbar">
-      <h1>លេង (Play)</h1>
-      <div class="spacer"></div>
-      <a href="settings.html" class="icon-btn" title="Settings">⚙</a>
-    </header>
-
     <main class="layout layout-single">
       <section class="panel board-panel">
 
@@ -98,8 +92,11 @@
           </div>
         </div>
 
-        <!-- Chat: real when playing an online friend, placeholder otherwise -->
-        <section id="chatCard" class="panel card chat-panel card-full">
+        <!-- Chat: only real when playing an online friend — js/ui.js
+             replaces this with the real thread and un-hides it; every
+             other mode (AI, local pass & play) has no chat, so this stays
+             hidden rather than showing a "coming soon" placeholder. -->
+        <section id="chatCard" class="panel card chat-panel card-full" hidden>
           <div class="card-left">
             <div class="card-title">សន្ទនា (Chat)</div>
             <div class="card-sub">coming soon</div>

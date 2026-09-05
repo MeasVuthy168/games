@@ -91,6 +91,21 @@ body{
 }
 .icon-btn:active{ transform:translateY(1px) }
 .topbar .spacer{ flex:1 }
+.topbar-back{ font-size:1.4rem; line-height:1; padding:.3rem .7rem .4rem; }
+
+/* Top-bar "more" menu (e.g. notifications.html's Mark all read / Delete all) */
+.topbar-menu{ position:relative; }
+.topbar-menu-list{
+  position:absolute; right:0; top:calc(100% + 6px); z-index:30;
+  min-width:170px; background:var(--panel); color:var(--ink);
+  border-radius:.7rem; box-shadow:var(--shadow); overflow:hidden;
+}
+.topbar-menu-list button{
+  display:block; width:100%; text-align:start; background:none; border:none;
+  padding:.7rem .9rem; font-weight:700; font-size:.85rem; color:var(--ink); cursor:pointer;
+}
+.topbar-menu-list button:hover{ background:#eef4ff; }
+.topbar-menu-list button.danger{ color:#a3312f; }
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }

@@ -9,7 +9,7 @@ const CORE = [
   './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js',
   './js/tournament.js','./js/rewards.js','./js/tournament-page.js','./js/rewards-page.js','./js/ai-vs-ai.js',
   './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/verify-email-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js',
-  './js/theme-init.js','./js/toast.js',
+  './js/theme-init.js','./js/toast.js','./js/topbar-back.js',
   './manifest.webmanifest',
   './assets/fonts/Krasar-Regular.ttf',
   './assets/board/wood_light.jpg','./assets/board/wood_dark.jpg',

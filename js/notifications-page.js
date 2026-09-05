@@ -10,6 +10,7 @@
 // (see groupNotifications below).
 import * as Api from './api.js';
 import { notificationsEnabled } from './notif-badge.js';
+import { initTranslations } from './i18n.js';
 
 const LABELS = {
   friend_request: (d) => ({ emoji: '👤', text: `<b>${esc(d.fromDisplayName)}</b> sent you a friend request` }),
@@ -121,6 +122,7 @@ function attachSwipe(row, { onSwipeLeft, onSwipeRight, onTap }) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  initTranslations();
   const root = document.getElementById('notifRoot');
   const notifMenu = document.getElementById('notifMenu');
   const notifMenuList = document.getElementById('notifMenuList');

@@ -1,8 +1,10 @@
 // js/friends-page.js — controller for friends.html's real online-friends section.
 import * as Api from './api.js';
 import { showToast } from './toast.js';
+import { initTranslations, t } from './i18n.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   const signedOutView = document.getElementById('signedOutView');
   const signedInView = document.getElementById('signedInView');
 
@@ -24,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const friendsList = document.getElementById('friendsList');
   const friendsEmpty = document.getElementById('friendsEmpty');
 
-  meName.textContent = Api.getCurrentUser()?.displayName || 'You';
+  meName.textContent = Api.getCurrentUser()?.displayName || t('friends.you');
 
   document.getElementById('btnSignOut').addEventListener('click', () => {
     Api.signOut();
@@ -90,10 +92,10 @@ document.addEventListener('DOMContentLoaded', () => {
           emoji: f.avatarEmoji,
           name: f.displayName,
           actions: [
-            btn('Play', 'btn-play', () => challenge(f.userId)),
-            btn('Message', 'btn-message', () => { location.href = `chat.html?friend=${f.userId}`; }),
-            btn('Remove', 'btn-remove', async () => {
-              if (!confirm(`Remove ${f.displayName} as a friend?`)) return;
+            btn(t('friends.play'), 'btn-play', () => challenge(f.userId)),
+            btn(t('friends.message'), 'btn-message', () => { location.href = `chat.html?friend=${f.userId}`; }),
+            btn(t('friends.remove'), 'btn-remove', async () => {
+              if (!confirm(t('friends.removeConfirm', { name: f.displayName }))) return;
               await Api.removeFriend(f.userId);
               loadFriends();
             }),
@@ -103,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (err) {
       friendsList.innerHTML = '';
       friendsEmpty.hidden = false;
-      friendsEmpty.textContent = err.message || 'Could not load friends.';
+      friendsEmpty.textContent = err.message || t('friends.couldNotLoad');
     }
   }
 
@@ -118,17 +120,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const amChallenger = g.myColor === 'w';
         let sub, actions;
         if (g.status === 'pending' && amChallenger) {
-          sub = 'Waiting for them to accept';
-          actions = [btn('Cancel', 'btn-decline', async () => { await Api.declineGame(g.id).catch(() => {}); loadGames(); })];
+          sub = t('friends.waitingAccept');
+          actions = [btn(t('friends.cancel'), 'btn-decline', async () => { await Api.declineGame(g.id).catch(() => {}); loadGames(); })];
         } else if (g.status === 'pending') {
-          sub = 'Challenged you to a game';
+          sub = t('friends.challengedYou');
           actions = [
-            btn('Accept', 'btn-accept', () => { location.href = `play.html?mode=online&gameId=${g.id}`; }),
-            btn('Decline', 'btn-decline', async () => { await Api.declineGame(g.id); loadGames(); }),
+            btn(t('friends.accept'), 'btn-accept', () => { location.href = `play.html?mode=online&gameId=${g.id}`; }),
+            btn(t('friends.decline'), 'btn-decline', async () => { await Api.declineGame(g.id); loadGames(); }),
           ];
         } else {
-          sub = g.myTurn ? 'Your move' : `Waiting for ${g.opponentName}`;
-          actions = [btn('Continue', 'btn-play', () => { location.href = `play.html?mode=online&gameId=${g.id}`; })];
+          sub = g.myTurn ? t('friends.yourMove') : t('friends.waitingFor', { name: g.opponentName });
+          actions = [btn(t('friends.continue'), 'btn-play', () => { location.href = `play.html?mode=online&gameId=${g.id}`; })];
         }
         gamesList.appendChild(personRow({ emoji: g.opponentAvatar, name: g.opponentName, sub, actions }));
       }
@@ -147,8 +149,8 @@ document.addEventListener('DOMContentLoaded', () => {
           emoji: r.avatarEmoji,
           name: r.displayName,
           actions: [
-            btn('Accept', 'btn-accept', async () => { await Api.acceptFriendRequest(r.requestId); loadRequests(); loadFriends(); }),
-            btn('Decline', 'btn-decline', async () => { await Api.declineFriendRequest(r.requestId); loadRequests(); }),
+            btn(t('friends.accept'), 'btn-accept', async () => { await Api.acceptFriendRequest(r.requestId); loadRequests(); loadFriends(); }),
+            btn(t('friends.decline'), 'btn-decline', async () => { await Api.declineFriendRequest(r.requestId); loadRequests(); }),
           ],
         }));
       }
@@ -171,10 +173,10 @@ document.addEventListener('DOMContentLoaded', () => {
           emoji: u.avatarEmoji,
           name: `${u.displayName} (${u.email})`,
           actions: already
-            ? [btn('Friend ✓', 'btn-remove', () => {})]
-            : [btn('Add Friend', 'btn-accept', async (e) => {
+            ? [btn(t('friends.alreadyFriend'), 'btn-remove', () => {})]
+            : [btn(t('friends.addFriend'), 'btn-accept', async (e) => {
                 e.target.disabled = true;
-                e.target.textContent = 'Sent';
+                e.target.textContent = t('friends.sent');
                 try { await Api.sendFriendRequest(u.id); loadRequests(); } catch (err) { showToast(err.message, 'error'); }
               })],
         }));
@@ -182,11 +184,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!users.length) {
         const none = document.createElement('div');
         none.className = 'empty-note';
-        none.textContent = 'No matching users.';
+        none.textContent = t('friends.noMatches');
         searchResults.appendChild(none);
       }
     } catch (err) {
-      searchResults.innerHTML = `<div class="empty-note">${err.message || 'Search failed'}</div>`;
+      searchResults.innerHTML = `<div class="empty-note">${err.message || t('friends.searchFailed')}</div>`;
     }
   }
 

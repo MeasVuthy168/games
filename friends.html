@@ -71,8 +71,8 @@
       <section class="online-section" id="signedOutView" hidden>
         <div class="card card-full clickable" id="btnGoSignIn" style="cursor:pointer">
           <div class="card-left">
-            <div class="card-title">Sign in for real online friends</div>
-            <div class="card-sub">Add friends by email, chat, and get notifications</div>
+            <div class="card-title" data-i18n="friends.signedOut.title">Sign in for real online friends</div>
+            <div class="card-sub" data-i18n="friends.signedOut.sub">Add friends by email, chat, and get notifications</div>
           </div>
           <div class="card-right">›</div>
         </div>
@@ -80,44 +80,44 @@
 
       <section class="online-section" id="signedInView" hidden>
         <div class="online-header">
-          <h3>Online Friends</h3>
-          <div class="signed-in-as">Signed in as <strong id="meName"></strong><button id="btnSignOut" type="button">Sign out</button></div>
+          <h3 data-i18n="friends.onlineFriends">Online Friends</h3>
+          <div class="signed-in-as"><span data-i18n="friends.signedInAs">Signed in as</span> <strong id="meName"></strong><button id="btnSignOut" type="button" data-i18n="friends.signOut">Sign out</button></div>
         </div>
 
         <div class="search-row">
-          <input type="text" id="searchInput" placeholder="Search by name or email…" />
-          <button id="btnSearch" type="button">Search</button>
+          <input type="text" id="searchInput" placeholder="Search by name or email…" data-i18n-placeholder="friends.searchPlaceholder" />
+          <button id="btnSearch" type="button" data-i18n="friends.search">Search</button>
         </div>
         <div id="searchResults"></div>
 
-        <div class="section-label" id="incomingLabel" hidden>Friend Requests</div>
+        <div class="section-label" id="incomingLabel" hidden data-i18n="friends.requests">Friend Requests</div>
         <div id="incomingList"></div>
 
-        <div class="section-label" id="gamesLabel" hidden>Games</div>
+        <div class="section-label" id="gamesLabel" hidden data-i18n="friends.games">Games</div>
         <div id="gamesList"></div>
 
-        <div class="section-label">My Friends</div>
+        <div class="section-label" data-i18n="friends.myFriends">My Friends</div>
         <div id="friendsList"></div>
-        <div class="empty-note" id="friendsEmpty" hidden>No friends yet — search above to add some.</div>
+        <div class="empty-note" id="friendsEmpty" hidden data-i18n="friends.empty">No friends yet — search above to add some.</div>
       </section>
     </main>
 
     <!-- Auto-hide bottom nav -->
     <footer id="appTabbar" class="home-nav">
       <a class="nav-item" href="index.html">
-        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span>
       </a>
       <a class="nav-item active" href="friends.html" aria-current="page">
-        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span>
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span>
       </a>
       <a class="nav-item" href="play.html">
-        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span>
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span>
       </a>
       <a class="nav-item" href="settings.html">
-        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span>
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span>
       </a>
       <a class="nav-item" href="notifications.html">
-        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span>
       </a>
     </footer>
     <div id="bottomSpacer" aria-hidden="true"></div>

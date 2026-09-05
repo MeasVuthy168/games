@@ -1,7 +1,9 @@
 // js/rewards-page.js — controller for rewards.html.
 import * as Rewards from './rewards.js';
+import { initTranslations } from './i18n.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   Rewards.recordLoginToday();
 
   const streakLine = document.getElementById('streakLine');

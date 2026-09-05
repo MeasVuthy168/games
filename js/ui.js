@@ -9,6 +9,7 @@ import * as Rewards from './rewards.js';
 import * as Api from './api.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 import { showToast } from './toast.js';
+import { initTranslations } from './i18n.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 
@@ -217,6 +218,7 @@ document.addEventListener('click', (e)=>{
 /* ---------------- main UI ---------------- */
 
 export async function initUI() {
+  initTranslations();
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
   const btnReset = document.getElementById('btnReset');

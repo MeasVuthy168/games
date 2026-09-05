@@ -5,6 +5,7 @@
 // (if not push-instant) chat.
 import * as Api from './api.js';
 import { showToast } from './toast.js';
+import { initTranslations } from './i18n.js';
 
 const POLL_MS = 4000;
 
@@ -148,6 +149,7 @@ async function renderThread(friendId) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   if (!Api.isSignedIn()) {
     location.href = `auth.html?next=${encodeURIComponent(location.pathname.split('/').pop() + location.search)}`;
     return;

@@ -17,6 +17,12 @@
     recordLoginToday();
   </script>
 
+  <!-- Fill in a real Google OAuth Client ID here to enable "Sign in with
+       Google" — see js/auth-page.js, which hides the button entirely when
+       this is left blank. -->
+  <meta name="google-signin-client-id" content="" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
   <link rel="stylesheet" href="styles.css" />
   <script type="module" src="js/auth-page.js"></script>
 
@@ -47,6 +53,9 @@
     .field-row{ display:flex; gap:.5rem; align-items:flex-end; }
     .field-row .field{ flex:1; }
     .field-row button{ white-space:nowrap; }
+    .google-signin-wrap{ display:flex; justify-content:center; margin-bottom:.8rem; }
+    .auth-divider{ display:flex; align-items:center; gap:.6rem; margin:0 0 .8rem; color:var(--ink); opacity:.55; font-size:.8rem; font-weight:700; }
+    .auth-divider::before, .auth-divider::after{ content:""; flex:1; height:1px; background:currentColor; opacity:.3; }
   </style>
 </head>
 <body>
@@ -67,6 +76,11 @@
           <button class="auth-tab" id="tabSignUp" type="button">Sign Up</button>
         </div>
 
+        <div id="googleSignInSection" hidden>
+          <div class="google-signin-wrap"><div id="googleSignInBtn"></div></div>
+          <div class="auth-divider"><span>or</span></div>
+        </div>
+
         <div id="authMsg"></div>
 
         <form class="auth-form" id="formSignIn" onsubmit="return false">
@@ -85,7 +99,11 @@
           </div>
 
           <div class="id-group" id="suEmailGroup">
-            <label class="field"><span>Email</span><input type="email" id="suEmail" autocomplete="email" /></label>
+            <div class="field-row">
+              <label class="field"><span>Email</span><input type="email" id="suEmail" autocomplete="email" /></label>
+              <button class="secondary" id="btnSendEmailCode" type="button">Send code</button>
+            </div>
+            <label class="field" id="suEmailCodeField" hidden><span>Verification code</span><input type="text" id="suEmailCode" inputmode="numeric" autocomplete="one-time-code" /></label>
           </div>
 
           <div class="id-group" id="suPhoneGroup" hidden>
@@ -110,11 +128,11 @@
     </main>
 
     <footer id="appTabbar" class="home-nav">
-      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span></a>
-      <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span></a>
-      <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span></a>
-      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span></a>
-      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span></a>
+      <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span></a>
+      <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span></a>
+      <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span></a>
+      <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span></a>
+      <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span></a>
     </footer>
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>

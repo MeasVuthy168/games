@@ -34,7 +34,9 @@
   <script type="module" src="js/notif-badge.js"></script>
   <script type="module">
     import { recordLoginToday } from './js/rewards.js';
+    import { initTranslations } from './js/i18n.js';
     recordLoginToday();
+    initTranslations();
   </script>
   <link rel="stylesheet" href="styles.css" />
 
@@ -96,38 +98,38 @@
 
     <!-- Main -->
     <main class="home-main">
-      <button id="installBtn" class="install-btn">📲 ធ្វើការតំឡើងកម្មវិធី (Install App)</button>
+      <button id="installBtn" class="install-btn" data-i18n="home.install">📲 ធ្វើការតំឡើងកម្មវិធី (Install App)</button>
 
       <div class="menu-grid">
         <!-- Only one level: Master -->
         <button id="btnVsAI" class="menu-card" type="button">
           <div class="card-emoji">🤖</div>
-          <span>លេងជាមួយ AI (Master)</span>
+          <span data-i18n="home.vsAI">លេងជាមួយ AI (Master)</span>
           <small id="aiLast" class="last-choice" style="display:none"></small>
         </button>
 
         <a id="btnFriend" class="menu-card" href="play.html?mode=friend">
           <div class="card-emoji">👥</div>
-          <span>លេងជាមួយមិត្ត</span>
-          <small class="last-choice" style="display:block">លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass &amp; Play)</small>
+          <span data-i18n="home.vsFriend">លេងជាមួយមិត្ត</span>
+          <small class="last-choice" style="display:block" data-i18n="home.vsFriendSub">លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass &amp; Play)</small>
         </a>
 
         <a id="btnFriendOnline" class="menu-card" href="friends.html">
           <div class="card-emoji">🌐</div>
-          <span>លេងជាមួយមិត្តភក្តិ (Online)</span>
-          <small class="last-choice" style="display:block">ប្រកួតជាមួយមិត្តតាមអនឡាញ គ្រប់ទីកន្លែង</small>
+          <span data-i18n="home.online">លេងជាមួយមិត្តភក្តិ (Online)</span>
+          <small class="last-choice" style="display:block" data-i18n="home.onlineSub">ប្រកួតជាមួយមិត្តតាមអនឡាញ គ្រប់ទីកន្លែង</small>
         </a>
 
         <a id="btnTournament" class="menu-card" href="tournament.html">
           <div class="card-emoji">🏆</div>
-          <span>Tournament</span>
-          <small class="last-choice" style="display:block">4-round AI bracket · win coins</small>
+          <span data-i18n="home.tournament">Tournament</span>
+          <small class="last-choice" style="display:block" data-i18n="home.tournamentSub">4-round AI bracket · win coins</small>
         </a>
 
         <a id="btnRewards" class="menu-card" href="rewards.html">
           <div class="card-emoji">🎁</div>
-          <span>Daily Rewards</span>
-          <small class="last-choice" style="display:block">Real objectives from your games</small>
+          <span data-i18n="home.rewards">Daily Rewards</span>
+          <small class="last-choice" style="display:block" data-i18n="home.rewardsSub">Real objectives from your games</small>
         </a>
       </div>
     </main>
@@ -137,23 +139,23 @@
       <div class="modal-backdrop" data-close></div>
       <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="roleTitle">
         <header class="modal-header">
-          <h3 id="roleTitle">ជ្រើសរើសពណ៌របស់អ្នក</h3>
+          <h3 id="roleTitle" data-i18n="home.roleTitle">ជ្រើសរើសពណ៌របស់អ្នក</h3>
           <button class="icon-btn" data-close type="button" aria-label="Close">✖</button>
         </header>
         <div class="modal-body">
-          <p class="role-hint">អ្នកចង់លេងជាមួយពណ៌អ្វី ប្រឆាំងនឹង Master?</p>
+          <p class="role-hint" data-i18n="home.roleHint">អ្នកចង់លេងជាមួយពណ៌អ្វី ប្រឆាំងនឹង Master?</p>
           <div class="role-options">
             <button class="role-opt" data-color="w" type="button">
               <span class="role-swatch role-swatch-w"></span>
-              <span>ស (White) <small class="role-opt-sub">អ្នកចាប់ផ្ដើមមុន</small></span>
+              <span><span data-i18n="home.roleWhite">ស (White)</span> <small class="role-opt-sub" data-i18n="home.roleWhiteSub">អ្នកចាប់ផ្ដើមមុន</small></span>
             </button>
             <button class="role-opt" data-color="b" type="button">
               <span class="role-swatch role-swatch-b"></span>
-              <span>ខ្មៅ (Black) <small class="role-opt-sub">Master ចាប់ផ្ដើមមុន</small></span>
+              <span><span data-i18n="home.roleBlack">ខ្មៅ (Black)</span> <small class="role-opt-sub" data-i18n="home.roleBlackSub">Master ចាប់ផ្ដើមមុន</small></span>
             </button>
             <button class="role-opt" data-color="r" type="button">
               <span class="role-swatch role-swatch-r">🎲</span>
-              <span>ចៃដន្យ (Random) <small class="role-opt-sub">ចាប់ឆ្នោតពណ៌</small></span>
+              <span><span data-i18n="home.roleRandom">ចៃដន្យ (Random)</span> <small class="role-opt-sub" data-i18n="home.roleRandomSub">ចាប់ឆ្នោតពណ៌</small></span>
             </button>
           </div>
         </div>
@@ -163,19 +165,19 @@
     <!-- Bottom navigation -->
     <footer id="appTabbar" class="bottom-bar">
       <a class="nav-item active" href="index.html" aria-current="page">
-        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span>
       </a>
       <a class="nav-item" href="friends.html">
-        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span>
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span>
       </a>
       <a class="nav-item" href="play.html">
-        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span>
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span>
       </a>
       <a class="nav-item" href="settings.html">
-        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span>
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span>
       </a>
       <a class="nav-item" href="notifications.html">
-        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span>
       </a>
     </footer>
     <div id="bottomSpacer" aria-hidden="true"></div>

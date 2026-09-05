@@ -37,34 +37,12 @@
     .profile-name-row{ display:flex; align-items:center; gap:.4rem; font-weight:800; font-size:1.15rem; color:var(--ink); }
     .profile-name-row button{ background:none; border:none; cursor:pointer; font-size:1rem; color:var(--blue); padding:.2rem; }
 
-    .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; padding:0 1rem 1.1rem; }
-    .stat-tile{
-      background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
-      padding:.7rem .5rem; text-align:center; border:1px solid rgba(13,45,92,.06);
-    }
-    .stat-tile .stat-value{ font-weight:800; font-size:1.15rem; color:var(--blue); }
-    .stat-tile .stat-label{ font-size:.72rem; opacity:.7; font-weight:700; margin-top:.15rem; }
-
     .avatar-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:.5rem; margin:.3rem 0 .8rem; }
     .avatar-choice{
       font-size:1.6rem; padding:.5rem 0; border-radius:.7rem; border:2px solid #e6ecf7;
       background:#f7f9fd; cursor:pointer;
     }
     .avatar-choice.selected{ border-color:var(--blue); background:#eef4ff; }
-
-    .history-list{ max-height:55vh; overflow-y:auto; }
-    .history-row{
-      display:flex; align-items:center; justify-content:space-between; gap:.5rem;
-      padding:.55rem 0; border-bottom:1px solid rgba(13,45,92,.08);
-    }
-    .history-row:last-child{ border-bottom:none; }
-    .history-meta{ display:flex; flex-direction:column; gap:.1rem; min-width:0; }
-    .history-opponent{ font-weight:700; font-size:.9rem; color:var(--ink); }
-    .history-date{ font-size:.72rem; opacity:.65; }
-    .history-badge{ font-weight:800; font-size:.75rem; padding:.2rem .6rem; border-radius:999px; flex:none; }
-    .history-badge.win{ background:#e4f8ea; color:#1c7a3a; }
-    .history-badge.loss{ background:#fdeaea; color:#a3312f; }
-    .history-badge.draw{ background:#eef1f6; color:#44506b; }
 
     .name-input{
       width:100%; font:inherit; padding:.6rem .7rem; border-radius:.6rem;
@@ -105,14 +83,6 @@
           </div>
         </div>
 
-        <div class="card card-full" id="verifyEmailBanner" hidden>
-          <div class="card-left">
-            <div class="card-title">Verify your email</div>
-            <div class="card-sub" id="verifyEmailSub">Confirm your email to secure your account.</div>
-          </div>
-          <div class="card-right"><button class="pill" id="btnResendVerify">Resend</button></div>
-        </div>
-
         <details class="card card-full exp">
           <summary>
             <div class="card-left"><div class="card-title">Server</div><div class="card-sub">Friends/chat backend address (advanced)</div></div>
@@ -143,36 +113,6 @@
           </div>
           <div class="card-right"><button class="btn-danger" id="btnDeleteAccount">Delete</button></div>
         </div>
-      </div>
-
-      <div class="stat-grid">
-        <div class="stat-tile">
-          <div class="stat-value" id="statCoins">0</div>
-          <div class="stat-label" data-i18n="profile.coins">Coins</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-value" id="statAILevel">5</div>
-          <div class="stat-label" data-i18n="profile.aiLevel">AI Level</div>
-        </div>
-        <div class="stat-tile">
-          <div class="stat-value" id="statWinRate">—</div>
-          <div class="stat-label" data-i18n="profile.winRate">Win Rate</div>
-        </div>
-      </div>
-
-      <div class="card-list">
-        <details class="card card-full exp" open>
-          <summary>
-            <div class="card-left">
-              <div class="card-title" data-i18n="profile.history.title">History</div>
-              <div class="card-sub" data-i18n="profile.history.sub">Your completed games</div>
-            </div>
-            <div class="card-right caret">›</div>
-          </summary>
-          <div class="card-body">
-            <div class="history-list" id="historyList"></div>
-          </div>
-        </details>
       </div>
     </main>
 
@@ -235,19 +175,19 @@
          of its own — it's reached from Settings, so Setting stays lit. -->
     <footer id="appTabbar" class="home-nav">
       <a class="nav-item" href="index.html">
-        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span>Home</span>
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span>
       </a>
       <a class="nav-item" href="friends.html">
-        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span>Friend</span>
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span>
       </a>
       <a class="nav-item" href="play.html">
-        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span>Play</span>
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span>
       </a>
       <a class="nav-item active" href="settings.html">
-        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span>Setting</span>
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span>
       </a>
       <a class="nav-item" href="notifications.html">
-        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span>Notification</span>
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span>
       </a>
     </footer>
     <div id="bottomSpacer" aria-hidden="true"></div>

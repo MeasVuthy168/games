@@ -6,10 +6,8 @@
 // account) — moved here from settings.html so Settings stays about app
 // preferences and this page owns "your account."
 
-import { getCoins } from './coins.js';
-import { getHistory, computeWinRate } from './history.js';
 import { getProfile, setProfileName, setProfileAvatar, applyAvatarToElement, BUILTIN_AVATARS } from './profile-data.js';
-import { setLanguage, applyTranslations, t } from './i18n.js';
+import { setLanguage, applyTranslations } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
 import { showToast } from './toast.js';
@@ -20,12 +18,6 @@ const LS_KEY = 'kc_settings_v1';
 function loadSettings() {
   try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null') || {}; }
   catch { return {}; }
-}
-
-function fmtDuration(sec) {
-  const s = Math.max(0, sec | 0);
-  const m = Math.floor(s / 60), r = s % 60;
-  return `${m}:${String(r).padStart(2, '0')}`;
 }
 
 // Resize+compress client-side before ever touching localStorage or the
@@ -58,10 +50,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const heroAvatar  = document.getElementById('heroAvatar');
   const heroName    = document.getElementById('heroName');
-  const statCoins   = document.getElementById('statCoins');
-  const statAILevel = document.getElementById('statAILevel');
-  const statWinRate = document.getElementById('statWinRate');
-  const historyList = document.getElementById('historyList');
 
   // Signed in → the real account is "the" profile; signed out → the local
   // guest profile. Both shapes are { name, avatar:{type,value} }.
@@ -84,54 +72,7 @@ document.addEventListener('DOMContentLoaded', () => {
     applyAvatarToElement(heroAvatar, p.avatar);
   }
 
-  function renderStats() {
-    statCoins.textContent = String(getCoins());
-    const lvl = parseInt(loadSettings().aiLevel, 10);
-    statAILevel.textContent = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? String(lvl) : '5';
-    const rate = computeWinRate();
-    statWinRate.textContent = rate === null ? t('profile.notRated') : `${rate}%`;
-  }
-
-  function renderHistory() {
-    const games = getHistory();
-    historyList.innerHTML = '';
-    if (games.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'card-sub';
-      empty.textContent = t('profile.history.empty');
-      historyList.appendChild(empty);
-      return;
-    }
-    for (const g of games) {
-      const row = document.createElement('div');
-      row.className = 'history-row';
-
-      const meta = document.createElement('div');
-      meta.className = 'history-meta';
-      const opp = document.createElement('div');
-      opp.className = 'history-opponent';
-      opp.textContent = g.opponent;
-      const date = document.createElement('div');
-      date.className = 'history-date';
-      const d = new Date(g.date);
-      const when = isNaN(d.getTime()) ? g.date : d.toLocaleString();
-      date.textContent = `${when} · ${g.moves} ${t('profile.history.moves')} · ${fmtDuration(g.duration)}`;
-      meta.appendChild(opp);
-      meta.appendChild(date);
-
-      const badge = document.createElement('div');
-      badge.className = `history-badge ${g.result}`;
-      badge.textContent = t(`profile.history.${g.result}`);
-
-      row.appendChild(meta);
-      row.appendChild(badge);
-      historyList.appendChild(row);
-    }
-  }
-
   renderProfile();
-  renderStats();
-  renderHistory();
   applyTranslations();
 
   /* ---------------- shared modal helpers ---------------- */
@@ -229,13 +170,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  /* ---------------- account (sign in/out, switch, verify email, server, delete) ---------------- */
+  /* ---------------- account (sign in/out, switch, server, delete) ---------------- */
+  // No "verify your email" banner here anymore — sign-up now requires the
+  // emailed/texted code before the account is even created (see
+  // auth-page.js), so every account is already verified by the time it
+  // can sign in.
   const accountSub = document.getElementById('accountSub');
   const btnAccountAction = document.getElementById('btnAccountAction');
   const btnSwitchAccount = document.getElementById('btnSwitchAccount');
-  const verifyEmailBanner = document.getElementById('verifyEmailBanner');
-  const verifyEmailSub = document.getElementById('verifyEmailSub');
-  const btnResendVerify = document.getElementById('btnResendVerify');
   const changePasswordCard = document.getElementById('changePasswordCard');
   const deleteAccountCard = document.getElementById('deleteAccountCard');
 
@@ -245,18 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
       accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
       btnAccountAction.textContent = 'Sign Out';
       if (btnSwitchAccount) btnSwitchAccount.hidden = false;
-      if (verifyEmailBanner) {
-        const needsVerify = !!u?.email && !u?.emailVerified;
-        verifyEmailBanner.hidden = !needsVerify;
-        if (needsVerify) verifyEmailSub.textContent = `Confirm ${u.email} to secure your account.`;
-      }
       if (changePasswordCard) changePasswordCard.hidden = false;
       if (deleteAccountCard) deleteAccountCard.hidden = false;
     } else {
       accountSub.textContent = 'Not signed in';
       btnAccountAction.textContent = 'Sign In';
       if (btnSwitchAccount) btnSwitchAccount.hidden = true;
-      if (verifyEmailBanner) verifyEmailBanner.hidden = true;
       if (changePasswordCard) changePasswordCard.hidden = true;
       if (deleteAccountCard) deleteAccountCard.hidden = true;
     }
@@ -264,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderProfile();
   }
   renderAccount();
-  // Refresh from the server once so a link verified elsewhere (another tab,
+  // Refresh from the server once so an edit made elsewhere (another tab,
   // another device) is reflected here without waiting for the next sign-in.
   if (Api.isSignedIn()) Api.fetchMe().then(renderAccount).catch(() => {});
 
@@ -277,20 +213,6 @@ document.addEventListener('DOMContentLoaded', () => {
   btnSwitchAccount?.addEventListener('click', () => {
     Api.signOut();
     location.href = 'auth.html?next=profile.html';
-  });
-  btnResendVerify?.addEventListener('click', async () => {
-    btnResendVerify.disabled = true;
-    const label = btnResendVerify.textContent;
-    btnResendVerify.textContent = 'Sending…';
-    try {
-      await Api.resendVerification();
-      showToast('Verification email sent — check your inbox.', 'success');
-    } catch (err) {
-      showToast(err.message || 'Could not resend verification email.', 'error');
-    } finally {
-      btnResendVerify.disabled = false;
-      btnResendVerify.textContent = label;
-    }
   });
 
   const apiBaseInput = document.getElementById('apiBaseInput');

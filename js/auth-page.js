@@ -1,5 +1,6 @@
 // js/auth-page.js — controller for auth.html (sign in / sign up / forgot password).
 import * as Api from './api.js';
+import { initTranslations } from './i18n.js';
 
 function nextUrl() {
   const n = new URLSearchParams(location.search).get('next');
@@ -7,6 +8,7 @@ function nextUrl() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTranslations();
   if (Api.isSignedIn()) {
     location.href = nextUrl();
     return;
@@ -31,6 +33,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const suCodeField = document.getElementById('suCodeField');
   const suCode = document.getElementById('suCode');
   const btnSendCode = document.getElementById('btnSendCode');
+  const suEmailCodeField = document.getElementById('suEmailCodeField');
+  const suEmailCode = document.getElementById('suEmailCode');
+  const btnSendEmailCode = document.getElementById('btnSendEmailCode');
   let signupMode = 'email';
 
   function setSignupMode(mode) {
@@ -63,6 +68,26 @@ document.addEventListener('DOMContentLoaded', () => {
     } finally {
       btnSendCode.disabled = false;
       btnSendCode.textContent = label;
+    }
+  });
+
+  btnSendEmailCode.addEventListener('click', async () => {
+    showMsg('');
+    const email = suEmail.value.trim();
+    if (!email) { showMsg('Enter your email first.'); return; }
+    btnSendEmailCode.disabled = true;
+    const label = btnSendEmailCode.textContent;
+    btnSendEmailCode.textContent = 'Sending…';
+    try {
+      await Api.sendEmailCode(email);
+      suEmailCodeField.hidden = false;
+      suEmailCode.required = true;
+      showMsg('Code sent — check your inbox.', 'ok');
+    } catch (err) {
+      showMsg(err.message || 'Could not send code');
+    } finally {
+      btnSendEmailCode.disabled = false;
+      btnSendEmailCode.textContent = label;
     }
   });
 
@@ -111,7 +136,7 @@ document.addEventListener('DOMContentLoaded', () => {
         displayName: document.getElementById('suName').value,
         email: signupMode === 'email' ? suEmail.value : undefined,
         phone: signupMode === 'phone' ? suPhone.value.trim() : undefined,
-        code: signupMode === 'phone' ? suCode.value.trim() : undefined,
+        code: signupMode === 'phone' ? suCode.value.trim() : (signupMode === 'email' ? suEmailCode.value.trim() : undefined),
         password: document.getElementById('suPassword').value,
       });
       location.href = nextUrl();
@@ -130,4 +155,30 @@ document.addEventListener('DOMContentLoaded', () => {
       showMsg(err.message || 'Something went wrong');
     }
   });
+
+  /* ---------------- Sign in with Google ---------------- */
+  // Only shown once a real Client ID is configured (see the meta tag in
+  // auth.html) — Google's script itself would otherwise reject an empty
+  // one, so this button simply never appears rather than showing a broken
+  // one. No client secret involved on either end of this flow (see the
+  // backend's POST /google for the trust chain).
+  const googleClientId = document.querySelector('meta[name="google-signin-client-id"]')?.content?.trim();
+  if (googleClientId) {
+    async function handleGoogleCredential(response) {
+      showMsg('');
+      try {
+        await Api.googleAuth(response.credential);
+        location.href = nextUrl();
+      } catch (err) {
+        showMsg(err.message || 'Google sign-in failed');
+      }
+    }
+    function initGoogle() {
+      google.accounts.id.initialize({ client_id: googleClientId, callback: handleGoogleCredential });
+      google.accounts.id.renderButton(document.getElementById('googleSignInBtn'), { theme: 'outline', size: 'large', width: 280 });
+      document.getElementById('googleSignInSection').hidden = false;
+    }
+    if (window.google?.accounts?.id) initGoogle();
+    else document.querySelector('script[src="https://accounts.google.com/gsi/client"]')?.addEventListener('load', initGoogle);
+  }
 });

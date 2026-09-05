@@ -31,15 +31,9 @@
     .auth-card{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1.3rem 1.2rem; }
     .auth-title{ font-weight:800; font-size:1.2rem; color:var(--blue); text-align:center; margin:0 0 .3rem; }
     .auth-sub{ text-align:center; opacity:.7; font-size:.85rem; margin:0 0 1rem; }
-    .auth-form{ display:flex; flex-direction:column; gap:.7rem; }
-    .auth-form[hidden]{ display:none; }
     .auth-error{ background:#fdeaea; color:#a3312f; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
     .auth-ok{ background:#e4f8ea; color:#1c7a3a; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
-    .auth-link{ text-align:center; font-size:.85rem; }
-    .auth-link a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
     .google-signin-wrap{ display:flex; justify-content:center; margin-bottom:.8rem; }
-    .legacy-toggle{ text-align:center; font-size:.85rem; margin-top:.4rem; }
-    .legacy-toggle a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -60,25 +54,6 @@
         </div>
 
         <div id="authMsg"></div>
-
-        <!-- Sign-up is Google-only now — no email/phone/OTP signup form.
-             Sign In (password) stays reachable behind this toggle so
-             existing password accounts aren't locked out. -->
-        <p class="legacy-toggle"><a id="linkShowLegacySignIn">Sign in with email or phone (existing account)</a></p>
-
-        <form class="auth-form" id="formSignIn" hidden onsubmit="return false">
-          <label class="field"><span>Email or phone number</span><input type="text" id="siIdentifier" required autocomplete="username" /></label>
-          <label class="field"><span>Password</span><input type="password" id="siPassword" required autocomplete="current-password" /></label>
-          <button class="primary" type="submit">Sign In</button>
-          <div class="auth-link"><a id="linkForgot">Forgot password?</a></div>
-        </form>
-
-        <form class="auth-form" id="formForgot" hidden onsubmit="return false">
-          <p class="card-sub">Enter your email and we'll send a reset link.</p>
-          <label class="field"><span>Email</span><input type="email" id="fpEmail" required autocomplete="email" /></label>
-          <button class="primary" type="submit">Send Reset Link</button>
-          <div class="auth-link"><a id="linkBackToSignIn">Back to sign in</a></div>
-        </form>
       </div>
     </main>
 

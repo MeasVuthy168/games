@@ -2,9 +2,10 @@
 // account (displayName/avatarEmoji/avatarUrl, synced via ouk-ai-backend)
 // is the source of truth for identity; signed out, this falls back to the
 // purely local guest profile in profile-data.js. Also hosts account
-// management (sign in/out, email verification, server address, delete
-// account) — moved here from settings.html so Settings stays about app
-// preferences and this page owns "your account."
+// management (sign in/out, delete account) — moved here from settings.html
+// so Settings stays about app preferences and this page owns "your
+// account." Google Sign-In is the only way in, so there's no
+// password/server-address UI here anymore.
 
 import { getProfile, setProfileName, setProfileAvatar, applyAvatarToElement, BUILTIN_AVATARS } from './profile-data.js';
 import { setLanguage, applyTranslations } from './i18n.js';
@@ -178,13 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const accountSub = document.getElementById('accountSub');
   const btnAccountAction = document.getElementById('btnAccountAction');
   const btnSwitchAccount = document.getElementById('btnSwitchAccount');
-  const changePasswordCard = document.getElementById('changePasswordCard');
   const deleteAccountCard = document.getElementById('deleteAccountCard');
-  const passwordCardTitle = document.getElementById('passwordCardTitle');
-  const passwordCardSub = document.getElementById('passwordCardSub');
-  const currentPasswordField = document.getElementById('currentPasswordField');
-  const deleteAccountPasswordField = document.getElementById('deleteAccountPasswordField');
-  const deleteAccountSub = document.getElementById('deleteAccountSub');
 
   function renderAccount() {
     if (Api.isSignedIn()) {
@@ -192,26 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
       accountSub.textContent = `Signed in as ${u?.displayName || u?.email || u?.phone || ''}`;
       btnAccountAction.textContent = 'Sign Out';
       if (btnSwitchAccount) btnSwitchAccount.hidden = false;
-      if (changePasswordCard) changePasswordCard.hidden = false;
       if (deleteAccountCard) deleteAccountCard.hidden = false;
-      // A Google-only account (no password ever set) skips the "current
-      // password" step everywhere — this is the first password it'll ever
-      // have, and being signed in is already proof of identity for delete.
-      const hasPassword = u?.hasPassword !== false;
-      if (currentPasswordField) currentPasswordField.hidden = !hasPassword;
-      if (passwordCardTitle) passwordCardTitle.textContent = hasPassword ? 'Password' : 'Set Password';
-      if (passwordCardSub) passwordCardSub.textContent = hasPassword
-        ? 'Change your password'
-        : 'Create a password so you can also sign in without Google';
-      if (deleteAccountPasswordField) deleteAccountPasswordField.hidden = !hasPassword;
-      if (deleteAccountSub) deleteAccountSub.textContent = hasPassword
-        ? 'This permanently erases your account, friends, chats, and games. This cannot be undone. Enter your password to confirm.'
-        : 'This permanently erases your account, friends, chats, and games. This cannot be undone.';
     } else {
       accountSub.textContent = 'Not signed in';
       btnAccountAction.textContent = 'Sign In';
       if (btnSwitchAccount) btnSwitchAccount.hidden = true;
-      if (changePasswordCard) changePasswordCard.hidden = true;
       if (deleteAccountCard) deleteAccountCard.hidden = true;
     }
     // Identity source (account vs local guest) depends on sign-in state.
@@ -233,46 +213,19 @@ document.addEventListener('DOMContentLoaded', () => {
     location.href = 'auth.html?next=profile.html';
   });
 
-  const apiBaseInput = document.getElementById('apiBaseInput');
-  if (apiBaseInput) apiBaseInput.value = Api.getApiBase();
-  document.getElementById('btnSaveApiBase')?.addEventListener('click', () => {
-    Api.setApiBase(apiBaseInput.value);
-    apiBaseInput.value = Api.getApiBase();
-    showToast('Server address saved.', 'success');
-  });
-
-  /* ---------------- change password ---------------- */
-  const currentPasswordInput = document.getElementById('currentPasswordInput');
-  const newPasswordInput = document.getElementById('newPasswordInput');
-  document.getElementById('btnChangePassword')?.addEventListener('click', async () => {
-    const currentPassword = currentPasswordInput.value;
-    const newPassword = newPasswordInput.value;
-    if (newPassword.length < 8) { showToast('New password must be at least 8 characters', 'error'); return; }
-    try {
-      await Api.changePassword({ currentPassword, newPassword });
-      currentPasswordInput.value = '';
-      newPasswordInput.value = '';
-      showToast('Password updated.', 'success');
-    } catch (err) {
-      showToast(err.message || 'Could not update password.', 'error');
-    }
-  });
-
   /* ---------------- delete account ---------------- */
+  // No password prompt — Google Sign-In is the only way in, so a valid
+  // signed-in session is the sole authorization needed (see the backend's
+  // DELETE /me, which no longer asks for one either).
   const deleteAccountModal = document.getElementById('deleteAccountModal');
-  const deleteAccountPassword = document.getElementById('deleteAccountPassword');
   wireCloseHandlers(deleteAccountModal);
 
   document.getElementById('btnDeleteAccount')?.addEventListener('click', () => {
-    deleteAccountPassword.value = '';
     showModal(deleteAccountModal, true);
   });
   document.getElementById('btnConfirmDeleteAccount')?.addEventListener('click', async () => {
-    const password = deleteAccountPassword.value;
-    const hasPassword = Api.getCurrentUser()?.hasPassword !== false;
-    if (hasPassword && !password) { showToast('Enter your password to confirm.', 'error'); return; }
     try {
-      await Api.deleteAccount(password);
+      await Api.deleteAccount();
       showModal(deleteAccountModal, false);
       showToast('Account deleted.', 'success');
       setTimeout(() => { location.href = 'index.html'; }, 600);

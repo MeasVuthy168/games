@@ -1,8 +1,8 @@
 // Settings controller
-import { LEVELS, MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-engine.js';
 import { pieceThemes, boardThemes } from './themes.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
-import { setLanguage, getLanguage, applyTranslations, t } from './i18n.js';
+import { setLanguage, applyTranslations } from './i18n.js';
+import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL } from './ai-engine.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
 import { notificationsEnabled, setNotificationsEnabled, refreshNotifBadge, requestPushPermission } from './notif-badge.js';
@@ -47,11 +47,6 @@ function setTheme(v){
   else root.removeAttribute('data-theme');
 }
 
-function bandKey(n) {
-  const band = levelBand(n).toLowerCase(); // 'easy'|'medium'|'hard'|'expert'
-  return `settings.band.${band}`;
-}
-
 /* ------------------------------ DOM Ready ------------------------------ */
 document.addEventListener('DOMContentLoaded', ()=>{
 
@@ -84,10 +79,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnResetTimer = document.getElementById('btnResetTimer');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
   const languageRadios = Array.from(document.querySelectorAll('input[name="language"]'));
-  const aiDebugToggle = document.getElementById('aiDebugToggle');
-  const aiLevelRange = document.getElementById('aiLevelRange');
-  const aiLevelValue = document.getElementById('aiLevelValue');
-  const aiLevelBand = document.getElementById('aiLevelBand');
   const pieceThemeName = document.getElementById('pieceThemeName');
   const pieceThemePrev = document.getElementById('pieceThemePrev');
   const pieceThemeNext = document.getElementById('pieceThemeNext');
@@ -103,18 +94,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   incInput.value      = s.increment;
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
   (languageRadios.find(r=>r.value===s.language)||languageRadios[0]).checked = true;
-  if (aiDebugToggle) aiDebugToggle.checked = !!s.aiDebug;
-
-  function renderAILevel(){
-    if (!aiLevelRange) return;
-    aiLevelRange.value = s.aiLevel;
-    if (aiLevelValue) aiLevelValue.textContent = String(s.aiLevel);
-    if (aiLevelBand) {
-      aiLevelBand.setAttribute('data-i18n', bandKey(s.aiLevel));
-      aiLevelBand.textContent = t(bandKey(s.aiLevel));
-    }
-  }
-  renderAILevel();
 
   function renderThemeSteppers(){
     if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
@@ -133,20 +112,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
   instantMoveToggle?.addEventListener('change', ()=>{ s.instantMove=!!instantMoveToggle.checked; saveSettings(s); });
 
-  aiLevelRange?.addEventListener('input', ()=>{
-    s.aiLevel = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, parseInt(aiLevelRange.value, 10) || DEFAULT_LEVEL));
-    renderAILevel();
-    saveSettings(s);
-  });
-  aiDebugToggle?.addEventListener('change', ()=>{ s.aiDebug = !!aiDebugToggle.checked; saveSettings(s); });
-
   languageRadios.forEach(r =>
     r.addEventListener('change', ()=>{
       if(!r.checked) return;
       s.language = r.value; saveSettings(s);
       setLanguage(s.language);
       applyTranslations();
-      renderAILevel(); // band label text depends on language too
     })
   );
 

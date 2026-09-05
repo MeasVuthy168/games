@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
   <script src="js/theme-init.js"></script>
   <script src="js/topbar-back.js" defer></script>
   <title>Setting | Khmer Chess</title>
@@ -136,30 +136,6 @@
             <label class="switch"><input type="checkbox" id="instantMoveToggle" /><span class="slider"></span></label>
           </div>
         </div>
-
-        <details class="card card-full exp">
-          <summary>
-            <div class="card-left"><div class="card-title" data-i18n="settings.ai.title">AI</div><div class="card-sub" data-i18n="settings.ai.sub">Difficulty & engine debug</div></div>
-            <div class="card-right caret">›</div>
-          </summary>
-          <div class="card-body">
-            <label class="field">
-              <span data-i18n="settings.ai.level">AI Level</span>
-              <span class="row-inline" style="align-items:center;margin-top:.1rem">
-                <strong id="aiLevelValue" style="font-size:1.1rem;min-width:1.4em">5</strong>
-                <span class="pill" id="aiLevelBand" data-i18n="settings.band.medium">Medium</span>
-              </span>
-              <input type="range" id="aiLevelRange" min="1" max="10" step="1" />
-            </label>
-            <div class="card-sub">1–2 Easy · 3–5 Medium · 6–8 Hard · 9–10 Expert</div>
-            <div class="card-full" style="padding:.4rem 0 0">
-              <div class="card-left"><div class="card-title" data-i18n="settings.ai.debug.title">AI Debug Mode</div><div class="card-sub" data-i18n="settings.ai.debug.sub">Show search stats panel on the Play screen</div></div>
-              <div class="card-right">
-                <label class="switch"><input type="checkbox" id="aiDebugToggle" /><span class="slider"></span></label>
-              </div>
-            </div>
-          </div>
-        </details>
 
         <details class="card card-full exp">
           <summary>

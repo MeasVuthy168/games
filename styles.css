@@ -25,6 +25,14 @@
   --shadow: 0 8px 24px rgba(0,0,0,.12);
   --bg:#f5f6f7;
 
+  /* Light "chip"/input/bubble backgrounds paired with --ink or --blue text —
+     these must flip in dark mode too, or that text (which itself correctly
+     turns light there) ends up light-on-light and unreadable. */
+  --chip-bg:#eef4ff;
+  --chip-bg-active:#e0ebff;
+  --input-bg:#f7f9fc;
+  --bubble-bg:#eef1f6;
+
   --board-light-img:url("assets/board/wood_light.jpg");
   --board-dark-img:url("assets/board/wood_dark.jpg");
 
@@ -43,6 +51,21 @@
 *{ box-sizing:border-box }
 html,body{ height:100% }
 html, body{ font-family: var(--ui-font); }
+
+/* This is an app, not a document — a long-press shouldn't pop up the
+   browser's native text-selection menu (Copy/Share/Select all/Web
+   search) over board squares, cards, or buttons. Real text entry still
+   needs to select/copy/paste normally, so inputs/textareas/contenteditable
+   opt back in explicitly. */
+*{
+  -webkit-user-select:none; user-select:none;
+  -webkit-touch-callout:none;
+}
+input, textarea, [contenteditable="true"]{
+  -webkit-user-select:text; user-select:text;
+  -webkit-touch-callout:default;
+}
+
 body{
   margin:0;
   color:var(--ink);
@@ -63,6 +86,10 @@ body{
     --ink:#e9edf4;
     --blue:#4d8dff;
     --shadow: 0 8px 24px rgba(0,0,0,.45);
+    --chip-bg:#243252;
+    --chip-bg-active:#2c3d68;
+    --input-bg:#262b35;
+    --bubble-bg:#2a2f3a;
   }
 }
 :root[data-theme="dark"]{
@@ -71,6 +98,10 @@ body{
   --ink:#e9edf4;
   --blue:#4d8dff;
   --shadow: 0 8px 24px rgba(0,0,0,.45);
+  --chip-bg:#243252;
+  --chip-bg-active:#2c3d68;
+  --input-bg:#262b35;
+  --bubble-bg:#2a2f3a;
 }
 
 /* ===== App shell ===== */
@@ -104,7 +135,7 @@ body{
   display:block; width:100%; text-align:start; background:none; border:none;
   padding:.7rem .9rem; font-weight:700; font-size:.85rem; color:var(--ink); cursor:pointer;
 }
-.topbar-menu-list button:hover{ background:#eef4ff; }
+.topbar-menu-list button:hover{ background:var(--chip-bg); }
 .topbar-menu-list button.danger{ color:#a3312f; }
 
 /* ===== Layout ===== */
@@ -231,7 +262,7 @@ body{
 .timers{ width:100% }
 .player-row{
   display:flex; align-items:center; gap:.5rem;
-  background:#fff; border:1px solid #e6e6e6; border-radius:.6rem;
+  background:var(--panel); border:1px solid #e6e6e6; border-radius:.6rem;
   padding:.4rem .7rem; box-shadow:var(--shadow);
 }
 .player-name{ font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -240,7 +271,7 @@ body{
 .player-avatar{
   width:26px; height:26px; border-radius:50%; flex:none;
   display:flex; align-items:center; justify-content:center;
-  font-size:1rem; line-height:1; background:#eef4ff;
+  font-size:1rem; line-height:1; background:var(--chip-bg);
   background-size:cover; background-position:center;
 }
 .clock{
@@ -731,7 +762,7 @@ details.card.card-full > .card-body{
 .field{ display:flex; flex-direction:column; gap:.3rem; font-weight:700; font-size:.85rem; color:var(--ink); }
 .field input{
   font:inherit; padding:.55rem .7rem; border-radius:.6rem; border:1px solid #d7dee8;
-  background:#f7f9fc; color:var(--ink);
+  background:var(--input-bg); color:var(--ink);
 }
 .field input:focus{ outline:2px solid var(--blue); outline-offset:1px; border-color:var(--blue); }
 
@@ -744,7 +775,7 @@ details.card.card-full > .card-body{
   border:none; cursor:pointer; transition:transform .12s ease;
 }
 .primary{ background:var(--blue); color:#fff; }
-.secondary{ background:#eef1f5; color:var(--ink); }
+.secondary{ background:var(--input-bg); color:var(--ink); }
 .primary:active, .secondary:active{ transform:scale(.97); }
 
 /* Toggle switch */
@@ -767,17 +798,17 @@ details.card.card-full > .card-body{
 .pill{
   display:inline-flex; align-items:center; justify-content:center;
   padding:.4rem .9rem; border-radius:999px; border:none;
-  background:#eef4ff; color:var(--blue); font-weight:800; font-size:.85rem;
+  background:var(--chip-bg); color:var(--blue); font-weight:800; font-size:.85rem;
   cursor:pointer; transition:transform .12s ease, background .15s ease;
 }
-.pill:active{ transform:scale(.95); background:#e0ebff; }
+.pill:active{ transform:scale(.95); background:var(--chip-bg-active); }
 
 /* Avatar rendering modes — layers on top of a page-local .avatar base
    (size/border/shadow). Emoji avatars need no extra art assets; uploaded
    photos are shown as a cover-fit background image. */
 .avatar.avatar-emoji{
   display:flex; align-items:center; justify-content:center;
-  font-size:2.1rem; line-height:1; background:#eef4ff;
+  font-size:2.1rem; line-height:1; background:var(--chip-bg);
 }
 .avatar.avatar-image{ background-size:cover; background-position:center; }
 
@@ -792,7 +823,7 @@ details.card.card-full > .card-body{
 .online-chat-msgs .msg-row.me{ justify-content:flex-end; }
 .online-chat-msgs .msg-bubble{
   max-width:80%; padding:.4rem .65rem; border-radius:.9rem; font-size:.85rem; line-height:1.3;
-  background:#eef1f6; color:var(--ink);
+  background:var(--bubble-bg); color:var(--ink);
 }
 .online-chat-msgs .msg-row.me .msg-bubble{ background:var(--blue); color:#fff; }
 .online-chat-form{ display:flex; gap:.4rem; }

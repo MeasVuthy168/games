@@ -21,6 +21,10 @@
     .profile-hero{
       flex-direction:column; align-items:center; gap:.6rem;
       padding:1.5rem 1rem 1.2rem !important; text-align:center;
+      /* Match the same 1rem side inset every card below it already has
+         (via .card-list's own padding) — without this it sits flush
+         against the screen edges instead of lining up with the rest. */
+      margin:0 1rem; width:auto;
     }
     .avatar-wrap{ position:relative; display:inline-block; }
     .profile-hero .avatar{

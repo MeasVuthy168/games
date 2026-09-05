@@ -3,10 +3,21 @@
 // Real unread count from the backend; respects the user's Settings ->
 // Notifications on/off toggle (kc_notif_enabled_v1) and is a no-op when
 // signed out.
+//
+// Also surfaces brand-new notifications two extra ways, on any page
+// (except notifications.html, which already shows its own live list):
+// an in-app toast, and — if the user has granted permission — a real OS
+// notification (shows in the system notification center / iOS Control
+// Center's notification list, not just inside the page). That native
+// notification only fires while this page is open and polling; there's
+// no service-worker push subscription behind it, so it can't wake a
+// fully-closed app the way a real push service would.
 
 import * as Api from './api.js';
+import { showToast } from './toast.js';
 
 const ENABLED_KEY = 'kc_notif_enabled_v1';
+const SEEN_KEY = 'kc_notif_seen_ids_v1';
 const POLL_MS = 20000;
 
 export function notificationsEnabled() {
@@ -15,6 +26,65 @@ export function notificationsEnabled() {
 
 export function setNotificationsEnabled(on) {
   try { localStorage.setItem(ENABLED_KEY, on ? 'true' : 'false'); } catch {}
+}
+
+// Only ever called from a direct user action (the Settings toggle turning
+// on) — never unprompted on page load, which browsers themselves
+// discourage (and often block outright).
+export async function requestPushPermission() {
+  if (!('Notification' in window)) return 'unsupported';
+  if (Notification.permission === 'granted' || Notification.permission === 'denied') return Notification.permission;
+  try { return await Notification.requestPermission(); } catch { return 'denied'; }
+}
+
+// Same event types as notifications-page.js's LABELS map, but plain text
+// (no <b> markup) since both the toast and the native Notification body
+// render as plain text, not HTML.
+function describe(n) {
+  const d = n.data || {};
+  switch (n.type) {
+    case 'friend_request': return { emoji: '👤', text: `${d.fromDisplayName} sent you a friend request` };
+    case 'friend_accepted': return { emoji: '🤝', text: `${d.byDisplayName} accepted your friend request` };
+    case 'message': return { emoji: '💬', text: `${d.fromDisplayName}: ${d.preview}` };
+    case 'game_invite': return { emoji: '♟️', text: `${d.fromDisplayName} challenged you to a game` };
+    case 'game_accepted': return { emoji: '♟️', text: `${d.byDisplayName} accepted your challenge` };
+    case 'game_move': return { emoji: '➡️', text: `It's your move against ${d.byDisplayName}` };
+    case 'game_over': return {
+      emoji: d.result === 'draw' ? '🤝' : '🏁',
+      text: d.result === 'draw'
+        ? `Your game with ${d.byDisplayName} ended in a draw`
+        : `Game over vs ${d.byDisplayName} — ${d.reason === 'resignation' ? `${d.result} won by resignation` : `${d.result} won`}`,
+    };
+    default: return { emoji: '🔔', text: 'You have a new notification' };
+  }
+}
+
+function targetFor(n) {
+  if (n.type === 'message') return `chat.html?friend=${n.data.fromUserId}`;
+  if (n.type === 'game_invite' || n.type === 'game_accepted' || n.type === 'game_move' || n.type === 'game_over') {
+    return `play.html?mode=online&gameId=${n.data.gameId}`;
+  }
+  return 'friends.html';
+}
+
+function getSeenIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(SEEN_KEY) || '[]')); } catch { return new Set(); }
+}
+
+function markSeen(ids) {
+  try {
+    const merged = [...getSeenIds(), ...ids];
+    localStorage.setItem(SEEN_KEY, JSON.stringify(merged.slice(-300)));
+  } catch {}
+}
+
+function fireNativeNotification(n) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  const { emoji, text } = describe(n);
+  try {
+    const notif = new Notification(`${emoji} Khmer Chess`, { body: text, icon: 'assets/icons/icon-192.png', tag: n.id });
+    notif.onclick = () => { window.focus(); location.href = targetFor(n); };
+  } catch { /* some browsers restrict constructing Notification directly outside a service worker; safe to skip */ }
 }
 
 function ensureBadgeEl() {
@@ -32,16 +102,36 @@ function ensureBadgeEl() {
 
 export async function refreshNotifBadge() {
   const badge = ensureBadgeEl();
-  if (!badge) return;
-  if (!Api.isSignedIn() || !notificationsEnabled()) { badge.hidden = true; return; }
+  if (!Api.isSignedIn() || !notificationsEnabled()) { if (badge) badge.hidden = true; return; }
   try {
-    const { unread } = await Api.getNotifications();
-    if (unread > 0) {
-      badge.textContent = unread > 9 ? '9+' : String(unread);
-      badge.hidden = false;
-    } else {
-      badge.hidden = true;
+    const { notifications, unread } = await Api.getNotifications();
+    if (badge) {
+      if (unread > 0) {
+        badge.textContent = unread > 9 ? '9+' : String(unread);
+        badge.hidden = false;
+      } else {
+        badge.hidden = true;
+      }
     }
+
+    // Toast + native notification for anything genuinely new since the
+    // last poll. Skipped entirely on the very first time this ever runs
+    // on a device (nothing to compare against yet), so opening the app
+    // for the first time doesn't dump a wall of toasts for old activity —
+    // and skipped on notifications.html itself, which already shows a
+    // live list of the same things.
+    const hasRunBefore = localStorage.getItem(SEEN_KEY) !== null;
+    const onNotifPage = (location.pathname.split('/').pop() || '') === 'notifications.html';
+    if (hasRunBefore && !onNotifPage) {
+      const seen = getSeenIds();
+      const fresh = notifications.filter(n => !n.read && !seen.has(n.id));
+      for (const n of fresh.slice(0, 3)) { // cap so a burst of activity doesn't flood the screen with toasts
+        const { text } = describe(n);
+        showToast(text, 'info');
+        fireNativeNotification(n);
+      }
+    }
+    markSeen(notifications.map(n => n.id));
   } catch {
     // transient network hiccup — leave the badge showing whatever it last had
   }

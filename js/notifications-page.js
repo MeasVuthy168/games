@@ -4,10 +4,11 @@
 // friends.js/chat.js/games.js routes.
 //
 // Each row supports a real swipe gesture (pointer events, so it works for
-// touch and mouse alike): swipe left marks it read, swipe right deletes
-// it — both act on every notification folded into that row, since
-// consecutive messages from the same sender are grouped into one row
-// (see groupNotifications below).
+// touch and mouse alike), Gmail-style: swipe left deletes, swipe right
+// marks read — both act on every notification folded into that row, since
+// consecutive messages from the same sender (and consecutive "it's your
+// move" pings for the same game) are grouped into one row (see
+// groupNotifications below).
 import * as Api from './api.js';
 import { notificationsEnabled } from './notif-badge.js';
 import { initTranslations } from './i18n.js';
@@ -52,14 +53,19 @@ function fmtTime(iso) {
   return d.toLocaleDateString();
 }
 
-// Folds a run of consecutive messages from the same sender into one row —
-// notifications are already ordered newest-first, so "consecutive" means
-// nothing else arrived in between (another sender, a friend request, …).
+// Folds a run of consecutive messages from the same sender (or consecutive
+// "it's your move" pings for the same game — see games.js's dedup on
+// insert, this only ever matters for anything already in the DB before
+// that existed) into one row — notifications are already ordered
+// newest-first, so "consecutive" means nothing else arrived in between
+// (another sender/game, a friend request, …).
 function groupNotifications(list) {
   const groups = [];
   for (const n of list) {
     const last = groups[groups.length - 1];
     if (n.type === 'message' && last?.type === 'message' && last.items[0].data.fromUserId === n.data.fromUserId) {
+      last.items.push(n);
+    } else if (n.type === 'game_move' && last?.type === 'game_move' && last.items[0].data.gameId === n.data.gameId) {
       last.items.push(n);
     } else {
       groups.push({ type: n.type, items: [n] });
@@ -70,8 +76,11 @@ function groupNotifications(list) {
 
 // Real swipe via Pointer Events (covers touch + mouse). Horizontal intent
 // is only locked in once the drag clearly isn't a vertical scroll, so the
-// page still scrolls normally on a mostly-vertical touch.
-function attachSwipe(row, { onSwipeLeft, onSwipeRight, onTap }) {
+// page still scrolls normally on a mostly-vertical touch. bgDelete/bgRead
+// are the reveal layers sitting under the row (see notifications.html) —
+// dragging left uncovers bgDelete on the right side of the wrap, dragging
+// right uncovers bgRead on the left side (Gmail's swipe convention).
+function attachSwipe(row, { bgDelete, bgRead, onSwipeLeft, onSwipeRight, onTap }) {
   const THRESHOLD = 80;
   let startX = 0, startY = 0, dx = 0, dragging = false, horizontal = false, pointerId = null;
 
@@ -92,8 +101,8 @@ function attachSwipe(row, { onSwipeLeft, onSwipeRight, onTap }) {
     }
     dx = ddx;
     row.style.transform = `translateX(${dx}px)`;
-    row.classList.toggle('swipe-read', dx < -20);
-    row.classList.toggle('swipe-delete', dx > 20);
+    bgDelete.classList.toggle('show', dx < -20);
+    bgRead.classList.toggle('show', dx > 20);
   });
 
   function finish(e) {
@@ -114,7 +123,8 @@ function attachSwipe(row, { onSwipeLeft, onSwipeRight, onTap }) {
       onSwipeRight();
     } else {
       row.style.transform = 'translateX(0)';
-      row.classList.remove('swipe-read', 'swipe-delete');
+      bgDelete.classList.remove('show');
+      bgRead.classList.remove('show');
     }
   }
   row.addEventListener('pointerup', finish);
@@ -169,12 +179,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         const first = group.items[0];
         const ids = group.items.map(n => n.id);
         const allRead = group.items.every(n => n.read);
-        const meta = group.items.length > 1
+        // A grouped "it's your move" still just says "it's your move" —
+        // only one move is actually pending regardless of how many stale
+        // pings got folded together, and the .notif-count badge already
+        // conveys that. Grouped messages get their own "N messages" text.
+        const meta = group.items.length > 1 && first.type === 'message'
           ? { emoji: '💬', text: `<b>${esc(first.data.fromDisplayName)}</b> sent you <b>${group.items.length}</b> messages` }
           : (LABELS[first.type] || (() => ({ emoji: '🔔', text: first.type })))(first.data);
 
         const wrap = document.createElement('div');
         wrap.className = 'notif-row-wrap';
+        wrap.innerHTML = `
+          <div class="notif-swipe-bg notif-swipe-bg-read">✓ Read</div>
+          <div class="notif-swipe-bg notif-swipe-bg-delete">🗑️ Delete</div>
+        `;
         const row = document.createElement('div');
         row.className = 'notif-row' + (allRead ? '' : ' unread');
         row.innerHTML = `
@@ -187,12 +205,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         list.appendChild(wrap);
 
         attachSwipe(row, {
+          bgDelete: wrap.querySelector('.notif-swipe-bg-delete'),
+          bgRead: wrap.querySelector('.notif-swipe-bg-read'),
           onSwipeLeft: async () => {
-            await Promise.all(ids.map(id => Api.markNotificationRead(id).catch(() => {})));
+            await Promise.all(ids.map(id => Api.deleteNotification(id).catch(() => {})));
             render();
           },
           onSwipeRight: async () => {
-            await Promise.all(ids.map(id => Api.deleteNotification(id).catch(() => {})));
+            await Promise.all(ids.map(id => Api.markNotificationRead(id).catch(() => {})));
             render();
           },
           onTap: async () => {

@@ -31,31 +31,15 @@
     .auth-card{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:1.3rem 1.2rem; }
     .auth-title{ font-weight:800; font-size:1.2rem; color:var(--blue); text-align:center; margin:0 0 .3rem; }
     .auth-sub{ text-align:center; opacity:.7; font-size:.85rem; margin:0 0 1rem; }
-    .auth-tabs{ display:flex; gap:.5rem; margin-bottom:1rem; }
-    .auth-tab{
-      flex:1; padding:.6rem; border-radius:.7rem; border:2px solid #e6ecf7; background:#f7f9fd;
-      font-weight:700; cursor:pointer; color:var(--blue);
-    }
-    .auth-tab.active{ border-color:var(--blue); background:#eef4ff; }
     .auth-form{ display:flex; flex-direction:column; gap:.7rem; }
     .auth-form[hidden]{ display:none; }
     .auth-error{ background:#fdeaea; color:#a3312f; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
     .auth-ok{ background:#e4f8ea; color:#1c7a3a; border-radius:.6rem; padding:.6rem .7rem; font-size:.85rem; font-weight:700; }
     .auth-link{ text-align:center; font-size:.85rem; }
     .auth-link a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
-    .id-tabs{ display:flex; gap:.4rem; }
-    .id-tab{
-      flex:1; padding:.4rem; border-radius:.6rem; border:2px solid #e6ecf7; background:#f7f9fd;
-      font-weight:700; font-size:.85rem; cursor:pointer; color:var(--blue);
-    }
-    .id-tab.active{ border-color:var(--blue); background:#eef4ff; }
-    .id-group[hidden]{ display:none; }
-    .field-row{ display:flex; gap:.5rem; align-items:flex-end; }
-    .field-row .field{ flex:1; }
-    .field-row button{ white-space:nowrap; }
     .google-signin-wrap{ display:flex; justify-content:center; margin-bottom:.8rem; }
-    .auth-divider{ display:flex; align-items:center; gap:.6rem; margin:0 0 .8rem; color:var(--ink); opacity:.55; font-size:.8rem; font-weight:700; }
-    .auth-divider::before, .auth-divider::after{ content:""; flex:1; height:1px; background:currentColor; opacity:.3; }
+    .legacy-toggle{ text-align:center; font-size:.85rem; margin-top:.4rem; }
+    .legacy-toggle a{ color:var(--blue); font-weight:700; cursor:pointer; text-decoration:underline; }
   </style>
 </head>
 <body>
@@ -69,53 +53,24 @@
     <main class="page settings-page auth-wrap">
       <div class="auth-card">
         <h1 class="auth-title">អុកចត្រង្គ</h1>
-        <p class="auth-sub">Sign in to add friends, chat, and get notifications.</p>
-
-        <div class="auth-tabs">
-          <button class="auth-tab active" id="tabSignIn" type="button">Sign In</button>
-          <button class="auth-tab" id="tabSignUp" type="button">Sign Up</button>
-        </div>
+        <p class="auth-sub">Continue with Google to sign in or create your account.</p>
 
         <div id="googleSignInSection" hidden>
           <div class="google-signin-wrap"><div id="googleSignInBtn"></div></div>
-          <div class="auth-divider"><span>or</span></div>
         </div>
 
         <div id="authMsg"></div>
 
-        <form class="auth-form" id="formSignIn" onsubmit="return false">
+        <!-- Sign-up is Google-only now — no email/phone/OTP signup form.
+             Sign In (password) stays reachable behind this toggle so
+             existing password accounts aren't locked out. -->
+        <p class="legacy-toggle"><a id="linkShowLegacySignIn">Sign in with email or phone (existing account)</a></p>
+
+        <form class="auth-form" id="formSignIn" hidden onsubmit="return false">
           <label class="field"><span>Email or phone number</span><input type="text" id="siIdentifier" required autocomplete="username" /></label>
           <label class="field"><span>Password</span><input type="password" id="siPassword" required autocomplete="current-password" /></label>
           <button class="primary" type="submit">Sign In</button>
           <div class="auth-link"><a id="linkForgot">Forgot password?</a></div>
-        </form>
-
-        <form class="auth-form" id="formSignUp" hidden onsubmit="return false">
-          <label class="field"><span>Display name</span><input type="text" id="suName" maxlength="40" required autocomplete="nickname" /></label>
-
-          <div class="id-tabs">
-            <button class="id-tab active" id="suModeEmail" type="button">Email</button>
-            <button class="id-tab" id="suModePhone" type="button">Phone</button>
-          </div>
-
-          <div class="id-group" id="suEmailGroup">
-            <div class="field-row">
-              <label class="field"><span>Email</span><input type="email" id="suEmail" autocomplete="email" /></label>
-              <button class="secondary" id="btnSendEmailCode" type="button">Send code</button>
-            </div>
-            <label class="field" id="suEmailCodeField" hidden><span>Verification code</span><input type="text" id="suEmailCode" inputmode="numeric" autocomplete="one-time-code" /></label>
-          </div>
-
-          <div class="id-group" id="suPhoneGroup" hidden>
-            <div class="field-row">
-              <label class="field"><span>Phone number</span><input type="tel" id="suPhone" placeholder="+85512345678" autocomplete="tel" /></label>
-              <button class="secondary" id="btnSendCode" type="button">Send code</button>
-            </div>
-            <label class="field" id="suCodeField" hidden><span>Verification code</span><input type="text" id="suCode" inputmode="numeric" autocomplete="one-time-code" /></label>
-          </div>
-
-          <label class="field"><span>Password (min 8 characters)</span><input type="password" id="suPassword" minlength="8" required autocomplete="new-password" /></label>
-          <button class="primary" type="submit">Create Account</button>
         </form>
 
         <form class="auth-form" id="formForgot" hidden onsubmit="return false">

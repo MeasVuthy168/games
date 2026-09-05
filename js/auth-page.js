@@ -1,4 +1,7 @@
-// js/auth-page.js — controller for auth.html (sign in / sign up / forgot password).
+// js/auth-page.js — controller for auth.html. Google Sign-In is the
+// primary/only way to create an account; email/phone+password Sign In and
+// Forgot Password stay available (behind a toggle) only for accounts that
+// already have a real password from before this change.
 import * as Api from './api.js';
 import { initTranslations } from './i18n.js';
 
@@ -14,82 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
     return;
   }
 
-  const tabSignIn = document.getElementById('tabSignIn');
-  const tabSignUp = document.getElementById('tabSignUp');
   const formSignIn = document.getElementById('formSignIn');
-  const formSignUp = document.getElementById('formSignUp');
   const formForgot = document.getElementById('formForgot');
   const authMsg = document.getElementById('authMsg');
-
-  // Sign-up identity: Email (default, verified async via emailed link) or
-  // Phone (verified up front via a Twilio Verify OTP before the account
-  // is even created).
-  const suModeEmail = document.getElementById('suModeEmail');
-  const suModePhone = document.getElementById('suModePhone');
-  const suEmailGroup = document.getElementById('suEmailGroup');
-  const suPhoneGroup = document.getElementById('suPhoneGroup');
-  const suEmail = document.getElementById('suEmail');
-  const suPhone = document.getElementById('suPhone');
-  const suCodeField = document.getElementById('suCodeField');
-  const suCode = document.getElementById('suCode');
-  const btnSendCode = document.getElementById('btnSendCode');
-  const suEmailCodeField = document.getElementById('suEmailCodeField');
-  const suEmailCode = document.getElementById('suEmailCode');
-  const btnSendEmailCode = document.getElementById('btnSendEmailCode');
-  let signupMode = 'email';
-
-  function setSignupMode(mode) {
-    signupMode = mode;
-    suModeEmail.classList.toggle('active', mode === 'email');
-    suModePhone.classList.toggle('active', mode === 'phone');
-    suEmailGroup.hidden = mode !== 'email';
-    suPhoneGroup.hidden = mode !== 'phone';
-    suEmail.required = mode === 'email';
-    suPhone.required = mode === 'phone';
-  }
-  setSignupMode('email');
-  suModeEmail.addEventListener('click', () => setSignupMode('email'));
-  suModePhone.addEventListener('click', () => setSignupMode('phone'));
-
-  btnSendCode.addEventListener('click', async () => {
-    showMsg('');
-    const phone = suPhone.value.trim();
-    if (!phone) { showMsg('Enter a phone number first (e.g. +85512345678).'); return; }
-    btnSendCode.disabled = true;
-    const label = btnSendCode.textContent;
-    btnSendCode.textContent = 'Sending…';
-    try {
-      await Api.sendPhoneCode(phone);
-      suCodeField.hidden = false;
-      suCode.required = true;
-      showMsg('Code sent — check your SMS.', 'ok');
-    } catch (err) {
-      showMsg(err.message || 'Could not send code');
-    } finally {
-      btnSendCode.disabled = false;
-      btnSendCode.textContent = label;
-    }
-  });
-
-  btnSendEmailCode.addEventListener('click', async () => {
-    showMsg('');
-    const email = suEmail.value.trim();
-    if (!email) { showMsg('Enter your email first.'); return; }
-    btnSendEmailCode.disabled = true;
-    const label = btnSendEmailCode.textContent;
-    btnSendEmailCode.textContent = 'Sending…';
-    try {
-      await Api.sendEmailCode(email);
-      suEmailCodeField.hidden = false;
-      suEmailCode.required = true;
-      showMsg('Code sent — check your inbox.', 'ok');
-    } catch (err) {
-      showMsg(err.message || 'Could not send code');
-    } finally {
-      btnSendEmailCode.disabled = false;
-      btnSendEmailCode.textContent = label;
-    }
-  });
+  const linkShowLegacySignIn = document.getElementById('linkShowLegacySignIn');
 
   function showMsg(text, kind) {
     authMsg.innerHTML = '';
@@ -100,17 +31,18 @@ document.addEventListener('DOMContentLoaded', () => {
     authMsg.appendChild(el);
   }
 
+  // Sign-up is Google-only now (see the removed email/phone/OTP form) —
+  // Sign In with an existing password stays reachable for legacy accounts
+  // created before this change, tucked behind this toggle so Google reads
+  // as the primary/default option.
   function showForm(which) {
     formSignIn.hidden = which !== 'signin';
-    formSignUp.hidden = which !== 'signup';
     formForgot.hidden = which !== 'forgot';
-    tabSignIn.classList.toggle('active', which === 'signin');
-    tabSignUp.classList.toggle('active', which === 'signup');
+    linkShowLegacySignIn.hidden = true; // once in this flow, no need to show the toggle again
     showMsg('');
   }
 
-  tabSignIn.addEventListener('click', () => showForm('signin'));
-  tabSignUp.addEventListener('click', () => showForm('signup'));
+  linkShowLegacySignIn.addEventListener('click', () => showForm('signin'));
   document.getElementById('linkForgot').addEventListener('click', () => showForm('forgot'));
   document.getElementById('linkBackToSignIn').addEventListener('click', () => showForm('signin'));
 
@@ -125,23 +57,6 @@ document.addEventListener('DOMContentLoaded', () => {
       location.href = nextUrl();
     } catch (err) {
       showMsg(err.message || 'Sign in failed');
-    }
-  });
-
-  formSignUp.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    showMsg('');
-    try {
-      await Api.signUp({
-        displayName: document.getElementById('suName').value,
-        email: signupMode === 'email' ? suEmail.value : undefined,
-        phone: signupMode === 'phone' ? suPhone.value.trim() : undefined,
-        code: signupMode === 'phone' ? suCode.value.trim() : (signupMode === 'email' ? suEmailCode.value.trim() : undefined),
-        password: document.getElementById('suPassword').value,
-      });
-      location.href = nextUrl();
-    } catch (err) {
-      showMsg(err.message || 'Sign up failed');
     }
   });
 

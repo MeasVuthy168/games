@@ -5,13 +5,16 @@
 // signed out.
 //
 // Also surfaces brand-new notifications two extra ways, on any page
-// (except notifications.html, which already shows its own live list):
-// an in-app toast, and — if the user has granted permission — a real OS
+// (except notifications.html, which already shows its own live list, and
+// except game_move — already visible live on the board itself): an
+// in-app toast, and — if the user has granted permission — a real OS
 // notification (shows in the system notification center / iOS Control
-// Center's notification list, not just inside the page). That native
-// notification only fires while this page is open and polling; there's
-// no service-worker push subscription behind it, so it can't wake a
-// fully-closed app the way a real push service would.
+// Center's notification list, not just inside the page; routed through
+// the registered Service Worker on browsers — Android Chrome included —
+// that require that instead of the plain Notification constructor). That
+// native notification only fires while this page is open and polling;
+// there's no push subscription behind it, so it can't wake a fully-closed
+// app the way a real push service would.
 
 import * as Api from './api.js';
 import { showToast } from './toast.js';
@@ -20,8 +23,10 @@ const ENABLED_KEY = 'kc_notif_enabled_v1';
 const SEEN_KEY = 'kc_notif_seen_ids_v1';
 const POLL_MS = 20000;
 
+// Opt-in, not opt-out — a fresh install has never set this key, so it
+// must default to off until the user explicitly turns it on in Settings.
 export function notificationsEnabled() {
-  try { return localStorage.getItem(ENABLED_KEY) !== 'false'; } catch { return true; }
+  try { return localStorage.getItem(ENABLED_KEY) === 'true'; } catch { return false; }
 }
 
 export function setNotificationsEnabled(on) {
@@ -78,11 +83,20 @@ function markSeen(ids) {
   } catch {}
 }
 
-function fireNativeNotification(n) {
+async function fireNativeNotification(n) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const { emoji, text } = describe(n);
+  const options = { body: text, icon: 'assets/icons/icon-192.png', tag: n.id, data: { url: targetFor(n) } };
   try {
-    const notif = new Notification(`${emoji} Khmer Chess`, { body: text, icon: 'assets/icons/icon-192.png', tag: n.id });
+    // Android Chrome throws ("Illegal constructor") on `new Notification()`
+    // called directly from a page — it requires going through a Service
+    // Worker registration instead (see sw.js's notificationclick handler
+    // for the tap-to-open behavior this needs on that path). Desktop
+    // Chrome/Firefox and iOS Safari are fine with either, so prefer the
+    // SW route whenever js/pwa.js has already registered one.
+    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    if (reg) { await reg.showNotification(`${emoji} Khmer Chess`, options); return; }
+    const notif = new Notification(`${emoji} Khmer Chess`, options);
     notif.onclick = () => { window.focus(); location.href = targetFor(n); };
   } catch { /* some browsers restrict constructing Notification directly outside a service worker; safe to skip */ }
 }
@@ -124,7 +138,10 @@ export async function refreshNotifBadge() {
     const onNotifPage = (location.pathname.split('/').pop() || '') === 'notifications.html';
     if (hasRunBefore && !onNotifPage) {
       const seen = getSeenIds();
-      const fresh = notifications.filter(n => !n.read && !seen.has(n.id));
+      // game_move ("it's your move against X") is already visible live on
+      // the board itself for anyone actually in that game — toasting it
+      // too is just a redundant interruption every time a move comes in.
+      const fresh = notifications.filter(n => !n.read && !seen.has(n.id) && n.type !== 'game_move');
       for (const n of fresh.slice(0, 3)) { // cap so a burst of activity doesn't flood the screen with toasts
         const { text } = describe(n);
         showToast(text, 'info');

@@ -1,8 +1,8 @@
 // js/api.js — thin client for the real accounts/friends/chat/notifications
-// backend (ouk-ai-backend). Everything else in this app stays fully local
-// and offline (coins/history/AI/tournament/rewards never touch this) —
-// this module is only for the account layer: sign up/in, friends, chat,
-// notifications.
+// backend (ouk-ai-backend). AI/tournament/rewards logic itself stays fully
+// local and offline — this module is for the account layer (sign up/in,
+// friends, chat, notifications) plus per-account coin/history sync (see
+// js/coins.js and js/history.js, which call the functions below).
 
 const BASE_KEY = 'kc_api_base_v1';
 const AUTH_KEY = 'kc_auth_v1';
@@ -264,6 +264,20 @@ export async function makeGameMove(id, from, to) {
 
 export async function resignGame(id) {
   return request(`/api/games/${id}/resign`, { method: 'POST' });
+}
+
+/* ---------------- stats (coins + game history) ---------------- */
+
+export async function getStats() {
+  return request('/api/stats');
+}
+
+export async function addCoinsRemote(delta) {
+  return request('/api/stats/coins', { method: 'POST', body: { delta } });
+}
+
+export async function recordGameRemote(entry) {
+  return request('/api/stats/history', { method: 'POST', body: entry });
 }
 
 export { ApiError };

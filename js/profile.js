@@ -12,8 +12,8 @@ import { setLanguage, applyTranslations, t } from './i18n.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
 import { showToast } from './toast.js';
-import { getCoins } from './coins.js';
-import { getHistory, computeWinRate } from './history.js';
+import { getCoins, syncCoinsFromServer } from './coins.js';
+import { getHistory, computeWinRate, syncHistoryFromServer } from './history.js';
 
 recordLoginToday();
 
@@ -144,6 +144,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   renderStats();
   renderHistory();
+  // Paint instantly from the local cache above, then (once signed in)
+  // pull the real per-account numbers from the backend and repaint — the
+  // backend is authoritative for a signed-in account, so this can only
+  // change what's shown, never get stuck behind a stale local value.
+  if (Api.isSignedIn()) {
+    Api.getStats().then((stats) => {
+      syncCoinsFromServer(stats);
+      syncHistoryFromServer(stats);
+      renderStats();
+      renderHistory();
+    }).catch(() => {});
+  }
 
   /* ---------------- shared modal helpers ---------------- */
   function showModal(modal, show) {

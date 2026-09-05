@@ -1,16 +1,29 @@
 // js/history.js — local game history + win-rate. One entry per real
 // completed game (checkmate or stalemate/draw) — never for a game that was
-// merely reset or abandoned mid-play. Backed by its own localStorage key.
+// merely reset or abandoned mid-play. A signed-out guest's history is
+// purely local (localStorage only, exactly as before). A signed-in
+// account's history is namespaced by user id so switching accounts never
+// shows another account's games, and is kept in sync with the backend
+// (see syncHistoryFromServer() below, and recordGame()'s server push), so
+// it's the same on every device.
 
-const LS_KEY = 'kc_history_v1';
+import * as Api from './api.js';
+
+const GUEST_KEY = 'kc_history_v1';
 
 // Keep the log bounded so localStorage doesn't grow without limit over a
-// long install lifetime. Most recent games are kept.
+// long install lifetime. Most recent games are kept. Mirrors the
+// backend's own per-user cap (see ouk-ai-backend's routes/stats.js).
 const MAX_ENTRIES = 500;
+
+function cacheKey() {
+  const u = Api.getCurrentUser();
+  return u ? `${GUEST_KEY}:${u.id}` : GUEST_KEY;
+}
 
 function readAll() {
   try {
-    const v = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    const v = JSON.parse(localStorage.getItem(cacheKey()) || '[]');
     return Array.isArray(v) ? v : [];
   } catch {
     return [];
@@ -18,7 +31,7 @@ function readAll() {
 }
 
 function writeAll(list) {
-  try { localStorage.setItem(LS_KEY, JSON.stringify(list)); } catch {}
+  try { localStorage.setItem(cacheKey(), JSON.stringify(list)); } catch {}
 }
 
 // entry: { date, opponent, mode, result, moves, duration }
@@ -42,6 +55,7 @@ export function recordGame(entry) {
   list.unshift(rec); // most recent first
   if (list.length > MAX_ENTRIES) list.length = MAX_ENTRIES;
   writeAll(list);
+  if (Api.isSignedIn()) Api.recordGameRemote(rec).catch(() => {});
   return rec;
 }
 
@@ -57,4 +71,21 @@ export function computeWinRate() {
   if (list.length === 0) return null;
   const wins = list.filter(g => g.result === 'win').length;
   return Math.round((wins / list.length) * 100);
+}
+
+// Pulls the signed-in account's real game history from the backend and
+// makes it this account's new local cache — the backend is the source of
+// truth once signed in, so this overwrites rather than merges with
+// whatever was cached before. No-op for a signed-out guest. Pass an
+// already-fetched Api.getStats() result to avoid a second round trip (see
+// profile.js, which also needs the coins half of that same response).
+export async function syncHistoryFromServer(stats) {
+  if (!Api.isSignedIn()) return getHistory();
+  try {
+    const data = stats || await Api.getStats();
+    writeAll(Array.isArray(data.history) ? data.history : []);
+    return getHistory();
+  } catch {
+    return getHistory();
+  }
 }

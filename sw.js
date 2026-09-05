@@ -45,6 +45,16 @@ self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
+// Tap-to-open for notifications shown via registration.showNotification()
+// (see js/notif-badge.js — the Android-compatible path, since that
+// browser rejects the plain `new Notification()` constructor called
+// directly from a page).
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = e.notification.data?.url || './';
+  e.waitUntil(self.clients.openWindow(new URL(url, self.registration.scope).href));
+});
+
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   const url = new URL(req.url);

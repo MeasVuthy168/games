@@ -202,4 +202,16 @@ document.addEventListener('DOMContentLoaded', () => {
   loadFriends();
   loadRequests();
   loadGames();
+
+  // Real-time-ish updates: an accept/decline made on the OTHER person's
+  // device (or an incoming request/challenge) used to only ever show up
+  // here after a manual reload. Poll the same three lists periodically so
+  // both sides see a request/challenge appear or disappear on their own.
+  const POLL_MS = 4000;
+  const pollHandle = setInterval(() => {
+    loadFriends();
+    loadRequests();
+    loadGames();
+  }, POLL_MS);
+  window.addEventListener('beforeunload', () => clearInterval(pollHandle));
 });

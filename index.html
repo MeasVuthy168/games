@@ -85,6 +85,18 @@
     .role-swatch-b{ background:#20242c; }
     .role-swatch-r{ background:linear-gradient(135deg,#fdfdfd 50%,#20242c 50%); }
     .role-opt-sub{ display:block; font-weight:600; font-size:.8rem; opacity:.65; margin-top:.1rem; }
+
+    /* AI Level / Debug Mode — moved here from Settings so difficulty is
+       set right when starting a game against the AI, not buried away.
+       This modal's card is a hardcoded white surface (not re-themed for
+       dark mode, same as menu-card/flash-card elsewhere) — .field and
+       .card-title normally pull color:var(--ink), which flips to a light
+       color in dark mode and would go invisible on this white card, so
+       pin them to match the rest of this modal's always-navy-on-white
+       text instead. */
+    .ai-level-section{ margin-top:1rem; padding-top:.9rem; border-top:1px solid rgba(13,45,92,.1); color:#0d2d5c; }
+    .ai-level-section .field,
+    .ai-level-section .card-title{ color:#0d2d5c; }
   </style>
 </head>
 <body>
@@ -158,6 +170,24 @@
               <span><span data-i18n="home.roleRandom">ចៃដន្យ (Random)</span> <small class="role-opt-sub" data-i18n="home.roleRandomSub">ចាប់ឆ្នោតពណ៌</small></span>
             </button>
           </div>
+
+          <div class="ai-level-section">
+            <label class="field">
+              <span data-i18n="settings.ai.level">AI Level</span>
+              <span class="row-inline" style="align-items:center;margin-top:.1rem">
+                <strong id="aiLevelValue" style="font-size:1.1rem;min-width:1.4em">5</strong>
+                <span class="pill" id="aiLevelBand" data-i18n="settings.band.medium">Medium</span>
+              </span>
+              <input type="range" id="aiLevelRange" min="1" max="10" step="1" />
+            </label>
+            <div class="card-sub">1–2 Easy · 3–5 Medium · 6–8 Hard · 9–10 Expert</div>
+            <div class="card-full" style="padding:.4rem 0 0">
+              <div class="card-left"><div class="card-title" data-i18n="settings.ai.debug.title">AI Debug Mode</div><div class="card-sub" data-i18n="settings.ai.debug.sub">Show search stats panel on the Play screen</div></div>
+              <div class="card-right">
+                <label class="switch"><input type="checkbox" id="aiDebugToggle" /><span class="slider"></span></label>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -183,7 +213,10 @@
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
 
-  <script>
+  <script type="module">
+    import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './js/ai-engine.js';
+    import { t } from './js/i18n.js';
+
     /* Bottom bar spacer + active state */
     (function(){
       const bar = document.getElementById('appTabbar');
@@ -220,6 +253,35 @@
     }
     showLastChoice();
 
+    /* AI Level / Debug Mode — moved here from Settings so difficulty is
+       set right when starting a game against the AI. */
+    function bandKey(n) { return `settings.band.${levelBand(n).toLowerCase()}`; }
+    const aiLevelRange = document.getElementById('aiLevelRange');
+    const aiLevelValue = document.getElementById('aiLevelValue');
+    const aiLevelBand = document.getElementById('aiLevelBand');
+    const aiDebugToggle = document.getElementById('aiDebugToggle');
+    function renderAILevel(s){
+      const level = s.aiLevel ?? DEFAULT_LEVEL;
+      if (aiLevelRange) aiLevelRange.value = level;
+      if (aiLevelValue) aiLevelValue.textContent = String(level);
+      if (aiLevelBand) {
+        const key = bandKey(level);
+        aiLevelBand.setAttribute('data-i18n', key);
+        aiLevelBand.textContent = t(key);
+      }
+    }
+    aiLevelRange?.addEventListener('input', ()=>{
+      const s = loadSettings();
+      s.aiLevel = Math.min(MAX_LEVEL, Math.max(MIN_LEVEL, parseInt(aiLevelRange.value, 10) || DEFAULT_LEVEL));
+      saveSettings(s);
+      renderAILevel(s);
+    });
+    aiDebugToggle?.addEventListener('change', ()=>{
+      const s = loadSettings();
+      s.aiDebug = !!aiDebugToggle.checked;
+      saveSettings(s);
+    });
+
     /* Role-selection modal: real White / Black / Random choice, wired to aiColor */
     const roleModal = document.getElementById('roleModal');
     function openRoleModal(){
@@ -227,6 +289,8 @@
       for(const btn of roleModal.querySelectorAll('.role-opt')){
         btn.classList.toggle('last-picked', s.lastRolePick && btn.dataset.color === s.lastRolePick);
       }
+      if (aiDebugToggle) aiDebugToggle.checked = !!s.aiDebug;
+      renderAILevel(s);
       roleModal.classList.add('show');
       roleModal.setAttribute('aria-hidden','false');
     }

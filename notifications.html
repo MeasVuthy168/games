@@ -2,7 +2,7 @@
 <html lang="km">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
   <script src="js/theme-init.js"></script>
   <script src="js/topbar-back.js" defer></script>
   <title>Notifications | Khmer Chess</title>
@@ -28,7 +28,7 @@
       border:1px solid rgba(13,45,92,.06); cursor:pointer;
       touch-action:pan-y; will-change:transform; position:relative;
     }
-    .notif-row.unread{ border-color:rgba(13,45,92,.35); background:#f5f8ff; }
+    .notif-row.unread{ border-color:rgba(13,45,92,.35); background:var(--chip-bg); }
     /* Swipe-reveal backgrounds, Gmail-style: left = delete, right = read.
        Both sit under the row (which slides on top of them) and are shown
        one at a time depending on drag direction — see attachSwipe() in

@@ -25,6 +25,10 @@
     .profile-bar{
       display:flex; align-items:center; justify-content:flex-start; gap:14px;
       padding:14px; text-decoration:none;
+      /* Match the same 1rem side inset every card below it already has
+         (via .card-list's own padding) — without this it sits flush
+         against the screen edges instead of lining up with the rest. */
+      margin:0 1rem; width:auto;
     }
     .profile-bar .profile-meta{ display:flex; flex-direction:column; gap:3px; min-width:0; }
     .profile-bar .profile-name{

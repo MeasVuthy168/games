@@ -46,11 +46,14 @@
     .thread-msgs{ flex:1; overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:.5rem; }
     .msg-row{ display:flex; }
     .msg-row.me{ justify-content:flex-end; }
+    .msg-group{ display:flex; flex-direction:column; max-width:75%; }
+    .msg-row.me .msg-group{ align-items:flex-end; }
     .msg-bubble{
-      max-width:75%; padding:.55rem .8rem; border-radius:1rem; font-size:.9rem; line-height:1.35;
+      padding:.55rem .8rem; border-radius:1rem; font-size:.9rem; line-height:1.35;
       background:#eef1f6; color:var(--ink);
     }
     .msg-row.me .msg-bubble{ background:var(--blue); color:#fff; }
+    .msg-time{ font-size:.68rem; opacity:.55; margin:.2rem .35rem 0; }
     .thread-composer{ display:flex; gap:.5rem; padding:.7rem 1rem; border-top:1px solid rgba(13,45,92,.08); }
     .thread-composer input{ flex:1; padding:.6rem .8rem; border-radius:1.2rem; border:1px solid #d7dee8; font:inherit; }
     .thread-composer button{

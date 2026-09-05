@@ -94,10 +94,17 @@ async function renderThread(friendId) {
     seenIds.add(m.id);
     const row = document.createElement('div');
     row.className = 'msg-row' + (m.fromMe ? ' me' : '');
+    const group = document.createElement('div');
+    group.className = 'msg-group';
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
     bubble.textContent = m.body;
-    row.appendChild(bubble);
+    const time = document.createElement('div');
+    time.className = 'msg-time';
+    time.textContent = fmtTime(m.createdAt);
+    group.appendChild(bubble);
+    group.appendChild(time);
+    row.appendChild(group);
     msgsEl.appendChild(row);
     if (!lastTimestamp || m.createdAt > lastTimestamp) lastTimestamp = m.createdAt;
   }

@@ -29,8 +29,18 @@
       touch-action:pan-y; will-change:transform; position:relative;
     }
     .notif-row.unread{ border-color:rgba(13,45,92,.35); background:#f5f8ff; }
-    .notif-row.swipe-read{ background:#e4f8ea !important; }
-    .notif-row.swipe-delete{ background:#fdeaea !important; }
+    /* Swipe-reveal backgrounds, Gmail-style: left = delete, right = read.
+       Both sit under the row (which slides on top of them) and are shown
+       one at a time depending on drag direction — see attachSwipe() in
+       notifications-page.js. */
+    .notif-swipe-bg{
+      position:absolute; inset:0; display:flex; align-items:center; gap:.4rem;
+      font-weight:800; font-size:.85rem; border-radius:.9rem; opacity:0;
+      transition:opacity .15s ease; padding:0 1.1rem;
+    }
+    .notif-swipe-bg.show{ opacity:1; }
+    .notif-swipe-bg-read{ background:#e4f8ea; color:#1c7a3a; justify-content:flex-start; }
+    .notif-swipe-bg-delete{ background:#fdeaea; color:#a3312f; justify-content:flex-end; }
     .notif-emoji{ font-size:1.3rem; flex:none; }
     .notif-count{
       font-weight:800; font-size:.7rem; color:#fff; background:var(--blue);

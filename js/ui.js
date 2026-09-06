@@ -262,7 +262,6 @@ function showEndFlash(opts){
 
   overlay.classList.add('show');
   overlay.setAttribute('aria-hidden','false');
-  $('#appTabbar')?.classList.add('is-hidden');
 }
 window.showEndFlash = showEndFlash;
 
@@ -271,7 +270,6 @@ document.addEventListener('click', (e)=>{
   if (e.target?.id === 'flashClose'){
     $('#flashOverlay')?.classList.remove('show');
     $('#flashOverlay')?.setAttribute('aria-hidden','true');
-    $('#appTabbar')?.classList.remove('is-hidden');
     // Tournament mode: round is already recorded (see handleTournamentEnd in
     // initUI) — hand control back to the bracket screen instead of just
     // dismissing the flash and staying on this ad-hoc board.
@@ -281,7 +279,6 @@ document.addEventListener('click', (e)=>{
   if (e.target?.id === 'flashAgain'){
     $('#flashOverlay')?.classList.remove('show');
     $('#flashOverlay')?.setAttribute('aria-hidden','true');
-    $('#appTabbar')?.classList.remove('is-hidden');
     if (window.__kcTournamentActive) { location.href = 'tournament.html'; return; }
     if (window.__kcOnlineActive) { location.href = 'friends.html'; return; }
     // call reset
@@ -1299,7 +1296,61 @@ export async function initUI() {
 
   window.addEventListener('beforeunload', () => saveGameState(game, clocks));
 
+  initFullscreenButton();
+
   return game;
+}
+
+/* ---------------- fullscreen toggle ----------------
+ * A page-level control, independent of game mode — deliberately outside
+ * #localControls so it isn't hidden for online games. Not all browsers
+ * support the Fullscreen API for arbitrary elements (notably iOS Safari,
+ * which has none), so the button only ever appears when it can actually
+ * do something; never break gameplay if the browser refuses. */
+function fullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+function isFullscreenSupported() {
+  const el = document.documentElement;
+  return !!(el.requestFullscreen || el.webkitRequestFullscreen);
+}
+async function enterFullscreen() {
+  const el = document.documentElement;
+  try {
+    if (el.requestFullscreen) await el.requestFullscreen();
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  } catch { /* denied or unsupported at runtime — leave the page as-is */ }
+}
+async function exitFullscreen() {
+  try {
+    if (document.exitFullscreen) await document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } catch {}
+}
+
+function initFullscreenButton() {
+  const btn = document.getElementById('btnFullscreen');
+  if (!btn || !isFullscreenSupported()) return;
+  btn.hidden = false;
+
+  const enterIcon = document.getElementById('fsEnterIcon');
+  const exitIcon  = document.getElementById('fsExitIcon');
+  const label     = document.getElementById('fsLabel');
+
+  function syncButton() {
+    const active = !!fullscreenElement();
+    if (enterIcon) enterIcon.hidden = active;
+    if (exitIcon)  exitIcon.hidden  = !active;
+    if (label)     label.textContent = active ? 'ចេញ' : 'ពេញអេក្រង់';
+    btn.title = active ? 'Exit fullscreen' : 'Fullscreen';
+  }
+
+  btn.addEventListener('click', () => {
+    if (fullscreenElement()) exitFullscreen(); else enterFullscreen();
+  });
+  document.addEventListener('fullscreenchange', syncButton);
+  document.addEventListener('webkitfullscreenchange', syncButton);
+  syncButton();
 }
 
 /* ---------------- service worker (unchanged) ---------------- */

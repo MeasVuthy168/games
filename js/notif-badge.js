@@ -11,13 +11,21 @@
 // notification (shows in the system notification center / iOS Control
 // Center's notification list, not just inside the page; routed through
 // the registered Service Worker on browsers — Android Chrome included —
-// that require that instead of the plain Notification constructor). That
-// native notification only fires while this page is open and polling;
-// there's no push subscription behind it, so it can't wake a fully-closed
-// app the way a real push service would.
+// that require that instead of the plain Notification constructor).
+//
+// That path alone only ever fires while this page is open and polling
+// (every POLL_MS) — it cannot wake a fully-closed app. js/push-client.js
+// closes that gap with a real Web Push subscription: ouk-ai-backend pushes
+// the same kind of event straight to the OS the instant it happens
+// (src/notify.js -> src/push.js), delivered by sw.js's own `push` handler
+// even with no tab/window open at all. Both paths tag their
+// showNotification() call with the same notification id, so if this page
+// happens to be open when a push also arrives, the OS just replaces the
+// same tray entry instead of showing two.
 
 import * as Api from './api.js';
 import { showToast } from './toast.js';
+import { subscribeToPush, unsubscribeFromPush, ensurePushSubscription } from './push-client.js';
 
 const ENABLED_KEY = 'kc_notif_enabled_v1';
 const SEEN_KEY = 'kc_notif_seen_ids_v1';
@@ -35,11 +43,25 @@ export function setNotificationsEnabled(on) {
 
 // Only ever called from a direct user action (the Settings toggle turning
 // on) — never unprompted on page load, which browsers themselves
-// discourage (and often block outright).
+// discourage (and often block outright). Also establishes the real Web
+// Push subscription once permission is granted, so turning this on is the
+// one action that both lets the OS show a notification AND lets one
+// actually reach this device while it's closed.
 export async function requestPushPermission() {
   if (!('Notification' in window)) return 'unsupported';
-  if (Notification.permission === 'granted' || Notification.permission === 'denied') return Notification.permission;
-  try { return await Notification.requestPermission(); } catch { return 'denied'; }
+  let permission = Notification.permission;
+  if (permission !== 'granted' && permission !== 'denied') {
+    try { permission = await Notification.requestPermission(); } catch { permission = 'denied'; }
+  }
+  if (permission === 'granted') subscribeToPush();
+  return permission;
+}
+
+// Called when the user turns the Settings toggle back off — stops any
+// further OS-level pushes to this device (the toggle already stops the
+// in-page polling/toast path via notificationsEnabled() below).
+export async function disablePush() {
+  await unsubscribeFromPush();
 }
 
 // Same event types as notifications-page.js's LABELS map, but plain text
@@ -157,4 +179,11 @@ export async function refreshNotifBadge() {
 document.addEventListener('DOMContentLoaded', () => {
   refreshNotifBadge();
   setInterval(refreshNotifBadge, POLL_MS);
+  // Self-healing: an existing "notifications on" user who already granted
+  // OS permission before this feature shipped (or whose subscription was
+  // silently dropped by the browser) otherwise never gets a new one
+  // established — nothing prompts for it again since permission is
+  // already 'granted'. Runs quietly on every page load; a no-op once a
+  // subscription already exists.
+  if (notificationsEnabled()) ensurePushSubscription();
 });

@@ -8,7 +8,7 @@ const CORE = [
   './styles.css','./js/main.js','./js/ui.js','./js/ai.js','./js/ai-engine.js','./js/ai-worker.js','./js/game.js','./js/pwa.js','./js/settings.js','./js/profile.js',
   './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js',
   './js/tournament.js','./js/rewards.js','./js/tournament-page.js','./js/rewards-page.js','./js/ai-vs-ai.js',
-  './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/verify-email-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js',
+  './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/verify-email-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js','./js/push-client.js',
   './js/theme-init.js','./js/toast.js','./js/topbar-back.js',
   './manifest.webmanifest',
   './assets/fonts/Krasar-Regular.ttf',
@@ -43,6 +43,46 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
+// Real Web Push — this is what lets a notification reach the device even
+// while every tab/PWA window is fully closed (ouk-ai-backend's src/push.js
+// sends the payload below via the browser's push service the instant a
+// real event happens; js/notif-badge.js's in-page polling is a separate,
+// foreground-only path that this doesn't replace). Payload shape is
+// { title, body, url, tag } — composed server-side in src/notify.js so it
+// never depends on any page's JS being alive to compute it.
+self.addEventListener('push', (e) => {
+  let payload = {};
+  try { payload = e.data ? e.data.json() : {}; } catch { /* non-JSON/empty push — show a generic fallback below */ }
+  const title = payload.title || 'Khmer Chess';
+  const options = {
+    body: payload.body || 'You have a new notification',
+    icon: 'assets/icons/icon-192.png',
+    badge: 'assets/icons/icon-192.png',
+    tag: payload.tag,
+    data: { url: payload.url || './' },
+  };
+  e.waitUntil(self.registration.showNotification(title, options));
+});
+
+// Chrome/Firefox/etc. can silently drop and re-issue a subscription with a
+// new endpoint (key rotation, storage pressure) — this fires when that
+// happens. Nothing here can re-POST to the backend itself (no page/fetch
+// auth context in this scope), so just re-subscribe with the same
+// application server key and hand it to any open page to persist; if none
+// is open, the next page load's own resubscribe-check (js/push-client.js)
+// picks it up instead.
+self.addEventListener('pushsubscriptionchange', (e) => {
+  e.waitUntil((async () => {
+    try {
+      const oldKey = e.oldSubscription?.options?.applicationServerKey;
+      if (!oldKey) return;
+      const newSub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: oldKey });
+      const clientsList = await self.clients.matchAll({ includeUncontrolled: true, type: 'window' });
+      for (const c of clientsList) c.postMessage({ type: 'PUSH_RESUBSCRIBED', subscription: newSub.toJSON() });
+    } catch { /* best-effort — the next page load's resubscribe-check is the fallback */ }
+  })());
 });
 
 // Tap-to-open for notifications shown via registration.showNotification()

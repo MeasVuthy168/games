@@ -13,9 +13,9 @@ recordLoginToday();
 const LS_KEY = 'kc_settings_v1';
 const THEME_KEY = 'kc_theme';
 const DEFAULTS = {
-  minutes: 10, increment: 5, sound: true, hints: true,
+  minutes: 10, increment: 5, sound: true, haptic: true, hints: true,
   aiLevel: DEFAULT_LEVEL, aiDebug: false,
-  language: 'en', pieceTheme: 0, boardTheme: 0, instantMove: false
+  language: 'en', pieceTheme: 0, boardTheme: 0, animationEnabled: true
 };
 
 // About App Information
@@ -31,6 +31,14 @@ function loadSettings() {
     const merged = s ? { ...DEFAULTS, ...s } : { ...DEFAULTS };
     const lvl = parseInt(merged.aiLevel, 10);
     merged.aiLevel = (Number.isInteger(lvl) && lvl >= MIN_LEVEL && lvl <= MAX_LEVEL) ? lvl : DEFAULT_LEVEL;
+    // Migrate the old (inverted) "instantMove" flag to the new
+    // animationEnabled flag, once, without losing existing users'
+    // preference — instantMove:true meant "skip the animation", i.e.
+    // animationEnabled:false.
+    if (s && typeof s.instantMove === 'boolean' && !('animationEnabled' in s)) {
+      merged.animationEnabled = !s.instantMove;
+    }
+    delete merged.instantMove;
     return merged;
   } catch {
     return { ...DEFAULTS };
@@ -71,8 +79,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Elements
   const soundToggle = document.getElementById('soundToggle');
+  const hapticToggle = document.getElementById('hapticToggle');
   const hintsToggle = document.getElementById('hintsToggle');
-  const instantMoveToggle = document.getElementById('instantMoveToggle');
+  const animationToggle = document.getElementById('animationToggle');
   const minutesInput = document.getElementById('minutesInput');
   const incInput = document.getElementById('incInput');
   const btnSaveTimer = document.getElementById('btnSaveTimer');
@@ -88,8 +97,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Init UI states
   soundToggle.checked = !!s.sound;
+  if (hapticToggle) hapticToggle.checked = s.haptic !== false;
   hintsToggle.checked = s.hints !== false;
-  if (instantMoveToggle) instantMoveToggle.checked = !!s.instantMove;
+  if (animationToggle) animationToggle.checked = s.animationEnabled !== false;
   minutesInput.value  = s.minutes;
   incInput.value      = s.increment;
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
@@ -109,8 +119,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
+  hapticToggle?.addEventListener('change', ()=>{ s.haptic=!!hapticToggle.checked; saveSettings(s); });
   hintsToggle.addEventListener('change', ()=>{ s.hints=!!hintsToggle.checked; saveSettings(s); });
-  instantMoveToggle?.addEventListener('change', ()=>{ s.instantMove=!!instantMoveToggle.checked; saveSettings(s); });
+  animationToggle?.addEventListener('change', ()=>{ s.animationEnabled=!!animationToggle.checked; saveSettings(s); });
 
   languageRadios.forEach(r =>
     r.addEventListener('change', ()=>{

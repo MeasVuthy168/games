@@ -20,11 +20,12 @@ const DEFAULTS = {
   minutes: 10,
   increment: 5,
   sound: true,
+  haptic: true,
   hints: true,
   aiColor: 'b', // fallback: human plays White, AI plays Black, until the player picks a role
   aiLevel: DEFAULT_LEVEL,
   aiDebug: false,
-  instantMove: false,
+  animationEnabled: true,
   pieceTheme: 0,
   boardTheme: 0
 };
@@ -63,6 +64,14 @@ function loadSettings() {
     // saved before the Easy/Medium/Hard/Expert → 1-10 refactor.
     const lvl = parseInt(merged.aiLevel, 10);
     merged.aiLevel = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? lvl : DEFAULT_LEVEL;
+    // Migrate the old (inverted) "instantMove" flag to the new
+    // animationEnabled flag, once, without losing existing users'
+    // preference — instantMove:true meant "skip the animation", i.e.
+    // animationEnabled:false. (Mirrors the same migration in settings.js.)
+    if (s && typeof s.instantMove === 'boolean' && !('animationEnabled' in s)) {
+      merged.animationEnabled = !s.instantMove;
+    }
+    delete merged.instantMove;
     if (isFriendMode) {
       // Two humans, pass-and-play on the same device — no AI.
       merged.aiEnabled = false;
@@ -92,9 +101,12 @@ class AudioBeeper {
       select:  new Audio('assets/sfx/select.mp3'),
       error:   new Audio('assets/sfx/error.mp3'),
       check:   new Audio('assets/sfx/check.mp3'),
-      // No dedicated win/lose clips are shipped; reuse existing sfx as stand-ins.
-      win:     new Audio('assets/sfx/check.mp3'),
-      lose:    new Audio('assets/sfx/error.mp3')
+      // No dedicated clips are shipped for every event below; reuse the
+      // closest existing sfx as a stand-in rather than shipping new assets.
+      win:      new Audio('assets/sfx/check.mp3'),
+      lose:     new Audio('assets/sfx/error.mp3'),
+      promotion:new Audio('assets/sfx/capture.mp3'),
+      draw:     new Audio('assets/sfx/select.mp3'),
     };
     for (const k in this.bank) this.bank[k].preload = 'auto';
   }
@@ -111,10 +123,62 @@ class AudioBeeper {
   check(){ this.play('check', 1.0); }
   sfxWin(){ this.play('win', 1.0); }
   sfxLose(){ this.play('lose', 1.0); }
+  // Checkmate's own audible cue is deliberately the same sfxWin/sfxLose call
+  // that showEndFlash() already makes (see concludeIfOver/announceCheckmate)
+  // — a plain check() on top of that would be duplicate feedback for the
+  // same event (see the "no duplicate feedback" rule this round's spec
+  // calls out), so there is no separate checkmate() sound method here.
+  promotion(){ this.play('promotion', .9); }
+  draw(){ this.play('draw', .8); }
 }
 const beeper = new AudioBeeper();
 
+// Low-level primitive — a bare wrapper around navigator.vibrate. Gameplay
+// code calls triggerHaptic(type) instead; this is only what that function
+// calls into. navigator.vibrate is unsupported on iOS Safari and some other
+// browsers — when it's missing this is simply a no-op, never an error.
 function vibrate(pattern){ if (navigator.vibrate) navigator.vibrate(pattern); }
+
+/* ---------------- centralized Animation/Haptic settings ----------------
+ * initUI() sets `currentSettings` once per page load (there is exactly one
+ * play.html per page, so this mirrors the existing single `beeper` — no
+ * per-instance state needed). Kept at module scope, not inside initUI,
+ * so showEndFlash() (also module-level, since it's reused by the online-
+ * play code path before initUI's own closures exist) can reach the same
+ * Haptic setting that every move-handling path already uses. */
+let currentSettings = null;
+// The OS-level "reduce motion" request is a hard ceiling on top of the
+// app's own Animation toggle — either one being "off" means no decorative
+// animation. Read once initUI() runs (matchMedia needs a real window).
+let prefersReducedMotionMQ = null;
+function isAnimationEnabled(){
+  if (prefersReducedMotionMQ?.matches) return false;
+  return !currentSettings || currentSettings.animationEnabled !== false;
+}
+function isHapticEnabled(){ return !currentSettings || currentSettings.haptic !== false; }
+
+// One centralized haptic dispatcher for every game event — mirrors
+// beeper's role for sound. Recommended patterns per event, in ms:
+// short single pulses for light feedback, longer/multi-pulse patterns for
+// heavier events (checkmate, win). Unsupported devices/browsers already
+// no-op silently inside vibrate() above.
+const HAPTIC_PATTERNS = {
+  select:    12,
+  move:      18,
+  capture:   [20, 40, 30],
+  check:     [30, 40, 30],       // short double pulse
+  checkmate: [40, 30, 40, 30, 70], // stronger pattern
+  promotion: 25,
+  win:       [30, 30, 30, 30, 60],
+  loss:      [50, 80, 50],
+  draw:      [20, 40, 20],
+  error:     40,
+};
+function triggerHaptic(type){
+  if (!isHapticEnabled()) return;
+  const pattern = HAPTIC_PATTERNS[type];
+  if (pattern != null) vibrate(pattern);
+}
 
 /* ---------------- clocks ---------------- */
 
@@ -165,6 +229,7 @@ function showEndFlash(opts){
   const title = $('#flashTitle');
   const sub = $('#flashSub');
   const rip = $('#ripWrap');
+  const card = overlay.querySelector('.flash-card');
   const fw = overlay.querySelector('.fireworks');
 
   // Defaults
@@ -176,15 +241,24 @@ function showEndFlash(opts){
     sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
     fw.style.display  = 'block';
     beeper.sfxWin();
+    triggerHaptic('win');
   } else if (type === 'lose'){
     title.textContent = titleText || 'អ្នកចាញ់!';
     sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
     rip.style.display = 'block';
     beeper.sfxLose();
+    triggerHaptic('loss');
   } else {
     title.textContent = 'ស្មើ!';
     sub.innerHTML     = '<span class="draw-badge">ល្បែងត្រូវបញ្ចប់</span>';
+    beeper.draw();
+    triggerHaptic('draw');
   }
+
+  // A short, professional fade+scale-in for the result card — the only
+  // "decorative" part of this overlay Animation OFF should skip; the
+  // result text/buttons themselves always render, animated or not.
+  card?.classList.toggle('flash-enter', isAnimationEnabled());
 
   overlay.classList.add('show');
   overlay.setAttribute('aria-hidden','false');
@@ -299,6 +373,13 @@ export async function initUI() {
     }
   }
   beeper.enabled = !!settings.sound;
+  currentSettings = settings; // see isAnimationEnabled()/isHapticEnabled() above
+  prefersReducedMotionMQ = window.matchMedia?.('(prefers-reduced-motion: reduce)') || null;
+  // A couple of effects (the check/checkmate king pulse) are always shown
+  // for correctness — even with Animation off the square must still be
+  // marked — but only their *pulsing* is decorative; this class lets CSS
+  // tell those two things apart without a second JS-side condition.
+  document.body.classList.toggle('kc-anim-off', !isAnimationEnabled());
 
   // Online games are played on separate devices, so each player expects
   // their own pieces at the bottom of their own screen — flip the board
@@ -544,7 +625,23 @@ export async function initUI() {
   }
 
   /* ====== render with animations ====== */
+  // Centralized check/checkmate king-square highlight — computed straight
+  // from the authoritative game engine's own status() (never from any
+  // animation/UI state, per this round's "animation is presentation-only"
+  // rule), so it's correct for every path that calls render(): human tap,
+  // drag-drop, AI, online polling, reset, and undo alike.
+  function applyCheckHighlight() {
+    for (const c of cells) c.classList.remove('in-check', 'in-check-mate');
+    const st = game.status();
+    if (st.state !== 'check' && st.state !== 'checkmate') return;
+    const k = game.findKing(st.toMove);
+    if (!k) return;
+    const cell = cells[gridSlot(k.x, k.y)];
+    cell?.classList.add(st.state === 'checkmate' ? 'in-check-mate' : 'in-check');
+  }
+
   function render() {
+    const animate = isAnimationEnabled();
     for (const c of cells) {
       c.innerHTML = '';
       c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
@@ -555,7 +652,7 @@ export async function initUI() {
     // move distance instead of a fixed small offset — a 12px nudge read as
     // an instant snap regardless of how far the piece actually moved,
     // which is what made every move look too fast.
-    const cellPx = cells[0]?.getBoundingClientRect().width || 44;
+    const cellPx = animate ? (cells[0]?.getBoundingClientRect().width || 44) : 0;
 
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
@@ -563,10 +660,11 @@ export async function initUI() {
         if (!p) continue;
         const cell = cells[gridSlot(x, y)];
 
-        // compute delta for small animation (skipped entirely when
-        // settings.instantMove is on — moves just appear in place)
+        // compute delta for small animation (skipped entirely — the piece
+        // just appears in place — whenever Animation is OFF, either by the
+        // user's own Settings toggle or the OS's prefers-reduced-motion)
         let dx = '0px', dy = '0px', klass = '';
-        if (last && last.to.x === x && last.to.y === y && !settings.instantMove){
+        if (last && last.to.x === x && last.to.y === y && animate){
           // flip the animation direction too, so the slide-in matches the
           // piece's actual on-screen movement rather than its raw board delta
           const sign = flipped ? -1 : 1;
@@ -574,6 +672,10 @@ export async function initUI() {
           dy = sign * (last.from.y - last.to.y) * cellPx + 'px';
           const isKnight = (p.t === PT.KNIGHT);
           klass = isKnight ? 'anim-hop' : 'anim-slide';
+          // Promotion pop layers on top of the slide/hop that just carried
+          // the pawn to this square — see the .piece.anim-promo rule for
+          // the timing (it starts right as the slide/hop finishes).
+          if (last.promo) klass += ' anim-promo';
         }
 
         const s = document.createElement('div');
@@ -590,13 +692,14 @@ export async function initUI() {
       const toIdx   = gridSlot(last.to.x, last.to.y);
       cells[fromIdx]?.classList.add('last-from');
       cells[toIdx]?.classList.add('last-to');
-      if (last.captured){
+      if (last.captured && animate){
         cells[toIdx]?.classList.add('last-capture');
         const rp = document.createElement('div'); rp.className = 'capture-ripple';
         cells[toIdx]?.appendChild(rp); setTimeout(()=> rp.remove(), 350);
       }
     }
 
+    applyCheckHighlight();
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
   }
@@ -662,7 +765,7 @@ export async function initUI() {
     game.history = [];
     if (g.history?.length) {
       const lastMove = g.history[g.history.length - 1];
-      game.history = [{ from: lastMove.from, to: lastMove.to, captured: !!lastMove.captured }];
+      game.history = [{ from: lastMove.from, to: lastMove.to, captured: !!lastMove.captured, promo: !!lastMove.promo }];
     }
 
     if (g.status === 'active') {
@@ -695,9 +798,20 @@ export async function initUI() {
       });
       // Real online wins are intentionally excluded from AI-specific Daily
       // Rewards objectives — Rewards.notifyGameResult only counts mode:'ai'.
-    } else if (prevUpdatedAt !== g.updatedAt && beeper.enabled && g.history?.length) {
+    } else if (prevUpdatedAt !== g.updatedAt && g.history?.length) {
+      // Sound and Haptic are independent settings — each is gated by its
+      // own toggle, never by the other (beeper.* already checks
+      // beeper.enabled internally; triggerHaptic() checks isHapticEnabled()).
       const last = g.history[g.history.length - 1];
-      if (last.captured) { beeper.capture(); vibrate([20, 40, 30]); } else beeper.move();
+      if (last.captured) beeper.capture(); else beeper.move();
+      triggerHaptic(last.captured ? 'capture' : 'move');
+      if (last.promo) { beeper.promotion(); triggerHaptic('promotion'); }
+      // game.board/turn already mirror server truth above, so the shared
+      // engine's own status() is authoritative here too, exactly as it is
+      // for local/AI moves — never inferred from animation state.
+      const st = game.status();
+      if (st.state === 'check') { beeper.check(); triggerHaptic('check'); }
+      else if (st.state === 'checkmate') { triggerHaptic('checkmate'); }
     }
   }
 
@@ -707,7 +821,7 @@ export async function initUI() {
       const { game: g } = await Api.makeGameMove(onlineGameId, from, to);
       applyOnlineGameState(g);
     } catch (err) {
-      beeper.error(); vibrate(40);
+      beeper.error(); triggerHaptic('error');
       if (err.status !== 400 && err.status !== 409) showToast(err.message || 'Move failed', 'error');
       setBoardBusy(!onlineState.myTurn);
     }
@@ -721,14 +835,14 @@ export async function initUI() {
 
     if (p && p.c === onlineState.myColor) {
       selected = { x, y }; showHints(x, y);
-      if (beeper.enabled) beeper.select();
+      beeper.select(); triggerHaptic('select');
       return;
     }
-    if (!selected) { if (beeper.enabled) beeper.error(); vibrate(40); return; }
+    if (!selected) { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); return; }
     const ok = legal.some(m => m.x === x && m.y === y);
     if (!ok) {
       selected = null; legal = []; clearHints();
-      if (beeper.enabled) beeper.error(); vibrate(40); return;
+      beeper.error(); triggerHaptic('error'); flashIllegal(x, y); return;
     }
     const from = { ...selected }, to = { x, y };
     selected = null; legal = []; clearHints();
@@ -863,10 +977,7 @@ export async function initUI() {
         const res2 = game.move(fb.from, fb.to);
         if (!res2?.ok){ settings.aiEnabled=false; return; }
 
-        if (beeper.enabled){
-          before2 ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
-          if (res2.status?.state === 'check') beeper.check();
-        }
+        applyMoveFeedback(res2, { captured: !!before2 });
 
         clocks.switchedByMove(prev2);
         render(); saveGameState(game, clocks);
@@ -875,10 +986,7 @@ export async function initUI() {
         return;
       }
 
-      if (beeper.enabled){
-        before ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
-        if (res.status?.state === 'check') beeper.check();
-      }
+      applyMoveFeedback(res, { captured: !!before });
 
       clocks.switchedByMove(prevTurn);
       render(); saveGameState(game, clocks);
@@ -908,6 +1016,48 @@ export async function initUI() {
 
   const hintsEnabled = () => settings.hints !== false;
 
+  // Briefly blocks new input while a move's animation is visually still
+  // running, so a fast double-tap can't select another piece or fire a
+  // second move before the first one has settled (item 24). A no-op —
+  // input is never delayed — when Animation is off.
+  let animLock = false;
+  function lockForAnimation() {
+    if (!isAnimationEnabled()) return;
+    animLock = true;
+    setTimeout(() => { animLock = false; }, 260); // covers slide/hop + promo-pop
+  }
+
+  // Short shake/reject cue for an illegal-move attempt (item 18) — the
+  // board/game state is never touched by this, purely visual+audible+haptic
+  // feedback on the square the player tried to move to.
+  function flashIllegal(x, y) {
+    const cell = cells[gridSlot(x, y)];
+    if (!cell) return;
+    cell.classList.remove('reject-shake');
+    void cell.offsetWidth; // restart the animation if retapped rapidly
+    cell.classList.add('reject-shake');
+    setTimeout(() => cell.classList.remove('reject-shake'), 260);
+  }
+
+  // Single centralized feedback path for every move that actually lands —
+  // human tap, drag-drop, and AI (both the primary engine move and its
+  // random-fallback) alike, so Sound/Haptic/check-detection behavior can
+  // never drift between the human and AI paths (item 5/19). Sound and
+  // Haptic are each gated only by their own setting (beeper.* already
+  // checks beeper.enabled internally; triggerHaptic() checks
+  // isHapticEnabled()) — never by each other or by Animation. Check/
+  // checkmate is read straight off res.status, which game.move() itself
+  // already computed from the authoritative engine — never inferred from
+  // any animation state.
+  function applyMoveFeedback(res, { captured }) {
+    if (captured) { beeper.capture(); triggerHaptic('capture'); }
+    else { beeper.move(); triggerHaptic('move'); }
+    if (res.promo) { beeper.promotion(); triggerHaptic('promotion'); }
+    if (res.status?.state === 'check') { beeper.check(); triggerHaptic('check'); }
+    else if (res.status?.state === 'checkmate') { triggerHaptic('checkmate'); }
+    lockForAnimation();
+  }
+
   function showHints(x, y) {
     clearHints();
     const cell = cells[gridSlot(x, y)];
@@ -922,6 +1072,7 @@ export async function initUI() {
   }
 
   function onCellTap(e) {
+    if (animLock) return; // an animation is still visually settling
     const x = +e.currentTarget.dataset.x;
     const y = +e.currentTarget.dataset.y;
     const p = game.at(x, y);
@@ -929,33 +1080,32 @@ export async function initUI() {
     // If AI turn → allow premove selection for the human's own color
     if (isAITurn() || AILock) {
       if (p && p.c === humanColor()){
-        if (!selected){ selected = {x,y}; showHints(x,y); beeper.select(); return; }
+        if (!selected){ selected = {x,y}; showHints(x,y); beeper.select(); triggerHaptic('select'); return; }
         const ok = legal.some(m => m.x===x && m.y===y);
         if (ok){
           premove = { from:{...selected}, to:{x,y} };
           cells[gridSlot(selected.x, selected.y)].classList.add('last-from');
           cells[gridSlot(x, y)].classList.add('last-to');
-          beeper.select();
-        } else { beeper.error(); }
-      } else { beeper.error(); }
-      vibrate(30);
+          beeper.select(); triggerHaptic('select');
+        } else { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); }
+      } else { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); }
       return;
     }
 
     // Select piece
     if (p && p.c === game.turn) {
       selected = { x, y }; showHints(x, y);
-      if (beeper.enabled) beeper.select(); return;
+      beeper.select(); triggerHaptic('select'); return;
     }
 
     // No selection yet
-    if (!selected) { if (beeper.enabled) beeper.error(); vibrate(40); return; }
+    if (!selected) { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); return; }
 
     // Check if target is legal
     const ok = legal.some(m => m.x === x && m.y === y);
     if (!ok) {
       selected = null; legal = []; clearHints();
-      if (beeper.enabled) beeper.error(); vibrate(40); return;
+      beeper.error(); triggerHaptic('error'); flashIllegal(x, y); return;
     }
 
     const from   = { ...selected };
@@ -965,11 +1115,7 @@ export async function initUI() {
     const res    = game.move(from, to);
 
     if (res.ok) {
-      if (beeper.enabled) {
-        if (before) { beeper.capture(); vibrate([20, 40, 30]); }
-        else { beeper.move(); }
-        if (res.status?.state === 'check') beeper.check();
-      }
+      applyMoveFeedback(res, { captured: !!before });
 
       clocks.switchedByMove(prev);
       selected = null; legal = []; clearHints();
@@ -1041,19 +1187,16 @@ export async function initUI() {
     if (!d) return;
 
     const dest = cellAtXY(px, py);
-    if (!dest){ beeper.error(); vibrate(40); return; }
+    if (!dest){ beeper.error(); triggerHaptic('error'); return; }
     const ok = d.legal.some(m => m.x===dest.x && m.y===dest.y);
-    if (!ok){ beeper.error(); vibrate(40); return; }
+    if (!ok){ beeper.error(); triggerHaptic('error'); flashIllegal(dest.x, dest.y); return; }
 
     const before = game.at(dest.x, dest.y);
     const prev   = game.turn;
     const res    = game.move(d.from, {x:dest.x, y:dest.y});
-    if (!res?.ok){ beeper.error(); vibrate(40); return; }
+    if (!res?.ok){ beeper.error(); triggerHaptic('error'); flashIllegal(dest.x, dest.y); return; }
 
-    if (beeper.enabled){
-      before ? (beeper.capture(), vibrate([20,40,30])) : beeper.move();
-      if (res.status?.state === 'check') beeper.check();
-    }
+    applyMoveFeedback(res, { captured: !!before });
     clocks.switchedByMove(prev);
     render(); saveGameState(game, clocks);
 
@@ -1061,10 +1204,11 @@ export async function initUI() {
   }
 
   function onCellPointerDown(e){
-    if (isAITurn() || AILock) { beeper.error(); vibrate(40); return; }
+    if (animLock) return; // an animation is still visually settling
+    if (isAITurn() || AILock) { beeper.error(); triggerHaptic('error'); return; }
     const x = +e.currentTarget.dataset.x, y = +e.currentTarget.dataset.y;
     const p = game.at(x,y);
-    if (!p || p.c !== game.turn){ if (beeper.enabled) beeper.error(); return; }
+    if (!p || p.c !== game.turn){ beeper.error(); return; }
     e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
     startDrag(x,y, e.clientX, e.clientY, e.pointerId);
   }

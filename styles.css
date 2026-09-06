@@ -513,11 +513,13 @@ body{
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
 
-/* Last capture flash */
-.cell.last-capture{ animation:capFlash .9s ease-out }
+/* Last capture flash — a clean, quick "impact" cue on the destination
+   square rather than a lingering effect (professional/minimal per the
+   Animation system's design goals). */
+.cell.last-capture{ animation:capFlash .5s ease-out }
 @keyframes capFlash{
   0%{box-shadow:none}
-  30%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.55),0 0 14px 6px rgba(255,0,0,.25)}
+  25%{box-shadow:inset 0 0 0 4px rgba(255,0,0,.5),0 0 14px 6px rgba(255,0,0,.22)}
   100%{box-shadow:none}
 }
 
@@ -602,19 +604,89 @@ body.ai-thinking #board{
 }
 
 /* ===================== MOVE ANIMATIONS ===================== */
+/* Tuned to a snappy, professional 180-250ms range — short enough that the
+   board never feels slow, long enough to read clearly as movement rather
+   than a teleport. Both classes are only ever added by render() when
+   Animation is on (settings toggle + prefers-reduced-motion combined —
+   see isAnimationEnabled() in ui.js), so no extra CSS gating is needed
+   here for the base slide/hop themselves. */
 @keyframes slideIn { from{transform:translate(var(--dx,0),var(--dy,0))} to{transform:translate(0,0)} }
-@keyframes hopIn   { 0%{transform:translate(var(--dx,0),var(--dy,0)) scale(.96)} 60%{transform:translate(0,0) scale(1.04)} 100%{transform:translate(0,0) scale(1)} }
-.piece.anim-slide{ animation:slideIn .38s cubic-bezier(.25,.8,.35,1) }
-.piece.anim-hop  { animation:hopIn .42s cubic-bezier(.25,.8,.35,1) }
+@keyframes hopIn   { 0%{transform:translate(var(--dx,0),var(--dy,0)) scale(.96)} 60%{transform:translate(0,0) scale(1.05)} 100%{transform:translate(0,0) scale(1)} }
+.piece.anim-slide{ animation:slideIn .2s cubic-bezier(.25,.8,.35,1) }
+.piece.anim-hop  { animation:hopIn .22s cubic-bezier(.25,.8,.35,1) }
 
-/* capture ripple */
+/* Promotion pop — layers on top of the slide/hop above via a second
+   comma-separated animation, timed to start right as the move-in finishes
+   (animation-delay matches the slide/hop duration it follows). */
+@keyframes promoPop{ 0%{transform:scale(.7); filter:drop-shadow(0 0 0 rgba(255,214,64,0))} 55%{transform:scale(1.12); filter:drop-shadow(0 0 10px rgba(255,214,64,.85))} 100%{transform:scale(1); filter:drop-shadow(0 0 0 rgba(255,214,64,0))} }
+.piece.anim-slide.anim-promo{ animation:slideIn .2s cubic-bezier(.25,.8,.35,1), promoPop .32s ease-out .2s; }
+.piece.anim-hop.anim-promo  { animation:hopIn .22s cubic-bezier(.25,.8,.35,1), promoPop .32s ease-out .22s; }
+
+/* capture ripple — a quick, clean "impact" cue on the destination square,
+   not an explosion. Only ever added by render() when Animation is on. */
 .capture-ripple{ position:absolute; inset:0; border-radius:4px; pointer-events:none; overflow:hidden; }
 .capture-ripple::after{
   content:""; position:absolute; top:50%; left:50%;
   width:10px; height:10px; background:rgba(255,0,0,.25); border-radius:50%;
-  transform:translate(-50%,-50%) scale(0.2); animation:capRipple .3s ease-out;
+  transform:translate(-50%,-50%) scale(0.2); animation:capRipple .22s ease-out;
 }
-@keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(12); opacity:0; } }
+@keyframes capRipple{ to{ transform:translate(-50%,-50%) scale(10); opacity:0; } }
+
+/* Illegal-move reject shake — a short, one-shot cue on the square the
+   player tried to move to (distinct from .count-bar.urgent's own
+   infinite-loop `shake` keyframe, which this reuses the same motion for
+   but must not inherit the looping). Always active regardless of the
+   Animation setting — this is error feedback, not decorative polish,
+   same as the existing error sound/haptic it always accompanies. */
+.cell.reject-shake{ animation:rejectShake .22s ease-in-out; z-index:5; }
+@keyframes rejectShake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-4px)}
+  50%{transform:translateX(4px)}
+  75%{transform:translateX(-3px)}
+}
+
+/* Check / Checkmate king-square highlight — always shown (a static red
+   ring) so the game state is legible even with Animation off; the pulsing
+   glow itself is the only decorative part, switched off by the same
+   body.kc-anim-off flag every other decorative effect respects. */
+.cell.in-check::before,
+.cell.in-check-mate::before{
+  content:""; position:absolute; inset:3px; border-radius:6px;
+  pointer-events:none; z-index:4;
+  box-shadow:0 0 0 3px rgba(220,38,38,.85), inset 0 0 10px rgba(220,38,38,.5);
+}
+.cell.in-check-mate::before{
+  box-shadow:0 0 0 4px rgba(220,38,38,.95), inset 0 0 14px rgba(220,38,38,.65);
+}
+body:not(.kc-anim-off) .cell.in-check::before{ animation:checkPulse .55s ease-in-out 2; }
+body:not(.kc-anim-off) .cell.in-check-mate::before{ animation:checkPulse .5s ease-in-out 2; }
+@keyframes checkPulse{
+  0%,100%{ box-shadow:0 0 0 3px rgba(220,38,38,.85), inset 0 0 10px rgba(220,38,38,.5); }
+  50%{ box-shadow:0 0 0 5px rgba(220,38,38,1), inset 0 0 18px rgba(220,38,38,.8); }
+}
+
+/* End-flash result card — a short, professional fade+scale-in. Only
+   applied (via the .flash-enter class) when Animation is on; otherwise
+   the card simply appears at full opacity/scale instantly. */
+.flash-card{ opacity:1; transform:scale(1); }
+.flash-card.flash-enter{
+  opacity:0; transform:scale(.92);
+  animation:flashEnter .55s cubic-bezier(.25,.8,.35,1) forwards;
+}
+@keyframes flashEnter{ to{ opacity:1; transform:scale(1); } }
+
+/* Respect the OS-level reduced-motion request as a hard ceiling, on top
+   of (not instead of) the app's own Animation setting. */
+@media (prefers-reduced-motion: reduce){
+  .piece.anim-slide, .piece.anim-hop,
+  .cell.reject-shake,
+  .cell.in-check::before, .cell.in-check-mate::before,
+  .flash-card.flash-enter{
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+  }
+}
 
 /* ===================== END FLASH OVERLAY ===================== */
 #flashOverlay{

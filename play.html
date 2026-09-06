@@ -36,6 +36,44 @@
 </head>
 <body>
   <div id="app" class="app">
+    <!-- Top-right "more" menu — Reset/Pause/Undo/Fullscreen all live here
+         instead of their own button rows, freeing up board space. Reset/
+         Pause/Undo are wrapped in #localControls (unchanged id) so
+         js/ui.js's existing online-mode hide still applies to just those
+         3; Fullscreen sits outside it so it stays available in online
+         mode too (see initFullscreenButton() in js/ui.js). -->
+    <header class="topbar">
+      <div class="spacer"></div>
+      <div class="topbar-menu" id="playMenu">
+        <button class="icon-btn" id="btnPlayMenu" type="button" aria-label="More options">⋮</button>
+        <div class="topbar-menu-list" id="playMenuList" hidden>
+          <div id="localControls">
+            <button id="btnReset" type="button">
+              <img src="assets/ui/reset.png" width="18" height="18" alt="">
+              <span data-i18n="play.menu.reset">ចាប់ផ្ដើមថ្មី</span>
+            </button>
+            <button id="btnPause" type="button">
+              <img src="assets/ui/pause.png" width="18" height="18" alt="">
+              <span data-i18n="play.menu.pause">ផ្អាក</span>
+            </button>
+            <button id="btnUndo" type="button">
+              <img src="assets/ui/undo.png" width="18" height="18" alt="">
+              <span data-i18n="play.menu.undo">ថយក្រោយ</span>
+            </button>
+          </div>
+          <button id="btnFullscreen" type="button" hidden>
+            <svg id="fsEnterIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </svg>
+            <svg id="fsExitIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+              <path d="M9 3v3a2 2 0 0 1-2 2H4M15 3v3a2 2 0 0 0 2 2h3M9 21v-3a2 2 0 0 0-2-2H4M15 21v-3a2 2 0 0 1 2-2h3"/>
+            </svg>
+            <span id="fsLabel" data-i18n="play.menu.fullscreenEnter">ពេញអេក្រង់</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
     <main class="layout layout-single">
       <section class="panel board-panel">
 
@@ -53,41 +91,6 @@
 
           <audio id="snd-count-start" preload="auto" src="assets/sfx/count-start.mp3"></audio>
           <audio id="snd-count-end"   preload="auto" src="assets/sfx/count-end.mp3"></audio>
-        </div>
-
-        <!-- Controls -->
-        <div class="controls controls-top" id="localControls">
-          <button id="btnReset" class="btn-icon primary" title="ចាប់ផ្ដើមថ្មី">
-            <img src="assets/ui/reset.png" width="22" height="22" alt="">
-            <span>ចាប់ផ្ដើមថ្មី</span>
-          </button>
-
-          <button id="btnPause" class="btn-icon secondary" title="Pause/Resume">
-            <img src="assets/ui/pause.png" width="22" height="22" alt="">
-            <span>ផ្អាក</span>
-          </button>
-
-          <button id="btnUndo" class="btn-icon secondary" title="ថយក្រោយ">
-            <img src="assets/ui/undo.png" width="22" height="22" alt="">
-            <span>ថយក្រោយ</span>
-          </button>
-        </div>
-
-        <!-- Fullscreen toggle — its own row, not inside #localControls, so
-             it stays available in online mode too (that container gets
-             hidden entirely for online games — see applyPlayerLabels() in
-             js/ui.js). Hidden automatically on browsers with no Fullscreen
-             API support (notably iOS Safari) — see initFullscreenButton(). -->
-        <div class="controls controls-top" id="pageControls">
-          <button id="btnFullscreen" class="btn-icon secondary" title="Fullscreen" type="button" hidden>
-            <svg id="fsEnterIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
-            </svg>
-            <svg id="fsExitIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
-              <path d="M9 3v3a2 2 0 0 1-2 2H4M15 3v3a2 2 0 0 0 2 2h3M9 21v-3a2 2 0 0 0-2-2H4M15 21v-3a2 2 0 0 1 2-2h3"/>
-            </svg>
-            <span id="fsLabel">ពេញអេក្រង់</span>
-          </button>
         </div>
 
         <div id="onlineStatusBanner" class="online-status-banner" hidden></div>

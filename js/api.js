@@ -235,6 +235,20 @@ export async function deleteAllNotifications() {
   return request('/api/notifications', { method: 'DELETE' });
 }
 
+/* ---------------- web push (real notifications while the app is closed) ---------------- */
+
+export async function getVapidPublicKey() {
+  return request('/api/push/vapid-public-key', { auth: false });
+}
+
+export async function subscribePush(subscription) {
+  return request('/api/push/subscribe', { method: 'POST', body: { subscription } });
+}
+
+export async function unsubscribePush(endpoint) {
+  return request('/api/push/unsubscribe', { method: 'POST', body: { endpoint } });
+}
+
 /* ---------------- online games ---------------- */
 
 export async function challengeFriend(friendId) {

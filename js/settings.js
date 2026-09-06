@@ -5,7 +5,7 @@ import { setLanguage, applyTranslations } from './i18n.js';
 import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL } from './ai-engine.js';
 import { recordLoginToday } from './rewards.js';
 import * as Api from './api.js';
-import { notificationsEnabled, setNotificationsEnabled, refreshNotifBadge, requestPushPermission } from './notif-badge.js';
+import { notificationsEnabled, setNotificationsEnabled, refreshNotifBadge, requestPushPermission, disablePush } from './notif-badge.js';
 import { showToast } from './toast.js';
 
 recordLoginToday();
@@ -209,9 +209,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
   if (notifToggle) notifToggle.checked = notificationsEnabled();
   notifToggle?.addEventListener('change', () => {
     setNotificationsEnabled(notifToggle.checked);
-    // Ask for real OS-level notification permission right when the user
-    // opts in — never unprompted on page load.
-    if (notifToggle.checked) requestPushPermission();
+    if (notifToggle.checked) {
+      // Ask for real OS-level notification permission right when the user
+      // opts in — never unprompted on page load. Also establishes the Web
+      // Push subscription so notifications can reach this device while
+      // it's closed, not just while a page is open polling.
+      requestPushPermission();
+    } else {
+      // Stop any further push to this device; in-page polling/toast is
+      // already gated by notificationsEnabled() above.
+      disablePush();
+    }
     refreshNotifBadge();
   });
 

@@ -107,7 +107,6 @@ class AudioBeeper {
       check:   new Audio('assets/sfx/check.mp3'),
       // No dedicated clips are shipped for every event below; reuse the
       // closest existing sfx as a stand-in rather than shipping new assets.
-      win:      new Audio('assets/sfx/check.mp3'),
       lose:     new Audio('assets/sfx/error.mp3'),
       promotion:new Audio('assets/sfx/capture.mp3'),
       draw:     new Audio('assets/sfx/select.mp3'),
@@ -124,14 +123,14 @@ class AudioBeeper {
   capture(){ this.play('capture', 1.0); }
   select(){ this.play('select', .85); }
   error(){ this.play('error', .9); }
+  // The checkmate MOMENT's own sound — a plain check() cue, fired once by
+  // presentGameResult() right as the king's checkmate glow pulses. WIN's
+  // own celebrate() (below) is a deliberately DIFFERENT sound fired later
+  // at the card reveal, so a win-via-checkmate never plays the same clip
+  // twice back to back (this round's explicit "no duplicate feedback"
+  // rule for CHECKMATE + WIN).
   check(){ this.play('check', 1.0); }
-  sfxWin(){ this.play('win', 1.0); }
   sfxLose(){ this.play('lose', 1.0); }
-  // Checkmate's own audible cue is deliberately the same sfxWin/sfxLose call
-  // that showEndFlash() already makes (see concludeIfOver/announceCheckmate)
-  // — a plain check() on top of that would be duplicate feedback for the
-  // same event (see the "no duplicate feedback" rule this round's spec
-  // calls out), so there is no separate checkmate() sound method here.
   promotion(){ this.play('promotion', .9); }
   draw(){ this.play('draw', .8); }
 
@@ -162,6 +161,17 @@ class AudioBeeper {
   countStart(){ this.tone(880, 120, 0.35); }
   count(){ this.tone(660, 70, 0.25); }
   countWarning(){ this.tone(520, 90, 0.35, 'square'); }
+
+  // WIN's own celebration flourish — a short ascending two-note chime,
+  // reusing the same Web Audio tone() this class already uses for
+  // counting cues rather than a second sound system. Fired once at the
+  // result card's reveal (see presentGameResult()), always AFTER and
+  // always DIFFERENT from the earlier checkmate-moment check() cue, so
+  // the two never sound like the same clip playing twice.
+  celebrate(){
+    this.tone(660, 110, 0.3);
+    setTimeout(() => this.tone(880, 160, 0.32), 90);
+  }
 }
 const beeper = new AudioBeeper();
 
@@ -254,45 +264,100 @@ class Clocks {
   }
 }
 
-/* ---------------- end-flash overlay ---------------- */
+/* ---------------- result celebration overlay ---------------- */
 
 function $(s, r=document){ return r.querySelector(s); }
 
+// WIN-only celebration particles — lightweight DOM spans, never a canvas
+// or external library. Only ever called while Animation is on (callers
+// guard this too; repeated here as a hard floor), so under Animation off
+// or prefers-reduced-motion no particle node is ever created at all, not
+// merely hidden. Self-contained inside .flash-particles (overflow:hidden
+// in CSS), so this can never cover the board or cause page scroll.
+function clearParticles(){
+  const el = document.getElementById('flashParticles');
+  if (el) el.innerHTML = '';
+}
+function spawnCelebrationParticles(){
+  if (!isAnimationEnabled()) return;
+  const el = document.getElementById('flashParticles');
+  if (!el) return;
+  clearParticles();
+  const count = 16 + Math.floor(Math.random() * 9); // 16–24
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < count; i++) {
+    const p = document.createElement('span');
+    p.className = 'particle';
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 55 + Math.random() * 85;
+    p.style.setProperty('--tx', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--ty', Math.sin(angle) * dist + 'px');
+    p.style.setProperty('--delay', Math.round(Math.random() * 120) + 'ms');
+    p.style.setProperty('--dur', Math.round(600 + Math.random() * 400) + 'ms');
+    p.style.setProperty('--hue', Math.round(30 + Math.random() * 55) + 'deg'); // warm gold/amber range
+    frag.appendChild(p);
+  }
+  el.appendChild(frag);
+}
+
+// Fills the optional small summary block (Opponent/Moves/Time) — purely
+// display of data the app already computes for History.recordGame()
+// elsewhere; never a new statistic. Any row missing a value is hidden
+// individually so a friend-mode game (no single "opponent") or an online
+// game just shows fewer rows rather than a blank one.
+function populateSummary(summary){
+  const box = document.getElementById('flashSummary');
+  if (!box) return;
+  if (!summary) { box.hidden = true; return; }
+  const rows = [
+    ['summaryOpponentRow', 'summaryOpponent', summary.opponent],
+    ['summaryMovesRow',    'summaryMoves',    summary.moves != null ? String(summary.moves) : null],
+    ['summaryTimeRow',     'summaryTime',     summary.timeText || null],
+  ];
+  let any = false;
+  for (const [rowId, valId, val] of rows) {
+    const row = document.getElementById(rowId);
+    const valEl = document.getElementById(valId);
+    const show = val != null && val !== '';
+    if (row) row.hidden = !show;
+    if (valEl && show) valEl.textContent = val;
+    any = any || show;
+  }
+  box.hidden = !any;
+}
+
+// Low-level "reveal the result now" — the one place that actually shows
+// the overlay and plays its final sound/haptic. Kept callable directly
+// (window.showEndFlash, unchanged signature) for quick manual/automated
+// checks that don't care about the new delayed-presentation timing;
+// presentGameResult() below is what real gameplay calls, and it always
+// ends by calling this exact function once the presentation delay (if
+// any) has elapsed.
 function showEndFlash(opts){
-  const { type='win', title:titleText, sub:subText } = opts||{};
+  const { type='win', title:titleText, sub:subText, icon:iconText, reason:reasonText, summary } = opts || {};
   const overlay = $('#flashOverlay');
+  const card = overlay.querySelector('.flash-card');
+  const iconEl = $('#flashIcon');
   const title = $('#flashTitle');
   const sub = $('#flashSub');
-  const rip = $('#ripWrap');
-  const card = overlay.querySelector('.flash-card');
-  const fw = overlay.querySelector('.fireworks');
+  const reasonEl = $('#flashReason');
 
-  // Defaults
-  fw.style.display = 'none';
-  rip.style.display = 'none';
+  overlay.classList.remove('type-win', 'type-lose', 'type-draw');
+  overlay.classList.add(type === 'win' ? 'type-win' : type === 'lose' ? 'type-lose' : 'type-draw');
 
-  if (type === 'win'){
-    title.textContent = titleText || 'អ្នកឈ្នះ!';
-    sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
-    fw.style.display  = 'block';
-    beeper.sfxWin();
-    triggerHaptic('win');
-  } else if (type === 'lose'){
-    title.textContent = titleText || 'អ្នកចាញ់!';
-    sub.textContent   = subText || 'អុកស្លាប់! ល្បែងត្រូវបញ្ចប់។';
-    rip.style.display = 'block';
-    beeper.sfxLose();
-    triggerHaptic('loss');
-  } else {
-    title.textContent = 'ស្មើ!';
-    const badgeText = subText || 'ល្បែងត្រូវបញ្ចប់';
-    sub.innerHTML     = `<span class="draw-badge"></span>`;
-    sub.querySelector('.draw-badge').textContent = badgeText;
-    beeper.draw();
-    triggerHaptic('draw');
-  }
+  const defaultIcon  = type === 'win' ? '🏆' : type === 'lose' ? '😔' : '🤝';
+  const defaultTitle = type === 'win' ? t('result.win') : type === 'lose' ? t('result.loss') : t('result.draw');
+  if (iconEl) iconEl.textContent = iconText || defaultIcon;
+  title.textContent = titleText || defaultTitle;
+  sub.textContent = subText || '';
+  if (reasonEl) { reasonEl.textContent = reasonText || ''; reasonEl.hidden = !reasonText; }
+  populateSummary(summary);
 
-  // A short, professional fade+scale-in for the result card — the only
+  if (type === 'win') { beeper.celebrate(); triggerHaptic('win'); }
+  else if (type === 'lose') { beeper.sfxLose(); triggerHaptic('loss'); }
+  else { beeper.draw(); triggerHaptic('draw'); }
+
+  // A short, professional entrance for the result card — the only
   // "decorative" part of this overlay Animation OFF should skip; the
   // result text/buttons themselves always render, animated or not.
   card?.classList.toggle('flash-enter', isAnimationEnabled());
@@ -576,25 +641,139 @@ export async function initUI() {
     return `វេនខាង (${side})${whoSuffix(game.turn)}`;
   }
 
-  // Localized end-of-game announcement, correct for any chosen color/role.
-  function announceCheckmate(matedColor) {
-    const winnerColor = matedColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
-    const sideTxt = (c) => c === COLORS.WHITE ? 'ស' : 'ខ្មៅ';
-    if (settings.aiEnabled) {
-      const humanWon = winnerColor !== settings.aiColor;
-      const matedRole = matedColor === settings.aiColor ? ' (Master/AI)' : ' (អ្នក/You)';
-      showEndFlash({
-        type: humanWon ? 'win' : 'lose',
-        title: humanWon ? 'អ្នកឈ្នះ!' : 'អ្នកចាញ់!',
-        sub: `អុកស្លាប់ខាង${sideTxt(matedColor)}${matedRole}! ល្បែងត្រូវបញ្ចប់។`
-      });
-    } else {
-      showEndFlash({
-        type: 'win',
-        title: `ខាង${sideTxt(winnerColor)}ឈ្នះ!`,
-        sub: `អុកស្លាប់ខាង${sideTxt(matedColor)}! ល្បែងត្រូវបញ្ចប់។`
-      });
+  /* ====== Result presentation (delayed celebration) ======
+   * Architecture (this round): the GAME ENGINE already decides win/loss/
+   * draw synchronously inside game.js's move() (game.winner is set before
+   * this file ever sees the result) — nothing here ever decides who won.
+   * All that's delayed is the VISUAL reveal: presentGameResult() is the
+   * one authoritative entry point every ending path calls (checkmate/
+   * stalemate/counting locally, and the online finished-game branch);
+   * it guards against being shown twice (`resultShown`), stages the
+   * checkmate glow/sound/haptic + WIN particles + card reveal through a
+   * short setTimeout chain when Animation is on, and collapses to an
+   * immediate reveal (sound/haptic still firing) when it's off. Every
+   * scheduled step re-checks `resultGen` so a Reset/Undo that fires mid-
+   * sequence safely drops whatever was still pending (section 21/23/30 of
+   * this round's spec) instead of showing a stale result over a fresh
+   * board, or leaking a timer/particle past it.
+   */
+  let resultShown = false;
+  let resultGen = 0;
+  let resultTimers = [];
+  function clearResultTimers() {
+    for (const id of resultTimers) clearTimeout(id);
+    resultTimers = [];
+  }
+  function scheduleResult(fn, delay) {
+    const id = setTimeout(fn, delay);
+    resultTimers.push(id);
+    return id;
+  }
+  // Called by New Game / Undo — the only two controls that can touch an
+  // already-finished game — so a pending or already-shown celebration
+  // never lingers into whatever comes next.
+  function resetResultPresentation() {
+    resultGen++;
+    clearResultTimers();
+    resultShown = false;
+    clearParticles();
+    const overlay = document.getElementById('flashOverlay');
+    overlay?.classList.remove('show');
+    overlay?.setAttribute('aria-hidden', 'true');
+  }
+
+  // Small, already-computed data only — never a new statistic. `opponent`
+  // is omitted (row hidden) for friend mode, which has no single opponent.
+  function buildSummary(opponent) {
+    const elapsedMs = Date.now() - gameStartedAt;
+    return {
+      opponent: opponent || null,
+      moves: game.history.length,
+      timeText: clocks.format(elapsedMs).replace(/\.\d$/, ''),
+    };
+  }
+
+  // Turns a {result, reason, opponentName, extra} payload (spec section 20)
+  // into the localized copy + icon showEndFlash() actually renders. Pure —
+  // reads only what's handed to it, never game/counting state directly, so
+  // it's still correct even if called from a scheduled callback after the
+  // board has already moved on.
+  function buildResultPresentation({ result, reason, opponentName, extra }) {
+    const type = result === 'WIN' ? 'win' : result === 'LOSS' ? 'lose' : 'draw';
+    let title = extra?.titleOverride;
+    let sub = extra?.descOverride;
+    let reasonText = '';
+
+    if (result === 'DRAW_COUNTING') {
+      title = title || t('result.drawCounting');
+      sub = sub || t('result.drawCountingDesc');
+      const c = extra?.counting;
+      if (c && c.type !== 'BARE_KINGS' && c.limit > 0) {
+        reasonText = t('result.countFinal', { current: c.current, limit: c.limit });
+      }
+    } else if (result === 'DRAW') {
+      title = title || t('result.draw');
+      sub = sub || t('result.drawDesc');
+      if (reason === 'STALEMATE') reasonText = '';
+    } else if (result === 'WIN') {
+      title = title || t('result.win');
+      sub = sub || (opponentName ? t('result.winDesc', { opponent: opponentName }) : '');
+      if (reason === 'CHECKMATE') reasonText = t('result.checkmate');
+    } else { // LOSS
+      title = title || t('result.loss');
+      sub = sub || (opponentName ? t('result.lossDesc', { opponent: opponentName }) : '');
+      if (reason === 'CHECKMATE') reasonText = t('result.checkmate');
+      else if (reason === 'RESIGNATION') reasonText = t('result.resignation');
     }
+
+    return { type, title, sub, reason: reasonText, summary: extra?.summary || null };
+  }
+
+  // The single authoritative entry point for ending a game's presentation
+  // (spec section 20/21). `result`/`reason` use the plain-string API the
+  // spec itself proposes (WIN/LOSS/DRAW/DRAW_COUNTING, CHECKMATE/
+  // STALEMATE/COUNTING/RESIGNATION) — deliberately NOT game.js's own
+  // lowercase 'w'/'b'/'draw' winner values, so this presentation-layer
+  // vocabulary can never be confused with (or accidentally fed back into)
+  // the engine's own authoritative state.
+  function presentGameResult({ result, reason, opponentName, extra } = {}) {
+    if (resultShown) return; // one authoritative presentation per game — never duplicate (section 21)
+    resultShown = true;
+    const myGen = resultGen;
+    const opts = buildResultPresentation({ result, reason, opponentName, extra });
+
+    if (!isAnimationEnabled()) {
+      // Animation OFF: no transitions, no particles — but Sound/Haptic are
+      // independent settings and must still fire (section 2/17).
+      if (reason === 'CHECKMATE') { beeper.check(); triggerHaptic('checkmate'); }
+      showEndFlash(opts);
+      return;
+    }
+
+    // Animation ON — final move animation (~260ms, matches the existing
+    // move-animation lock) already played before this was even called;
+    // stage the rest: checkmate glow/sound/haptic -> celebration
+    // (particles start here for WIN) -> card reveal, landing the card at
+    // ~700-1000ms after the final move as the spec asks.
+    const settleMs = 260;
+    const checkmateMs = reason === 'CHECKMATE' ? 400 : 200;
+    const celebrateMs = 250;
+
+    if (reason === 'CHECKMATE') {
+      scheduleResult(() => {
+        if (myGen !== resultGen) return;
+        beeper.check();
+        triggerHaptic('checkmate');
+      }, settleMs);
+    }
+    scheduleResult(() => {
+      if (myGen !== resultGen) return;
+      if (result === 'WIN') spawnCelebrationParticles();
+    }, settleMs + checkmateMs);
+    scheduleResult(() => {
+      if (myGen !== resultGen) return;
+      showEndFlash(opts);
+    }, settleMs + checkmateMs + celebrateMs);
   }
 
   // One js/history.js entry per real completed game — called only from the
@@ -646,13 +825,37 @@ export async function initUI() {
     const status = res?.status;
     if (status?.state === 'checkmate') {
       const result = recordGameEnd('checkmate', status.toMove);
-      announceCheckmate(status.toMove);
+      const winnerColor = status.toMove === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
+      if (settings.aiEnabled) {
+        const humanWon = winnerColor !== settings.aiColor;
+        presentGameResult({
+          result: humanWon ? 'WIN' : 'LOSS',
+          reason: 'CHECKMATE',
+          opponentName: 'Master (AI)',
+          extra: { summary: buildSummary('Master (AI)') },
+        });
+      } else {
+        // Friend mode: two local humans passing one device — there's no
+        // single "the player" to show a personalized WIN/LOSS for, so this
+        // keeps the existing side-based win announcement, just through the
+        // same new timing/celebration pipeline as every other ending.
+        const sideTxt = winnerColor === COLORS.WHITE ? 'ស' : 'ខ្មៅ';
+        presentGameResult({
+          result: 'WIN',
+          reason: 'CHECKMATE',
+          extra: {
+            titleOverride: `ខាង${sideTxt}ឈ្នះ!`,
+            descOverride: 'ល្បែងត្រូវបញ្ចប់។',
+            summary: buildSummary('Local Friend'),
+          },
+        });
+      }
       handleTournamentEnd(result);
       return true;
     }
     if (status?.state === 'stalemate') {
       const result = recordGameEnd('stalemate', null);
-      showEndFlash({ type: 'draw' });
+      presentGameResult({ result: 'DRAW', reason: 'STALEMATE', extra: { summary: buildSummary() } });
       handleTournamentEnd(result);
       return true;
     }
@@ -664,7 +867,11 @@ export async function initUI() {
     // is NOT already over some other way.
     if (res?.counting?.result === 'draw') {
       const result = recordGameEnd('counting', null);
-      showEndFlash({ type: 'draw', sub: t('counting.draw') });
+      presentGameResult({
+        result: 'DRAW_COUNTING',
+        reason: 'COUNTING',
+        extra: { counting: { ...res.counting }, summary: buildSummary() },
+      });
       handleTournamentEnd(result);
       return true;
     }
@@ -885,10 +1092,27 @@ export async function initUI() {
       render();
       const myWon = (g.result === 'white' && g.myColor === 'w') || (g.result === 'black' && g.myColor === 'b');
       const isDraw = g.result === 'draw';
-      showEndFlash({
-        type: isDraw ? 'draw' : (myWon ? 'win' : 'lose'),
-        title: isDraw ? undefined : (myWon ? 'អ្នកឈ្នះ!' : 'អ្នកចាញ់!'),
-        sub: `ល្បែងជាមួយ ${g.opponentName} ត្រូវបញ្ចប់។`,
+      // Online games carry no explicit "why did it end" field, but it's
+      // fully derivable from data already mirrored above: a draw with
+      // counting.result==='draw' is a Counting Draw (never a stalemate,
+      // since game.js's own priority order — mirrored server-side too —
+      // never lets counting fire on a stalemate); any win/loss where the
+      // shared engine's own status() reads 'checkmate' on this final
+      // board was a real mate, otherwise it was a resignation.
+      const st = game.status();
+      let result, reason;
+      if (isDraw) {
+        const isCounting = g.counting?.result === 'draw' && g.counting.type !== 'BARE_KINGS';
+        result = isCounting ? 'DRAW_COUNTING' : 'DRAW';
+        reason = isCounting ? 'COUNTING' : 'STALEMATE';
+      } else {
+        result = myWon ? 'WIN' : 'LOSS';
+        reason = st.state === 'checkmate' ? 'CHECKMATE' : 'RESIGNATION';
+      }
+      presentGameResult({
+        result, reason,
+        opponentName: g.opponentName,
+        extra: { counting: g.counting, summary: buildSummary(g.opponentName) },
       });
       History.recordGame({
         date: new Date().toISOString(),
@@ -910,10 +1134,11 @@ export async function initUI() {
       if (last.promo) { beeper.promotion(); triggerHaptic('promotion'); }
       // game.board/turn already mirror server truth above, so the shared
       // engine's own status() is authoritative here too, exactly as it is
-      // for local/AI moves — never inferred from animation state.
+      // for local/AI moves — never inferred from animation state. A real
+      // game-ending checkmate is handled by the `g.status === 'finished'`
+      // branch above instead (this branch only ever sees an ongoing game).
       const st = game.status();
       if (st.state === 'check') { beeper.check(); triggerHaptic('check'); }
-      else if (st.state === 'checkmate') { triggerHaptic('checkmate'); }
       applyCountingFeedback(g.counting);
     }
   }
@@ -1168,16 +1393,19 @@ export async function initUI() {
   // never drift between the human and AI paths (item 5/19). Sound and
   // Haptic are each gated only by their own setting (beeper.* already
   // checks beeper.enabled internally; triggerHaptic() checks
-  // isHapticEnabled()) — never by each other or by Animation. Check/
-  // checkmate is read straight off res.status, which game.move() itself
-  // already computed from the authoritative engine — never inferred from
-  // any animation state.
+  // isHapticEnabled()) — never by each other or by Animation. Check is
+  // read straight off res.status, which game.move() itself already
+  // computed from the authoritative engine — never inferred from any
+  // animation state. Checkmate's own sound/haptic are deliberately NOT
+  // fired here — presentGameResult() (called moments later via
+  // concludeIfOver) fires them itself, timed to land with the checkmate
+  // glow/celebration instead of instantly at move-time, so this round's
+  // delayed-presentation feature never doubles that feedback up.
   function applyMoveFeedback(res, { captured }) {
     if (captured) { beeper.capture(); triggerHaptic('capture'); }
     else { beeper.move(); triggerHaptic('move'); }
     if (res.promo) { beeper.promotion(); triggerHaptic('promotion'); }
     if (res.status?.state === 'check') { beeper.check(); triggerHaptic('check'); }
-    else if (res.status?.state === 'checkmate') { triggerHaptic('checkmate'); }
     applyCountingFeedback(res.counting);
     lockForAnimation();
   }
@@ -1396,6 +1624,7 @@ export async function initUI() {
 
   btnReset?.addEventListener('click', () => {
     aiGen++; AI.resetAI?.(); setBoardBusy(false);
+    resetResultPresentation(); // New Game always clears any pending/shown celebration first
     game.reset();
     gameStartedAt = Date.now();
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
@@ -1406,6 +1635,7 @@ export async function initUI() {
 
   btnUndo?.addEventListener('click', () => {
     aiGen++; AI.resetAI?.(); setBoardBusy(false);
+    resetResultPresentation(); // Undoing out of a just-finished game clears its celebration too
     if (!game.undo()) return;
     // Playing vs AI: also undo the AI's reply so control returns to the human.
     if (isAITurn()) game.undo();

@@ -9,7 +9,7 @@ import * as Rewards from './rewards.js';
 import * as Api from './api.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 import { showToast } from './toast.js';
-import { initTranslations } from './i18n.js';
+import { initTranslations, t } from './i18n.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 
@@ -1291,12 +1291,17 @@ export async function initUI() {
     const i = btnPause?.querySelector('img');
     const s = btnPause?.querySelector('span');
     if (i) i.src = wasRunning ? 'assets/ui/play.png' : 'assets/ui/pause.png';
-    if (s) s.textContent = wasRunning ? 'ចាប់ផ្ដើម' : 'ផ្អាក';
+    if (s) {
+      const key = wasRunning ? 'play.menu.resume' : 'play.menu.pause';
+      s.setAttribute('data-i18n', key);
+      s.textContent = t(key);
+    }
   });
 
   window.addEventListener('beforeunload', () => saveGameState(game, clocks));
 
   initFullscreenButton();
+  initPlayMenu();
 
   return game;
 }
@@ -1339,10 +1344,11 @@ function initFullscreenButton() {
 
   function syncButton() {
     const active = !!fullscreenElement();
+    const key = active ? 'play.menu.fullscreenExit' : 'play.menu.fullscreenEnter';
     if (enterIcon) enterIcon.hidden = active;
     if (exitIcon)  exitIcon.hidden  = !active;
-    if (label)     label.textContent = active ? 'ចេញ' : 'ពេញអេក្រង់';
-    btn.title = active ? 'Exit fullscreen' : 'Fullscreen';
+    if (label) { label.setAttribute('data-i18n', key); label.textContent = t(key); }
+    btn.title = t(key);
   }
 
   btn.addEventListener('click', () => {
@@ -1351,6 +1357,29 @@ function initFullscreenButton() {
   document.addEventListener('fullscreenchange', syncButton);
   document.addEventListener('webkitfullscreenchange', syncButton);
   syncButton();
+}
+
+/* ---------------- top-right "more" menu ----------------
+ * Reset/Pause/Undo/Fullscreen live here now instead of their own button
+ * rows — same open/close-on-outside-click/close-on-item-click pattern as
+ * notifications.html's #notifMenu (see js/notifications-page.js). */
+function initPlayMenu() {
+  const menu = document.getElementById('playMenu');
+  const list = document.getElementById('playMenuList');
+  const btn  = document.getElementById('btnPlayMenu');
+  if (!menu || !list || !btn) return;
+
+  function closeMenu() { list.hidden = true; }
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    list.hidden = !list.hidden;
+  });
+  list.addEventListener('click', (e) => {
+    if (e.target.closest('button')) closeMenu();
+  });
+  document.addEventListener('click', (e) => {
+    if (!list.hidden && !menu.contains(e.target)) closeMenu();
+  });
 }
 
 /* ---------------- service worker (unchanged) ---------------- */

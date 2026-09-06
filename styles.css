@@ -132,11 +132,18 @@ body{
   border-radius:.7rem; box-shadow:var(--shadow); overflow:hidden;
 }
 .topbar-menu-list button{
-  display:block; width:100%; text-align:start; background:none; border:none;
+  display:flex; align-items:center; gap:.5rem;
+  width:100%; text-align:start; background:none; border:none;
   padding:.7rem .9rem; font-weight:700; font-size:.85rem; color:var(--ink); cursor:pointer;
 }
 .topbar-menu-list button:hover{ background:var(--chip-bg); }
 .topbar-menu-list button.danger{ color:#a3312f; }
+.topbar-menu-list button img,
+.topbar-menu-list button svg{ flex:none; }
+/* Pure grouping wrapper (play.html's Reset/Pause/Undo, hidden together in
+   online mode) — no layout box of its own, so its buttons lay out exactly
+   like any other direct child of the menu list. */
+#localControls{ display:contents; }
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }

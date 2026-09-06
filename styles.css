@@ -673,100 +673,142 @@ body:not(.kc-anim-off) .cell.in-check-mate::before{ animation:checkPulse .5s eas
   50%{ box-shadow:0 0 0 5px rgba(220,38,38,1), inset 0 0 18px rgba(220,38,38,.8); }
 }
 
-/* End-flash result card — a short, professional fade+scale-in. Only
-   applied (via the .flash-enter class) when Animation is on; otherwise
-   the card simply appears at full opacity/scale instantly. */
-.flash-card{ opacity:1; transform:scale(1); }
-.flash-card.flash-enter{
-  opacity:0; transform:scale(.92);
-  animation:flashEnter .55s cubic-bezier(.25,.8,.35,1) forwards;
+/* ===================== RESULT CELEBRATION OVERLAY =====================
+   Layered per-type presentation (WIN/LOSS/DRAW), driven entirely by
+   js/ui.js's presentGameResult()/showEndFlash() — this file only supplies
+   the look. #flashOverlay.type-win/type-lose/type-draw select the
+   background atmosphere, icon-entrance keyframe, and particle color; the
+   static tint itself is always shown (it's game-state, like the counting
+   bar's .low color), while every *animated* piece here (icon bounce,
+   particle flight, card entrance) is skipped under body.kc-anim-off —
+   the same flag Animation-off / prefers-reduced-motion already drive for
+   the check/checkmate pulse above, so this round adds no second gate. */
+#flashOverlay{
+  position:fixed; inset:0; z-index:10000;
+  display:none; align-items:center; justify-content:center;
+  padding:16px;
+  background:radial-gradient(circle at 50% 38%, rgba(90,110,140,.28), rgba(0,0,0,.6) 72%);
+  backdrop-filter: blur(3px);
 }
-@keyframes flashEnter{ to{ opacity:1; transform:scale(1); } }
+#flashOverlay.show{ display:flex; }
+#flashOverlay.type-win{
+  background:radial-gradient(circle at 50% 38%, rgba(255,196,64,.32), rgba(0,0,0,.62) 72%);
+}
+#flashOverlay.type-lose{
+  background:radial-gradient(circle at 50% 38%, rgba(71,85,105,.30), rgba(0,0,0,.64) 72%);
+}
+#flashOverlay.type-draw{
+  background:radial-gradient(circle at 50% 38%, rgba(64,150,255,.26), rgba(0,0,0,.6) 72%);
+}
+
+.flash-card{
+  position:relative;
+  isolation:isolate; /* keeps .flash-particles' negative-stacking-free layering scoped to this card, never the page behind it */
+  width:min(420px, 92vw);
+  max-height:min(680px, 88vh);
+  overflow-y:auto;
+  border-radius:20px;
+  padding:22px 20px calc(18px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg, #121a2c, #0b1220);
+  color:#e6f0ff;
+  box-shadow:0 24px 70px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.09);
+  text-align:center;
+  opacity:1; transform:translateY(0) scale(1);
+}
+.flash-card.flash-enter{
+  opacity:0; transform:translateY(20px) scale(.92);
+  animation:flashEnter .5s cubic-bezier(.22,.9,.32,1) forwards;
+}
+@keyframes flashEnter{ to{ opacity:1; transform:translateY(0) scale(1); } }
+
+.flash-icon{
+  font-size:3rem; line-height:1; margin-bottom:8px; display:inline-block;
+  filter:drop-shadow(0 4px 10px rgba(0,0,0,.35));
+}
+body:not(.kc-anim-off) #flashOverlay.type-win .flash-icon{ animation:iconWin .5s cubic-bezier(.34,1.35,.64,1) both; }
+body:not(.kc-anim-off) #flashOverlay.type-lose .flash-icon{ animation:iconLose .4s ease-out both; }
+body:not(.kc-anim-off) #flashOverlay.type-draw .flash-icon{ animation:iconDraw .45s ease-out both; }
+@keyframes iconWin { 0%{transform:scale(.5); opacity:0} 60%{transform:scale(1.1); opacity:1} 100%{transform:scale(1)} }
+@keyframes iconLose{ 0%{transform:scale(.8); opacity:0} 100%{transform:scale(1); opacity:1} }
+@keyframes iconDraw { 0%{transform:scale(.8); opacity:0} 60%{transform:scale(1.05)} 100%{transform:scale(1); opacity:1} }
+
+.flash-title{
+  font-size:1.55rem; font-weight:800; margin:0 0 .3rem;
+  animation:textIn .35s ease-out .05s both;
+}
+body.kc-anim-off .flash-title{ animation:none; }
+.flash-desc{
+  font-size:1rem; opacity:.92; margin:0 0 .4rem;
+  animation:textIn .35s ease-out .12s both;
+}
+body.kc-anim-off .flash-desc{ animation:none; }
+@keyframes textIn{ from{opacity:0; transform:translateY(6px)} to{opacity:1; transform:translateY(0)} }
+
+.flash-reason{
+  display:inline-block; margin:.15rem 0 .6rem;
+  padding:5px 14px; border-radius:999px;
+  background:rgba(255,255,255,.10); color:#e6f0ff;
+  font-weight:700; font-size:.85rem;
+}
+#flashOverlay.type-win .flash-reason{ background:rgba(255,214,64,.18); color:#ffe9a8; }
+#flashOverlay.type-draw .flash-reason{ background:rgba(100,180,255,.18); color:#cfe6ff; }
+
+.flash-summary{
+  margin:.4rem 0 .2rem; padding:10px 12px;
+  border-radius:12px; background:rgba(255,255,255,.05);
+  display:flex; flex-direction:column; gap:4px;
+}
+.summary-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.summary-label{ font-size:.8rem; opacity:.7; }
+.summary-value{ font-size:.85rem; font-weight:700; }
+
+.flash-actions{ margin-top:14px; display:flex; gap:10px; justify-content:center; }
+.flash-btn{
+  min-height:44px; min-width:44px;
+  border:none; border-radius:12px;
+  padding:.65rem 1.2rem; font-weight:800; font-size:.95rem; cursor:pointer;
+  box-shadow:0 6px 16px rgba(0,0,0,.2);
+  transition:transform .12s ease, box-shadow .12s ease, filter .12s ease;
+}
+.flash-btn.primary{ background:#fff; color:#0d2d5c; }
+.flash-btn.secondary{ background:rgba(255,255,255,.12); color:#e6f0ff; box-shadow:none; }
+.flash-btn:hover{ filter:brightness(1.05); }
+.flash-btn:active{ transform:translateY(1px) scale(.98); }
+
+/* Celebration particles — WIN only, spawned by js/ui.js only when
+   Animation is on (never created at all otherwise, not just hidden).
+   Contained to the card via overflow:hidden — never escapes to the page
+   or the board underneath, never causes scrolling. */
+.flash-particles{
+  position:absolute; inset:0; overflow:hidden; pointer-events:none;
+  border-radius:inherit; z-index:-1;
+}
+.particle{
+  position:absolute; left:50%; top:40%;
+  width:6px; height:6px; border-radius:50%;
+  background:hsl(var(--hue,45deg) 90% 62%);
+  opacity:0;
+  animation:particleFly var(--dur,800ms) ease-out var(--delay,0ms) forwards;
+}
+@keyframes particleFly{
+  0%{ opacity:0; transform:translate(0,0) scale(.4); }
+  15%{ opacity:1; }
+  100%{ opacity:0; transform:translate(var(--tx),var(--ty)) scale(1); }
+}
 
 /* Respect the OS-level reduced-motion request as a hard ceiling, on top
-   of (not instead of) the app's own Animation setting. */
+   of (not instead of) the app's own Animation setting — js/ui.js's
+   isAnimationEnabled() already folds this into body.kc-anim-off above,
+   this is pure defense-in-depth for the CSS-only pieces. */
 @media (prefers-reduced-motion: reduce){
   .piece.anim-slide, .piece.anim-hop,
   .cell.reject-shake,
   .cell.in-check::before, .cell.in-check-mate::before,
-  .flash-card.flash-enter{
+  .flash-card.flash-enter,
+  .flash-icon, .flash-title, .flash-desc, .particle{
     animation-duration:.001ms !important;
     animation-iteration-count:1 !important;
   }
-}
-
-/* ===================== END FLASH OVERLAY ===================== */
-#flashOverlay{
-  position:fixed; inset:0; z-index:10000;
-  display:none; align-items:center; justify-content:center;
-  background:rgba(0,0,0,.55);
-  backdrop-filter: blur(3px);
-}
-#flashOverlay.show{ display:flex; }
-
-.flash-card{
-  position:relative;
-  width:min(560px, 92vw);
-  border-radius:16px; padding:18px 18px 20px;
-  background:#0b1220; color:#e6f0ff;
-  box-shadow:0 18px 60px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.08);
-  text-align:center;
-}
-
-.flash-title{ font-size:1.6rem; font-weight:800; margin:0 0 .25rem; }
-.flash-sub  { font-size:1rem; opacity:.9; margin:.25rem 0 .75rem; }
-.flash-row  { display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
-
-.flash-actions{ margin-top:12px; display:flex; gap:10px; justify-content:center; }
-.flash-btn{
-  background:#fff; color:#0d2d5c; border:none; border-radius:12px;
-  padding:.6rem 1rem; font-weight:800; cursor:pointer; box-shadow:0 6px 16px rgba(0,0,0,.2);
-}
-.flash-btn:active{ transform:translateY(1px) }
-
-/* Fireworks */
-.fireworks{
-  position:absolute; inset:0; pointer-events:none; overflow:hidden;
-}
-.fireworks .burst{
-  position:absolute; width:6px; height:6px; background:transparent;
-  left:50%; top:50%;
-}
-.fireworks .burst::before, .fireworks .burst::after{
-  content:""; position:absolute; inset:-3px; border-radius:50%;
-  box-shadow:
-    0 -40px 0 2px #ffec99,
-    28px -28px 0 2px #ffd6a5,
-    40px 0 0 2px #ffc6ff,
-    28px 28px 0 2px #bdb2ff,
-    0 40px 0 2px #a0c4ff,
-    -28px 28px 0 2px #9bf6ff,
-    -40px 0 0 2px #caffbf,
-    -28px -28px 0 2px #fdffb6;
-  transform:scale(0);
-  animation:pop 900ms ease-out forwards;
-}
-.fireworks .b2{ transform:translate(-140px,-60px) }
-.fireworks .b3{ transform:translate(140px,-40px) }
-.fireworks .b4{ transform:translate(-120px,70px) }
-.fireworks .b5{ transform:translate(120px,90px) }
-@keyframes pop{
-  60%{transform:scale(1)}
-  100%{transform:scale(0); opacity:0}
-}
-
-/* RIP image */
-.rip-wrap{ display:flex; align-items:center; justify-content:center; }
-.rip-img{
-  width:min(200px, 60vw); height:auto; display:block;
-  filter:drop-shadow(0 10px 24px rgba(0,0,0,.35));
-  margin:10px auto;
-}
-
-/* Draw badge */
-.draw-badge{
-  display:inline-block; padding:6px 12px; border-radius:999px;
-  background:#fff3bf; color:#7c5b00; font-weight:800;
 }
 
 /* =================================================================== */

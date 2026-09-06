@@ -149,27 +149,37 @@
     </div>
   </div>
 
-  <!-- === END FLASH OVERLAY (NEW) === -->
+  <!-- === RESULT CELEBRATION OVERLAY ===
+       Layered per this round's redesign: overlay backdrop (dim/blur +
+       result-tinted glow, toggled via #flashOverlay.type-win/lose/draw) ->
+       card -> particles (WIN only, JS-populated) -> icon -> title ->
+       description -> optional reason line -> optional summary -> actions.
+       js/ui.js's presentGameResult()/showEndFlash() are the only code that
+       touch this markup — never duplicate that logic elsewhere. -->
   <div id="flashOverlay" aria-hidden="true">
     <div class="flash-card">
-      <div class="fireworks" aria-hidden="true">
-        <div class="burst b1"></div>
-        <div class="burst b2"></div>
-        <div class="burst b3"></div>
-        <div class="burst b4"></div>
-        <div class="burst b5"></div>
-      </div>
+      <div class="flash-particles" id="flashParticles" aria-hidden="true"></div>
+      <div class="flash-icon" id="flashIcon" aria-hidden="true">🏆</div>
       <h2 class="flash-title" id="flashTitle">អ្នកឈ្នះ!</h2>
-      <div class="flash-row">
-        <div class="flash-sub" id="flashSub">អុកស្លាប់ខាងខ្មៅ (AI)! ល្បែងត្រូវបញ្ចប់។</div>
-      </div>
-      <div class="rip-wrap" id="ripWrap" style="display:none;">
-        <!-- Provide your image: assets/ui/rip.png -->
-        <img class="rip-img" src="assets/ui/rip.png" alt="RIP">
+      <div class="flash-desc" id="flashSub">អ្នកបានឈ្នះ Master (AI)!</div>
+      <div class="flash-reason" id="flashReason" hidden></div>
+      <div class="flash-summary" id="flashSummary" hidden>
+        <div class="summary-row" id="summaryOpponentRow">
+          <span class="summary-label" data-i18n="result.summaryOpponent">Opponent</span>
+          <span class="summary-value" id="summaryOpponent"></span>
+        </div>
+        <div class="summary-row" id="summaryMovesRow">
+          <span class="summary-label" data-i18n="result.summaryMoves">Moves</span>
+          <span class="summary-value" id="summaryMoves"></span>
+        </div>
+        <div class="summary-row" id="summaryTimeRow">
+          <span class="summary-label" data-i18n="result.summaryTime">Time</span>
+          <span class="summary-value" id="summaryTime"></span>
+        </div>
       </div>
       <div class="flash-actions">
-        <button id="flashAgain" class="flash-btn">ចាប់ផ្ដើមថ្មី</button>
-        <button id="flashClose" class="flash-btn" style="background:#eef4ff;">បិទ</button>
+        <button id="flashAgain" class="flash-btn primary" data-i18n="result.playAgain">ចាប់ផ្ដើមថ្មី</button>
+        <button id="flashClose" class="flash-btn secondary" data-i18n="result.close">បិទ</button>
       </div>
     </div>
   </div>

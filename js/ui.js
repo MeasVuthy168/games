@@ -1,6 +1,6 @@
 // ui.js — Khmer Chess (Play page) — Makruk AI with remote engine + fallback + end flashes + DnD + premove
 
-import { Game, SIZE, COLORS, PT } from './game.js';
+import { Game, SIZE, COLORS, PT, emptyCounting } from './game.js';
 import * as AI from './ai.js';
 import { DEFAULT_LEVEL } from './ai-engine.js';
 import * as History from './history.js';
@@ -37,6 +37,10 @@ function saveGameState(game, clocks) {
     board: game.board,
     turn: game.turn,
     history: game.history,
+    // Counting Draw is real game state (which move it's on, whose count
+    // it is), not a setting — it belongs in the resumable game-state save,
+    // never in kc_settings_v1.
+    counting: game.counting,
     msW: clocks.msW,
     msB: clocks.msB,
     clockTurn: clocks.turn
@@ -130,6 +134,34 @@ class AudioBeeper {
   // calls out), so there is no separate checkmate() sound method here.
   promotion(){ this.play('promotion', .9); }
   draw(){ this.play('draw', .8); }
+
+  // Counting Draw sounds — generated Web Audio tones rather than shipping
+  // 3 more small mp3 files (play.html used to reference count-start.mp3/
+  // count-end.mp3 that were never actually added as real assets). Reuses
+  // this same class/instance, gated by the same `enabled` flag as every
+  // other sound here — nothing about Sound/Haptic/Animation independence
+  // changes for these.
+  tone(freq, durationMs, vol = 0.35, waveType = 'sine') {
+    if (!this.enabled) return;
+    try {
+      if (!this._ctx) this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = this._ctx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = waveType;
+      osc.frequency.value = freq;
+      const now = ctx.currentTime;
+      gain.gain.setValueAtTime(vol, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + durationMs / 1000);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + durationMs / 1000 + 0.02);
+    } catch { /* Web Audio unsupported/blocked — never break gameplay */ }
+  }
+  countStart(){ this.tone(880, 120, 0.35); }
+  count(){ this.tone(660, 70, 0.25); }
+  countWarning(){ this.tone(520, 90, 0.35, 'square'); }
 }
 const beeper = new AudioBeeper();
 
@@ -173,6 +205,9 @@ const HAPTIC_PATTERNS = {
   loss:      [50, 80, 50],
   draw:      [20, 40, 20],
   error:     40,
+  countStart:   15,
+  count:        10,     // very short pulse per counted move
+  countWarning: [25, 20, 25], // slightly stronger, final 1-2 counted moves
 };
 function triggerHaptic(type){
   if (!isHapticEnabled()) return;
@@ -250,7 +285,9 @@ function showEndFlash(opts){
     triggerHaptic('loss');
   } else {
     title.textContent = 'ស្មើ!';
-    sub.innerHTML     = '<span class="draw-badge">ល្បែងត្រូវបញ្ចប់</span>';
+    const badgeText = subText || 'ល្បែងត្រូវបញ្ចប់';
+    sub.innerHTML     = `<span class="draw-badge"></span>`;
+    sub.querySelector('.draw-badge').textContent = badgeText;
     beeper.draw();
     triggerHaptic('draw');
   }
@@ -565,7 +602,7 @@ export async function initUI() {
   function recordGameEnd(kind, matedColor) {
     const mode = settings.aiEnabled ? 'ai' : 'friend';
     let result;
-    if (kind === 'stalemate') {
+    if (kind === 'stalemate' || kind === 'counting') {
       result = 'draw';
     } else {
       const winnerColor = matedColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
@@ -605,7 +642,8 @@ export async function initUI() {
   // Shared tail for every place a move can end the game: records history
   // once, then shows the existing win/lose/draw flash. Returns true if the
   // game ended (so callers know not to also call thinkAndPlay()).
-  function concludeIfOver(status) {
+  function concludeIfOver(res) {
+    const status = res?.status;
     if (status?.state === 'checkmate') {
       const result = recordGameEnd('checkmate', status.toMove);
       announceCheckmate(status.toMove);
@@ -615,6 +653,18 @@ export async function initUI() {
     if (status?.state === 'stalemate') {
       const result = recordGameEnd('stalemate', null);
       showEndFlash({ type: 'draw' });
+      handleTournamentEnd(result);
+      return true;
+    }
+    // Counting Draw ("រាប់ស្មើ") — checkmate/stalemate above are checked
+    // FIRST and always win the priority order (Part 10): a checkmate
+    // delivered on the very last allowed counted move is only ever
+    // reached via the branches above, never this one, because game.js's
+    // own move() only ever sets counting.result to 'draw' when the game
+    // is NOT already over some other way.
+    if (res?.counting?.result === 'draw') {
+      const result = recordGameEnd('counting', null);
+      showEndFlash({ type: 'draw', sub: t('counting.draw') });
       handleTournamentEnd(result);
       return true;
     }
@@ -635,6 +685,56 @@ export async function initUI() {
     if (!k) return;
     const cell = cells[gridSlot(k.x, k.y)];
     cell?.classList.add(st.state === 'checkmate' ? 'in-check-mate' : 'in-check');
+  }
+
+  // Counting Draw UI ("រាប់ស្មើ") — reads game.counting directly (the
+  // engine's own authoritative state, updated inside game.js's move()) and
+  // never computes eligibility/progress itself, per this feature's central
+  // architecture rule. The progress bar/badge/pulse markup already existed
+  // in play.html/styles.css (built, then never wired up) — reused as-is.
+  function renderCounting() {
+    const label = document.getElementById('count-label');
+    const bar = document.getElementById('count-bar');
+    if (!label || !bar) return;
+
+    const c = game.counting;
+    // BARE_KINGS is an immediate draw with no "progress" to show — the
+    // end-flash overlay covers it; a countdown bar here would be
+    // meaningless for it (limit is 0).
+    if (!c || !c.active || c.type === 'BARE_KINGS') {
+      label.style.display = 'none';
+      bar.style.display = 'none';
+      return;
+    }
+
+    const animate = isAnimationEnabled();
+    const text = `${c.current} / ${c.limit}`;
+    const numberEl = document.getElementById('count-number');
+    const badgeEl = document.getElementById('count-badge');
+    if (numberEl) numberEl.textContent = text;
+    if (badgeEl) badgeEl.textContent = text;
+
+    const prefixEl = document.getElementById('count-label-prefix');
+    if (prefixEl) {
+      const key = c.type === 'BOARD' ? 'counting.board' : 'counting.piece';
+      prefixEl.setAttribute('data-i18n', key);
+      prefixEl.textContent = t(key);
+    }
+
+    label.style.display = '';
+    bar.style.display = '';
+
+    const barFill = document.getElementById('count-bar-fill');
+    if (barFill) {
+      barFill.style.width = Math.min(100, Math.round((c.current / c.limit) * 100)) + '%';
+      // Part 15: remaining<=2 is a warning, remaining<=1 is the strong
+      // warning — the warning COLOR is game-state information and always
+      // shown; only the continuous pulse/shake animations are decorative
+      // and skipped when Animation is off.
+      barFill.classList.toggle('low', c.remaining <= 2);
+    }
+    bar.classList.toggle('urgent', c.remaining <= 1 && animate);
+    label.classList.toggle('pulse', c.remaining <= 2 && animate);
   }
 
   function render() {
@@ -697,6 +797,7 @@ export async function initUI() {
     }
 
     applyCheckHighlight();
+    renderCounting();
     if (elTurn) elTurn.textContent = khTurnLabel();
     applyTurnClass();
   }
@@ -759,6 +860,10 @@ export async function initUI() {
     onlineState = g;
     game.board = g.board;
     game.turn = g.turn;
+    // Counting Draw is server-authoritative for online games too (see
+    // src/routes/games.js) — mirror it directly rather than recomputing
+    // locally, so both players always see the exact same count.
+    game.counting = g.counting || emptyCounting();
     game.history = [];
     if (g.history?.length) {
       const lastMove = g.history[g.history.length - 1];
@@ -809,6 +914,7 @@ export async function initUI() {
       const st = game.status();
       if (st.state === 'check') { beeper.check(); triggerHaptic('check'); }
       else if (st.state === 'checkmate') { triggerHaptic('checkmate'); }
+      applyCountingFeedback(g.counting);
     }
   }
 
@@ -979,7 +1085,7 @@ export async function initUI() {
         clocks.switchedByMove(prev2);
         render(); saveGameState(game, clocks);
 
-        concludeIfOver(res2.status);
+        concludeIfOver(res2);
         return;
       }
 
@@ -988,7 +1094,7 @@ export async function initUI() {
       clocks.switchedByMove(prevTurn);
       render(); saveGameState(game, clocks);
 
-      concludeIfOver(res.status);
+      concludeIfOver(res);
 
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
@@ -1036,6 +1142,26 @@ export async function initUI() {
     setTimeout(() => cell.classList.remove('reject-shake'), 260);
   }
 
+  // Counting Draw feedback — reads game.js's own authoritative counting
+  // state (res.counting, straight off the same move() call that computed
+  // check/checkmate) and never re-derives eligibility/progress itself.
+  // The Auto Draw case plays no extra sound/haptic of its own here — that
+  // is the existing draw sound/haptic already fired by showEndFlash() via
+  // concludeIfOver(), so this never doubles up on the same event.
+  function applyCountingFeedback(counting) {
+    if (!counting || !counting.active || counting.result === 'draw') return;
+    if (counting.justStarted) {
+      beeper.countStart();
+      triggerHaptic('countStart');
+    } else if (counting.justIncremented) {
+      // "Final 1-2 moves" warning window — matches the visual .low
+      // threshold in renderCounting() below, so sound/haptic/color all
+      // agree on when the count is running out.
+      if (counting.remaining <= 2) { beeper.countWarning(); triggerHaptic('countWarning'); }
+      else { beeper.count(); triggerHaptic('count'); }
+    }
+  }
+
   // Single centralized feedback path for every move that actually lands —
   // human tap, drag-drop, and AI (both the primary engine move and its
   // random-fallback) alike, so Sound/Haptic/check-detection behavior can
@@ -1052,6 +1178,7 @@ export async function initUI() {
     if (res.promo) { beeper.promotion(); triggerHaptic('promotion'); }
     if (res.status?.state === 'check') { beeper.check(); triggerHaptic('check'); }
     else if (res.status?.state === 'checkmate') { triggerHaptic('checkmate'); }
+    applyCountingFeedback(res.counting);
     lockForAnimation();
   }
 
@@ -1070,6 +1197,7 @@ export async function initUI() {
 
   function onCellTap(e) {
     if (animLock) return; // an animation is still visually settling
+    if (game.winner) return; // game already over (checkmate/stalemate/Counting Draw) — input locked
     const x = +e.currentTarget.dataset.x;
     const y = +e.currentTarget.dataset.y;
     const p = game.at(x, y);
@@ -1118,7 +1246,7 @@ export async function initUI() {
       selected = null; legal = []; clearHints();
       render(); saveGameState(game, clocks);
 
-      if (!concludeIfOver(res.status)) {
+      if (!concludeIfOver(res)) {
         thinkAndPlay();
       }
     }
@@ -1197,11 +1325,12 @@ export async function initUI() {
     clocks.switchedByMove(prev);
     render(); saveGameState(game, clocks);
 
-    if (!concludeIfOver(res.status)) { thinkAndPlay(); }
+    if (!concludeIfOver(res)) { thinkAndPlay(); }
   }
 
   function onCellPointerDown(e){
     if (animLock) return; // an animation is still visually settling
+    if (game.winner) return; // game already over (checkmate/stalemate/Counting Draw) — input locked
     if (isAITurn() || AILock) { beeper.error(); triggerHaptic('error'); return; }
     const x = +e.currentTarget.dataset.x, y = +e.currentTarget.dataset.y;
     const p = game.at(x,y);
@@ -1249,9 +1378,10 @@ export async function initUI() {
   // resume or fresh start
   const saved = loadGameState();
   if (saved) {
-    game.board   = saved.board;
-    game.turn    = saved.turn;
-    game.history = saved.history || [];
+    game.board    = saved.board;
+    game.turn     = saved.turn;
+    game.history  = saved.history || [];
+    game.counting = saved.counting || emptyCounting();
     render();
     clocks.start();
   } else {

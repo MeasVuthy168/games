@@ -34,6 +34,44 @@
 //   m = met (Neang / Queen)
 //   k = king
 
+// ---------------------------------------------------------------------
+// Counting Draw (Ouk Chaktrang "រាប់" board/piece counting) — see the
+// Game class methods evaluateCountingState()/_updateCounting() below for
+// the full rules. Two counting phases exist:
+//   BOARD — no unpromoted pawns (Trey) remain anywhere; flat 64-move cap.
+//   PIECE — additionally, one side is reduced to a lone King; the cap
+//           depends on the other side's remaining Rook/Khon/Knight mix.
+// A third pseudo-phase, BARE_KINGS (neither side has any material at
+// all), is an immediate draw — no force exists to ever checkmate with.
+export const COUNTING_TYPE = { BOARD: 'BOARD', PIECE: 'PIECE', BARE_KINGS: 'BARE_KINGS' };
+
+export function emptyCounting() {
+  return {
+    active: false, type: null, countingSide: null, strongerSide: null,
+    limit: 0, current: 0, remaining: 0, result: null,
+    justStarted: false, justIncremented: false,
+  };
+}
+
+// The Piece/Honor Count category table (Ouk Chaktrang convention) — from
+// the STRONGER side's Rook/Khon("Bishop")/Knight composition only; Neang/
+// Met (original or promoted-from-Trey alike) and Pawns never affect this
+// table. Checked as a priority cascade (most-forcing material first) since
+// the source rule only defines pure categories, not every possible mix:
+//   2+ Rooks  -> 8      1 Rook   -> 16
+//   2+ Khons  -> 22     2+ Knights -> 32
+//   1 Khon    -> 44     1 Knight -> 64
+//   anything else (Neang-only, bare King) -> 64
+export function countingLimitFromMaterial({ rooks = 0, khons = 0, knights = 0 } = {}) {
+  if (rooks >= 2) return 8;
+  if (rooks === 1) return 16;
+  if (khons >= 2) return 22;
+  if (knights >= 2) return 32;
+  if (khons === 1) return 44;
+  if (knights === 1) return 64;
+  return 64;
+}
+
 export const SIZE   = 8;
 export const COLORS = { WHITE: 'w', BLACK: 'b' };
 
@@ -196,10 +234,11 @@ export class Game {
   }
 
   reset() {
-    this.board   = initialPosition();
-    this.turn    = COLORS.WHITE;
-    this.history = [];
-    this.winner  = null;
+    this.board    = initialPosition();
+    this.turn     = COLORS.WHITE;
+    this.history  = [];
+    this.winner   = null;
+    this.counting = emptyCounting();
   }
 
   // Expose FEN for the AI
@@ -497,6 +536,175 @@ export class Game {
     return false;
   }
 
+  // ---------- Counting Draw ----------
+
+  // Any Trey (unpromoted Pawn) anywhere on the board, either color. Once
+  // this is false, Board Count becomes possible; Piece/Honor Count also
+  // requires it (a promoted piece is a Neang/Met — PT.MET — never a Trey,
+  // so it never counts here).
+  hasUnpromotedPawn() {
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const p = this.at(x, y);
+        if (p && p.t === PT.PAWN) return true;
+      }
+    }
+    return false;
+  }
+
+  nonKingPieces(color) {
+    const out = [];
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const p = this.at(x, y);
+        if (p && p.c === color && p.t !== PT.KING) out.push(p);
+      }
+    }
+    return out;
+  }
+
+  getTotalBoardPieces() {
+    let n = 0;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        if (this.at(x, y)) n++;
+      }
+    }
+    return n;
+  }
+
+  getCountingLimit(strongerPieces) {
+    let rooks = 0, khons = 0, knights = 0;
+    for (const p of strongerPieces) {
+      if (p.t === PT.ROOK) rooks++;
+      else if (p.t === PT.KHON) khons++;
+      else if (p.t === PT.KNIGHT) knights++;
+    }
+    return countingLimitFromMaterial({ rooks, khons, knights });
+  }
+
+  // The single authoritative counting evaluator (pure — never mutates,
+  // safe to call any time). Determines, from the CURRENT board alone,
+  // whether a counting phase is eligible and — if so — its type, which
+  // side is counted (disadvantaged/escaping) vs stronger (chasing), the
+  // move limit, and the count's starting value for a phase beginning now.
+  //
+  // Returns { eligible:false } or:
+  //   { eligible:true, type, countingSide, strongerSide, limit, initialCurrent }
+  //
+  // initialCurrent follows the Ouk Chaktrang convention from the material
+  // table itself: a Piece/Honor Count phase's count starts already at the
+  // number of pieces on the board (kings included), not at 0 — e.g. 2
+  // Rooks + 2 Kings on the board means the count starts at 4/8, i.e. 4
+  // effective moves remain, not 8. Board Count has no such convention
+  // documented for it, so it starts at a plain 0/64.
+  evaluateCountingState() {
+    const wPieces = this.nonKingPieces(COLORS.WHITE);
+    const bPieces = this.nonKingPieces(COLORS.BLACK);
+
+    // Neither side has any material at all to ever force mate with —
+    // an immediate draw regardless of any counting phase (King vs King).
+    if (wPieces.length === 0 && bPieces.length === 0) {
+      return {
+        eligible: true, type: COUNTING_TYPE.BARE_KINGS,
+        countingSide: null, strongerSide: null, limit: 0, initialCurrent: 0,
+      };
+    }
+
+    if (this.hasUnpromotedPawn()) return { eligible: false };
+
+    // Piece/Honor Count: exactly one side is reduced to a lone King.
+    if (wPieces.length === 0 || bPieces.length === 0) {
+      const countingSide   = wPieces.length === 0 ? COLORS.WHITE : COLORS.BLACK;
+      const strongerSide   = this.enemyColor(countingSide);
+      const strongerPieces = countingSide === COLORS.WHITE ? bPieces : wPieces;
+      const limit = this.getCountingLimit(strongerPieces);
+      const initialCurrent = this.getTotalBoardPieces();
+      return { eligible: true, type: COUNTING_TYPE.PIECE, countingSide, strongerSide, limit, initialCurrent };
+    }
+
+    // Board Count: no Trey remain, but neither side is a lone King.
+    // "Stronger/chasing" is determined by non-King piece count; an exact
+    // tie means no clear chaser, so Board Count does not engage.
+    if (wPieces.length === bPieces.length) return { eligible: false };
+    const strongerSide = wPieces.length > bPieces.length ? COLORS.WHITE : COLORS.BLACK;
+    const countingSide  = this.enemyColor(strongerSide);
+    return { eligible: true, type: COUNTING_TYPE.BOARD, countingSide, strongerSide, limit: 64, initialCurrent: 0 };
+  }
+
+  // Advances/starts/clears `this.counting` for the move that was JUST
+  // applied (this.turn has already flipped to the next player by the time
+  // this runs — see move() below). Called once per real move, never from
+  // the AI search's internal _do/_undo hot path, so search performance is
+  // completely unaffected.
+  _updateCounting() {
+    const evald = this.evaluateCountingState();
+
+    if (!evald.eligible) {
+      this.counting = emptyCounting();
+      return;
+    }
+
+    if (evald.type === COUNTING_TYPE.BARE_KINGS) {
+      this.counting = {
+        active: true, type: COUNTING_TYPE.BARE_KINGS,
+        countingSide: null, strongerSide: null, limit: 0, current: 0, remaining: 0,
+        result: 'draw', justStarted: true, justIncremented: false,
+      };
+      return;
+    }
+
+    const prev = this.counting;
+    const samePhase = prev && prev.active && prev.type === evald.type &&
+      prev.countingSide === evald.countingSide && prev.strongerSide === evald.strongerSide;
+
+    if (!samePhase) {
+      // A brand-new phase: first-ever eligibility, or the type/sides
+      // changed (e.g. Board Count's stronger side flipped, or Piece Count
+      // just started the move the last Trey vanished).
+      this.counting = {
+        active: true, type: evald.type,
+        countingSide: evald.countingSide, strongerSide: evald.strongerSide,
+        limit: evald.limit, current: evald.initialCurrent,
+        remaining: Math.max(0, evald.limit - evald.initialCurrent),
+        result: null, justStarted: true, justIncremented: false,
+      };
+    } else {
+      // Same ongoing phase: the limit may still need recalculating (a
+      // capture can shrink the stronger side's force — e.g. 2 Rooks -> 1
+      // Rook moves 8 -> 16) but progress already made is NEVER reset for
+      // a mere capture. Only the stronger side's completed moves ever
+      // advance `current` (this.turn already flipped, so the mover is
+      // enemyColor(this.turn)).
+      const mover = this.enemyColor(this.turn);
+      const incremented = mover === prev.strongerSide;
+      const current = incremented ? prev.current + 1 : prev.current;
+      this.counting = {
+        ...prev,
+        limit: evald.limit,
+        current,
+        remaining: Math.max(0, evald.limit - current),
+        result: null,
+        justStarted: false,
+        justIncremented: incremented,
+      };
+    }
+
+    if (this.counting.current >= this.counting.limit) {
+      this.counting.result = 'draw';
+    }
+  }
+
+  // Debug-only snapshot — never shown to normal users; callers gate this
+  // behind their own existing debug-mode flag (see settings.aiDebug).
+  getCountingDebugState() {
+    return {
+      ...this.counting,
+      totalPieces: this.getTotalBoardPieces(),
+      hasUnpromotedPawn: this.hasUnpromotedPawn(),
+    };
+  }
+
   status() {
     const toMove = this.turn;
     const check  = this.inCheck(toMove);
@@ -516,6 +724,14 @@ export class Game {
   // ---------- Public make/undo ----------
 
   move(from, to) {
+    // Checkmate/stalemate already block further moves structurally (the
+    // mated/stalemated side's legalMoves() is empty by definition), but a
+    // Counting Draw can end the game on a position that still has plenty
+    // of legal moves available — so this is the one case that needs an
+    // explicit guard: once the game is over for any reason, no further
+    // move is ever accepted, full stop.
+    if (this.winner) return { ok: false };
+
     const p = this.at(from.x, from.y);
     if (!p) return { ok: false };
 
@@ -525,6 +741,7 @@ export class Game {
 
     if (!isLegal) return { ok: false };
 
+    const prevCounting = this.counting ? { ...this.counting } : emptyCounting();
     const snap = this._do(from, to);
     const { captured, promo } = snap;
 
@@ -535,20 +752,28 @@ export class Game {
       promo,
       prevType:  snap.prevType,
       prevMoved: snap.prevMoved,
+      prevCounting,
     });
 
     this.turn = this.enemyColor(this.turn);
 
+    // Priority order matters (Ouk Chaktrang counting must never override
+    // an actual mate): checkmate/stalemate are existing, higher-priority
+    // terminal states, decided first and left completely alone — counting
+    // is only ever evaluated when the game is NOT already over some other
+    // way, and a checkmate on the very last allowed counted move is still
+    // simply a win, never a draw, because this branch never runs for it.
     const st = this.status();
     if (st.state === 'checkmate') {
       this.winner = this.enemyColor(st.toMove);
     } else if (st.state === 'stalemate') {
       this.winner = 'draw';
     } else {
-      this.winner = null;
+      this._updateCounting();
+      this.winner = this.counting.result === 'draw' ? 'draw' : null;
     }
 
-    return { ok: true, promo, captured, status: st };
+    return { ok: true, promo, captured, status: st, counting: this.counting };
   }
 
   undo() {
@@ -563,6 +788,7 @@ export class Game {
       prevMoved: last.prevMoved,
     });
 
+    this.counting = last.prevCounting ? { ...last.prevCounting } : emptyCounting();
     this.winner = null;
     return true;
   }

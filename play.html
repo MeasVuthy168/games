@@ -73,6 +73,23 @@
           </button>
         </div>
 
+        <!-- Fullscreen toggle — its own row, not inside #localControls, so
+             it stays available in online mode too (that container gets
+             hidden entirely for online games — see applyPlayerLabels() in
+             js/ui.js). Hidden automatically on browsers with no Fullscreen
+             API support (notably iOS Safari) — see initFullscreenButton(). -->
+        <div class="controls controls-top" id="pageControls">
+          <button id="btnFullscreen" class="btn-icon secondary" title="Fullscreen" type="button" hidden>
+            <svg id="fsEnterIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3"/>
+            </svg>
+            <svg id="fsExitIcon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" hidden>
+              <path d="M9 3v3a2 2 0 0 1-2 2H4M15 3v3a2 2 0 0 0 2 2h3M9 21v-3a2 2 0 0 0-2-2H4M15 21v-3a2 2 0 0 1 2-2h3"/>
+            </svg>
+            <span id="fsLabel">ពេញអេក្រង់</span>
+          </button>
+        </div>
+
         <div id="onlineStatusBanner" class="online-status-banner" hidden></div>
 
         <!-- Top clock -->

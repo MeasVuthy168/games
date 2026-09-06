@@ -10,6 +10,16 @@
 
 import * as Api from './api.js';
 
+// A PushSubscription is per BROWSER/ORIGIN, not per account — switching
+// which account is signed in on the same device does NOT itself change
+// or clear it (see ensurePushSubscription() below for why that matters).
+// This tracks whose account the *server* currently has this device's one
+// subscription attached to, so a real account switch on a shared device
+// is detected and re-synced instead of silently leaving the previous
+// account's id on the row (which is what let one account see push
+// notifications meant for another that had used the same device/browser).
+const SUBSCRIBED_USER_KEY = 'kc_push_subscribed_user_id';
+
 function urlBase64ToUint8Array(base64String) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -53,6 +63,7 @@ export async function subscribeToPush() {
       });
     }
     await Api.subscribePush(sub.toJSON());
+    try { localStorage.setItem(SUBSCRIBED_USER_KEY, Api.getCurrentUser()?.id || ''); } catch {}
     return true;
   } catch (e) {
     console.warn('[push-client] subscribe failed', e);
@@ -65,6 +76,7 @@ export async function subscribeToPush() {
 // the backend still holding a subscription the browser already dropped.
 export async function unsubscribeFromPush() {
   if (!isPushSupported()) return;
+  try { localStorage.removeItem(SUBSCRIBED_USER_KEY); } catch {}
   try {
     const reg = await navigator.serviceWorker.getRegistration();
     const sub = await reg?.pushManager.getSubscription();
@@ -83,13 +95,26 @@ export async function unsubscribeFromPush() {
 // the browser silently dropped, cleared site data, ...), quietly
 // (re)establish one. Never prompts for permission itself — Notification.
 // permission must already be 'granted' for this to do anything at all.
+//
+// Also re-subscribes when a DIFFERENT account is now signed in on this
+// device than the one the server currently has this subscription
+// attached to. A PushSubscription belongs to the browser/origin, not to
+// whichever account is signed in — switching accounts on a shared device
+// (sign out, sign in as someone else) leaves the OLD account's id on the
+// row otherwise, so that device keeps receiving pushes meant for the
+// account that isn't even signed in anymore (a real cross-account leak,
+// not just stale data). Re-POSTing the exact same subscription under the
+// new account's token re-associates it via the backend's own upsert.
 export async function ensurePushSubscription() {
   if (!isPushSupported() || !Api.isSignedIn()) return;
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const existing = await reg.pushManager.getSubscription();
-    if (existing) return; // already subscribed on this device
+    const myId = Api.getCurrentUser()?.id || '';
+    let lastSubscribedId = '';
+    try { lastSubscribedId = localStorage.getItem(SUBSCRIBED_USER_KEY) || ''; } catch {}
+    if (existing && lastSubscribedId === myId) return; // already subscribed, same account as last time
     await subscribeToPush();
   } catch { /* best-effort */ }
 }

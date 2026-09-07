@@ -41,6 +41,10 @@ function saveGameState(game, clocks) {
     // it is), not a setting — it belongs in the resumable game-state save,
     // never in kc_settings_v1.
     counting: game.counting,
+    // Whether any capture has happened yet — gates the King's/Neang's
+    // first-move special openings (see game.js). Real game state, same
+    // reasoning as `counting` above.
+    captureOccurred: game.captureOccurred,
     msW: clocks.msW,
     msB: clocks.msB,
     clockTurn: clocks.turn
@@ -1157,6 +1161,13 @@ export async function initUI() {
       const lastMove = g.history[g.history.length - 1];
       game.history = [{ from: lastMove.from, to: lastMove.to, captured: !!lastMove.captured, promo: !!lastMove.promo }];
     }
+    // Server-authoritative, same reasoning as `counting` above — the
+    // truncated `game.history` here (last move only) can't be used to
+    // derive this, so it's computed from the server's full move history
+    // instead (also gates showHints()'s King/Neang special-move dots for
+    // an online game, so those correctly stop appearing the moment either
+    // player's client sees a capture in the shared history).
+    game.captureOccurred = !!g.history?.some(h => h.captured);
 
     if (g.status === 'active') {
       renderOnlineBanner();
@@ -1691,6 +1702,11 @@ export async function initUI() {
     game.turn     = saved.turn;
     game.history  = saved.history || [];
     game.counting = saved.counting || emptyCounting();
+    // A save from before this field existed won't have it — derive it
+    // from the (fully restored, for local games) history instead.
+    game.captureOccurred = typeof saved.captureOccurred === 'boolean'
+      ? saved.captureOccurred
+      : game.history.some(h => h.captured);
     render();
     clocks.start();
   } else {

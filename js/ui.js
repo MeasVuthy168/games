@@ -1031,14 +1031,19 @@ export async function initUI() {
           const sign = flipped ? -1 : 1;
           const dx = sign * (last.from.x - last.to.x) * cellPx;
           const dy = sign * (last.from.y - last.to.y) * cellPx;
-          const SLIDE_MS = 200;
+          const SLIDE_MS = 260;
           // Every piece — knights included — glides in a plain straight
           // line; no separate bounce/scale treatment for knights (matches
           // the reference: a knight move reads as the same smooth slide as
-          // any other piece, not a distinct "hop").
+          // any other piece, not a distinct "hop"). Plain 'ease-out' here,
+          // not the previous steep custom curve (cubic-bezier(.25,.8,.35,1)
+          // reaches ~80% of the distance in the first quarter of the
+          // duration) — that front-loading made the slide read as an
+          // instant snap with a barely-visible tail, even though it was
+          // technically animating the whole time.
           s.animate(
             [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
-            { duration: SLIDE_MS, easing: 'cubic-bezier(.25,.8,.35,1)', fill: 'both' }
+            { duration: SLIDE_MS, easing: 'ease-out', fill: 'both' }
           );
           // Promotion pop layers on top of the slide that just carried the
           // pawn to this square, timed to start right as the slide finishes.
@@ -1417,7 +1422,7 @@ export async function initUI() {
   function lockForAnimation() {
     if (!isAnimationEnabled()) return;
     animLock = true;
-    setTimeout(() => { animLock = false; }, 260); // covers the slide + promo-pop
+    setTimeout(() => { animLock = false; }, 320); // covers the slide + promo-pop
   }
 
   // Short shake/reject cue for an illegal-move attempt (item 18) — the

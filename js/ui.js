@@ -1007,33 +1007,52 @@ export async function initUI() {
         cell.innerHTML = '';
         if (!p) continue;
 
-        // compute delta for small animation (skipped entirely — the piece
-        // just appears in place — whenever Animation is OFF, either by the
-        // user's own Settings toggle or the OS's prefers-reduced-motion)
-        let dx = '0px', dy = '0px', klass = '';
+        const s = document.createElement('div');
+        s.className = `piece ${p.c === 'w' ? 'white' : 'black'}`;
+        setPieceBG(s, p);
+        cell.appendChild(s);
+
+        // Driven by the Web Animations API (element.animate()) rather than
+        // a CSS class carrying an `animation`, and started only AFTER the
+        // piece is already in the DOM — a CSS animation-on-insert (the
+        // previous approach) raced WebKit's own compositor-layer setup for
+        // that brand-new element on real iOS: the piece stayed invisible
+        // for a chunk of the slide, only painting once it was already
+        // mostly (or fully) there. Explicitly constructing the animation
+        // via JS forces the engine to commit the element's normal paint
+        // first, so it's visible while it travels instead of popping in
+        // partway through. Skipped entirely — the piece just appears in
+        // place — whenever Animation is OFF, either by the user's own
+        // Settings toggle or the OS's prefers-reduced-motion (isMoveDest
+        // is only ever true when `animate` is also true).
         if (isMoveDest){
           // flip the animation direction too, so the slide-in matches the
           // piece's actual on-screen movement rather than its raw board delta
           const sign = flipped ? -1 : 1;
-          dx = sign * (last.from.x - last.to.x) * cellPx + 'px';
-          dy = sign * (last.from.y - last.to.y) * cellPx + 'px';
+          const dx = sign * (last.from.x - last.to.x) * cellPx;
+          const dy = sign * (last.from.y - last.to.y) * cellPx;
+          const SLIDE_MS = 200;
           // Every piece — knights included — glides in a plain straight
           // line; no separate bounce/scale treatment for knights (matches
           // the reference: a knight move reads as the same smooth slide as
           // any other piece, not a distinct "hop").
-          klass = 'anim-slide';
-          // Promotion pop layers on top of the slide that just carried
-          // the pawn to this square — see the .piece.anim-promo rule for
-          // the timing (it starts right as the slide finishes).
-          if (last.promo) klass += ' anim-promo';
+          s.animate(
+            [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
+            { duration: SLIDE_MS, easing: 'cubic-bezier(.25,.8,.35,1)', fill: 'both' }
+          );
+          // Promotion pop layers on top of the slide that just carried the
+          // pawn to this square, timed to start right as the slide finishes.
+          if (last.promo) {
+            s.animate(
+              [
+                { transform: 'scale(.7)', filter: 'drop-shadow(0 0 0 rgba(255,214,64,0))' },
+                { transform: 'scale(1.12)', filter: 'drop-shadow(0 0 10px rgba(255,214,64,.85))', offset: 0.55 },
+                { transform: 'scale(1)', filter: 'drop-shadow(0 0 0 rgba(255,214,64,0))' },
+              ],
+              { duration: 320, easing: 'ease-out', delay: SLIDE_MS, fill: 'both' }
+            );
+          }
         }
-
-        const s = document.createElement('div');
-        s.className = `piece ${p.c === 'w' ? 'white' : 'black'} ${klass}`.trim();
-        s.style.setProperty('--dx', dx);
-        s.style.setProperty('--dy', dy);
-        setPieceBG(s, p);
-        cell.appendChild(s);
       }
     }
 

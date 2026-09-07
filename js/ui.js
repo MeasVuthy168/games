@@ -1032,6 +1032,16 @@ export async function initUI() {
           const dx = sign * (last.from.x - last.to.x) * cellPx;
           const dy = sign * (last.from.y - last.to.y) * cellPx;
           const SLIDE_MS = 260;
+          // Every `.cell` is its own stacking context (position:relative +
+          // z-index:1), so a piece translated across a NEIGHBORING cell
+          // during the slide paints behind that cell whenever it comes
+          // later in DOM order (i.e. whenever the move's direction happens
+          // to travel toward an earlier-painted cell) — the piece visibly
+          // slides "under the board" and only reappears on top once it
+          // settles back into its own cell. Lifting the piece's own cell
+          // above every other cell for the moment it's animating fixes
+          // this regardless of which direction the move travels.
+          cell.classList.add('cell-sliding');
           // Every piece — knights included — glides in a plain straight
           // line; no separate bounce/scale treatment for knights (matches
           // the reference: a knight move reads as the same smooth slide as
@@ -1041,10 +1051,11 @@ export async function initUI() {
           // duration) — that front-loading made the slide read as an
           // instant snap with a barely-visible tail, even though it was
           // technically animating the whole time.
-          s.animate(
+          const slideAnim = s.animate(
             [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
             { duration: SLIDE_MS, easing: 'ease-out', fill: 'both' }
           );
+          slideAnim.finished.then(() => cell.classList.remove('cell-sliding')).catch(() => {});
           // Promotion pop layers on top of the slide that just carried the
           // pawn to this square, timed to start right as the slide finishes.
           if (last.promo) {

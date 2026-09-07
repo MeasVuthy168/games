@@ -115,6 +115,31 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Script/style are the app's actual logic — serving a stale cached copy
+  // here (then quietly refreshing the cache "for next time") means a real
+  // code change can sit invisible on a device for a long time: the
+  // background refresh only lands if that request happens to finish before
+  // the tab is backgrounded/suspended, which on a phone is not reliable.
+  // Network-first (falling back to cache only when actually offline) means
+  // any online load gets the current code; images/fonts/audio below keep
+  // the original cache-first behavior since those rarely change and
+  // refetching them on every load would be wasteful.
+  if (req.destination === 'script' || req.destination === 'style') {
+    e.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.status === 200) {
+          const c = await caches.open(CACHE);
+          c.put(req, fresh.clone());
+        }
+        return fresh;
+      } catch {
+        return (await caches.match(req)) || Response.error();
+      }
+    })());
+    return;
+  }
+
   e.respondWith((async () => {
     const cached = await caches.match(req);
     const fetchAndUpdate = fetch(req).then(async (res) => {

@@ -82,21 +82,17 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
   return data;
 }
 
-/* ---------------- auth ---------------- */
-
-export async function signUp({ email, phone, code, password, displayName }) {
-  const data = await request('/api/auth/signup', { method: 'POST', body: { email, phone, code, password, displayName }, auth: false });
-  writeAuth(data);
-  return data.user;
-}
-
-export async function sendPhoneCode(phone) {
-  return request('/api/auth/phone/send-code', { method: 'POST', body: { phone }, auth: false });
-}
-
-export async function sendEmailCode(email) {
-  return request('/api/auth/email/send-code', { method: 'POST', body: { email }, auth: false });
-}
+/* ---------------- auth ----------------
+ * Google Login is the only sign-up/sign-in path the app's UI exposes (see
+ * js/auth-page.js / auth.html). signUp, signIn, sendPhoneCode, sendEmailCode,
+ * forgotPassword, changePassword, and resendVerification were legacy
+ * password/email/phone-code exports with zero callers anywhere in the
+ * frontend and were removed here; the backend routes behind them are left
+ * untouched (existing password-based accounts, has_password on `users`, and
+ * this session's own backend test suites still exercise them directly).
+ * resetPassword/verifyEmail are kept below since reset-password.html and
+ * verify-email.html (reachable from emailed links, not app navigation)
+ * still call them. */
 
 export async function googleAuth(credential) {
   const data = await request('/api/auth/google', { method: 'POST', body: { credential }, auth: false });
@@ -104,26 +100,8 @@ export async function googleAuth(credential) {
   return data.user;
 }
 
-// `identifier` is either an email or a phone number — the backend tells
-// them apart by whether it contains "@".
-export async function signIn({ identifier, password }) {
-  const isEmail = identifier.includes('@');
-  const body = isEmail ? { email: identifier, password } : { phone: identifier, password };
-  const data = await request('/api/auth/signin', { method: 'POST', body, auth: false });
-  writeAuth(data);
-  return data.user;
-}
-
 export async function verifyEmail({ email, token }) {
   return request('/api/auth/verify-email', { method: 'POST', body: { email, token }, auth: false });
-}
-
-export async function resendVerification() {
-  return request('/api/auth/resend-verification', { method: 'POST' });
-}
-
-export async function forgotPassword(email) {
-  return request('/api/auth/forgot-password', { method: 'POST', body: { email }, auth: false });
 }
 
 export async function resetPassword({ email, token, password }) {
@@ -152,12 +130,6 @@ export async function logoutAllDevices() {
 export async function deleteAccount() {
   await request('/api/auth/me', { method: 'DELETE' });
   signOut();
-}
-
-export async function changePassword({ currentPassword, newPassword }) {
-  const data = await request('/api/auth/change-password', { method: 'POST', body: { currentPassword, newPassword } });
-  writeAuth(data);
-  return data.user;
 }
 
 /* ---------------- users / friends ---------------- */

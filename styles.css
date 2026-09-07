@@ -104,8 +104,21 @@ body{
   --bubble-bg:#2a2f3a;
 }
 
-/* ===== App shell ===== */
-.app{ min-height:100dvh; display:flex; flex-direction:column }
+/* ===== App shell =====
+   Fixed (not min-) height: the Play page's game chrome (topbar, board
+   area, bottom-nav spacer) is meant to fit exactly one viewport so the
+   board can claim all the space left over after that chrome — see
+   .board-panel/.board below. #chatCard (online mode only) lives OUTSIDE
+   this element in play.html specifically so it can still extend the
+   page further for scrolling without shrinking the board. */
+.app{ height:100dvh; display:flex; flex-direction:column }
+
+/* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
+   aria-hidden="true" already signals it's not meant to be visible.
+   Previously masked by #app's own overflow always being taller than the
+   viewport; now that #app fits exactly one viewport (above), it would
+   otherwise become a new few-pixel scroll-reveal below the fold. */
+.orientation-blocker{ display:none; }
 
 /* ===== Top bar ===== */
 .topbar{
@@ -116,6 +129,14 @@ body{
   transition: transform .25s ease, opacity .25s ease;
 }
 .topbar h1{ font-size:1.1rem; margin:0 }
+/* Play page's topbar is the game's own chrome (#app is exclusive to
+   play.html) — make it as compact as the .icon-btn/menu still allow, and
+   clear the status bar/notch (viewport-fit=cover is set on this page),
+   without touching the shared .topbar rule every other page also uses. */
+#app .topbar{
+  padding: .4rem 1rem;
+  padding-top: calc(.4rem + env(safe-area-inset-top));
+}
 .icon-btn{
   background:#fff; color:var(--blue); border:none; border-radius:.75rem;
   padding:.4rem .7rem; font-weight:600; cursor:pointer;
@@ -147,20 +168,28 @@ body{
 
 /* ===== Layout ===== */
 .layout{ display:grid; grid-template-columns:1fr 320px; gap:1rem; padding:1rem; flex:1 }
-.layout.layout-single{ grid-template-columns:1fr; padding:0 }
+/* Single-column (Play page) variant: a flex column instead of grid, so
+   its one child (.board-panel) can be given flex:1;min-height:0 below
+   and actually fill the remaining viewport height rather than just
+   sizing to its own content. */
+.layout.layout-single{
+  grid-template-columns:1fr; padding:0;
+  display:flex; flex-direction:column; min-height:0;
+}
 .panel{ background:var(--panel); border-radius:1rem; box-shadow:var(--shadow); padding:12px }
 
 /* === PLAY PAGE PANEL ==================================================== */
 .board-panel{
-  display:flex; flex-direction:column; align-items:center; gap:.6rem;
-  padding:8px 0 12px 0;
+  display:flex; flex-direction:column; align-items:center; gap:.35rem;
+  flex:1; min-height:0;
+  padding:4px 0 6px 0;
   overscroll-behavior: contain;
 }
 
 /* --- Turn banner --- */
 .turn-banner{
   font-weight:800;
-  font-size:1.15rem;
+  font-size:1.05rem;
   text-align:center;
   margin:0;
 }
@@ -170,9 +199,13 @@ body{
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:10px;
+  gap:8px;
   flex-wrap:wrap;
   width:100%;
+  /* Natural/compact height only — never compressed to make room for the
+     board (see #board's flex:1 below, which is the only element meant
+     to absorb/give up vertical space). */
+  flex:none;
 }
 
 .count-label{
@@ -266,11 +299,11 @@ body{
 }
 
 /* ===== Timers ===== */
-.timers{ width:100% }
+.timers{ width:100%; flex:none }
 .player-row{
   display:flex; align-items:center; gap:.5rem;
   background:var(--panel); border:1px solid #e6e6e6; border-radius:.6rem;
-  padding:.4rem .7rem; box-shadow:var(--shadow);
+  padding:.35rem .6rem; box-shadow:var(--shadow);
 }
 .player-name{ font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Real photo (or emoji fallback) for an online opponent/self — toggled by
@@ -302,7 +335,18 @@ body{
   grid-template-columns:repeat(8,1fr);
   grid-template-rows:repeat(8,1fr);
   width:100%;
+  max-width:100%;
   aspect-ratio:1/1.35;
+  /* The one flexible element in .board-panel's column: grows/shrinks to
+     fill whatever vertical space turn-wrap/timers (both flex:none) leave
+     behind, min-height:0 so it can shrink below its aspect-ratio-implied
+     content height instead of overflowing. Combined with width:100%/
+     max-width:100% above, the browser picks whichever of width- or
+     height-constrained sizing is smaller while preserving the aspect
+     ratio — i.e. the largest board that fits both available dimensions,
+     with no JS measurement needed. */
+  flex:1 1 auto;
+  min-height:0;
 
   padding:var(--frame-thickness);
   border-radius:16px;
@@ -569,6 +613,23 @@ body.ai-thinking #board{
   box-shadow:0 0 0 2px var(--panel, #fff);
 }
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
+/* Play page only (#app is exclusive to it): the shared 56px assumption
+   above undershoots #appTabbar's actual rendered height (~69px, from its
+   icon+label+padding) — harmless on other pages since their content
+   scrolls normally, but on this page the board area now fits the
+   viewport exactly, so that shortfall would overlap the bottom player
+   row with the nav bar. A few px of buffer over the measured value
+   tolerates minor font-metric differences across browsers. */
+#app #bottomSpacer{ height:calc(72px + env(safe-area-inset-bottom)) }
+
+/* #chatCard (online mode only) now sits below #app rather than inside
+   it (see .app above), specifically so it can extend the page for
+   scrolling instead of shrinking the board. But that means nothing else
+   reserves room for the fixed #appTabbar the way #bottomSpacer does for
+   #app's own content — without this, scrolling down to the chat's Send
+   button can leave it covered by the fixed nav bar. Same measured
+   height as #bottomSpacer above. */
+#chatCard{ padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
 
 /* ===== AI overlay ===== */
 #aiBusy{
@@ -937,6 +998,7 @@ details.card.card-full > .card-body{
 .online-status-banner{
   margin:0 12px 10px; padding:.6rem .8rem; border-radius:.7rem;
   background:#fff3cd; color:#7a5b00; font-weight:700; font-size:.88rem; text-align:center;
+  flex:none;
 }
 .online-chat{ display:flex; flex-direction:column; gap:.5rem; padding:.6rem; }
 .online-chat-msgs{ max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:.4rem; }

@@ -597,6 +597,12 @@ export async function initUI() {
   // Build board
   elBoard.innerHTML = '';
   const cells = [];
+  // render() tracks what piece (if any) it last actually painted into each
+  // board square here — see render() for why: real devices (especially
+  // WebKit/iOS) visibly struggle to recreate and re-paint 64 piece images
+  // every single move, so it only touches the handful of squares whose
+  // piece actually changed instead of wiping and rebuilding the whole board.
+  const renderedPiece = Array.from({ length: SIZE }, () => new Array(SIZE).fill(undefined));
   for (let gy = 0; gy < SIZE; gy++) {
     for (let gx = 0; gx < SIZE; gx++) {
       // dataset.x/y always name the real board square this grid slot holds
@@ -950,7 +956,6 @@ export async function initUI() {
   function render() {
     const animate = isAnimationEnabled();
     for (const c of cells) {
-      c.innerHTML = '';
       c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
     }
 
@@ -964,14 +969,26 @@ export async function initUI() {
     for (let y = 0; y < SIZE; y++) {
       for (let x = 0; x < SIZE; x++) {
         const p = game.at(x, y);
-        if (!p) continue;
+        const isMoveDest = !!(last && last.to.x === x && last.to.y === y && animate);
+        const key = p ? p.c + p.t : null;
+        // Skip squares whose piece hasn't actually changed since last
+        // render — recreating a `.piece` div means a fresh background-image
+        // for the browser to paint, and doing that for all 64 squares on
+        // every single move (most of which didn't change at all) is what
+        // made real devices visibly struggle to paint the board in time
+        // for the move that DID happen to even show up.
+        if (key === renderedPiece[y][x] && !isMoveDest) continue;
+        renderedPiece[y][x] = key;
+
         const cell = cells[gridSlot(x, y)];
+        cell.innerHTML = '';
+        if (!p) continue;
 
         // compute delta for small animation (skipped entirely — the piece
         // just appears in place — whenever Animation is OFF, either by the
         // user's own Settings toggle or the OS's prefers-reduced-motion)
         let dx = '0px', dy = '0px', klass = '';
-        if (last && last.to.x === x && last.to.y === y && animate){
+        if (isMoveDest){
           // flip the animation direction too, so the slide-in matches the
           // piece's actual on-screen movement rather than its raw board delta
           const sign = flipped ? -1 : 1;

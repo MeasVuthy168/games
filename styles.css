@@ -622,6 +622,13 @@ body.ai-thinking #board{
    is on (settings toggle + prefers-reduced-motion combined — see
    isAnimationEnabled() in ui.js), so no CSS gating is needed here.
 */
+/* Every .cell is its own stacking context (z-index:1 below) — without
+   this, a piece translating across a neighboring cell while sliding paints
+   BEHIND that cell whenever it comes later in DOM order, so the piece
+   visibly travels "under the board" and only reappears once it lands.
+   Applied to the animating piece's own cell only for the duration of its
+   slide (see ui.js). */
+.cell.cell-sliding{ z-index:8; }
 
 /* capture ripple — a quick, clean "impact" cue on the destination square,
    not an explosion. Only ever added by render() when Animation is on. */

@@ -613,21 +613,19 @@ body.ai-thinking #board{
 /* ===================== MOVE ANIMATIONS ===================== */
 /* Tuned to a snappy, professional 180-250ms range — short enough that the
    board never feels slow, long enough to read clearly as movement rather
-   than a teleport. Both classes are only ever added by render() when
-   Animation is on (settings toggle + prefers-reduced-motion combined —
-   see isAnimationEnabled() in ui.js), so no extra CSS gating is needed
-   here for the base slide/hop themselves. */
+   than a teleport. Every piece (knights included) gets the same plain
+   glide — no separate bounce/scale treatment for knights. Only ever added
+   by render() when Animation is on (settings toggle + prefers-reduced-
+   motion combined — see isAnimationEnabled() in ui.js), so no extra CSS
+   gating is needed here for the slide itself. */
 @keyframes slideIn { from{transform:translate(var(--dx,0),var(--dy,0))} to{transform:translate(0,0)} }
-@keyframes hopIn   { 0%{transform:translate(var(--dx,0),var(--dy,0)) scale(.96)} 60%{transform:translate(0,0) scale(1.05)} 100%{transform:translate(0,0) scale(1)} }
 .piece.anim-slide{ animation:slideIn .2s cubic-bezier(.25,.8,.35,1) }
-.piece.anim-hop  { animation:hopIn .22s cubic-bezier(.25,.8,.35,1) }
 
-/* Promotion pop — layers on top of the slide/hop above via a second
+/* Promotion pop — layers on top of the slide above via a second
    comma-separated animation, timed to start right as the move-in finishes
-   (animation-delay matches the slide/hop duration it follows). */
+   (animation-delay matches the slide duration it follows). */
 @keyframes promoPop{ 0%{transform:scale(.7); filter:drop-shadow(0 0 0 rgba(255,214,64,0))} 55%{transform:scale(1.12); filter:drop-shadow(0 0 10px rgba(255,214,64,.85))} 100%{transform:scale(1); filter:drop-shadow(0 0 0 rgba(255,214,64,0))} }
 .piece.anim-slide.anim-promo{ animation:slideIn .2s cubic-bezier(.25,.8,.35,1), promoPop .32s ease-out .2s; }
-.piece.anim-hop.anim-promo  { animation:hopIn .22s cubic-bezier(.25,.8,.35,1), promoPop .32s ease-out .22s; }
 
 /* capture ripple — a quick, clean "impact" cue on the destination square,
    not an explosion. Only ever added by render() when Animation is on. */
@@ -801,7 +799,7 @@ body.kc-anim-off .flash-desc{ animation:none; }
    isAnimationEnabled() already folds this into body.kc-anim-off above,
    this is pure defense-in-depth for the CSS-only pieces. */
 @media (prefers-reduced-motion: reduce){
-  .piece.anim-slide, .piece.anim-hop,
+  .piece.anim-slide,
   .cell.reject-shake,
   .cell.in-check::before, .cell.in-check-mate::before,
   .flash-card.flash-enter,

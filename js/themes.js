@@ -30,3 +30,20 @@ export function clampThemeIndex(i, themes) {
   const n = i | 0;
   return n >= 0 && n < themes.length ? n : 0;
 }
+
+// js/ui.js's render() wipes and recreates every `.piece` div from scratch on
+// every move (a fresh element with a fresh backgroundImage, never the same
+// node reused/translated), so the first time a given piece image is ever
+// referenced is often mid-animation. Warming every piece image into the
+// browser's decoded-image cache as soon as the board loads (well before a
+// first move can happen) means there's nothing left to fetch/decode by the
+// time any move actually needs it.
+export function preloadPieceImages(theme) {
+  for (const color of ['w', 'b']) {
+    for (const typeLetter of Object.keys(PIECE_FILE_KEY)) {
+      const img = new Image();
+      img.src = `./${pieceImageUrl(theme, color, typeLetter)}`;
+      if (img.decode) img.decode().catch(() => {});
+    }
+  }
+}

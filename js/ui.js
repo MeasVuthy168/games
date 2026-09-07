@@ -7,7 +7,7 @@ import * as History from './history.js';
 import * as Tournament from './tournament.js';
 import * as Rewards from './rewards.js';
 import * as Api from './api.js';
-import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
+import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex, preloadPieceImages } from './themes.js';
 import { showToast } from './toast.js';
 import { initTranslations, t } from './i18n.js';
 
@@ -454,6 +454,9 @@ export async function initUI() {
 
   const game = new Game();
   const settings = loadSettings();
+  // Fire-and-forget, as early as possible — warms every piece image into
+  // the browser's decoded-image cache well before a first move can need it.
+  preloadPieceImages(pieceThemes[clampThemeIndex(settings.pieceTheme, pieceThemes)]);
   if (tournamentMode) {
     // Fixed seat + the round's assigned difficulty, regardless of whatever
     // role/level the player last picked for ad-hoc games. Always start the
@@ -974,11 +977,14 @@ export async function initUI() {
           const sign = flipped ? -1 : 1;
           dx = sign * (last.from.x - last.to.x) * cellPx + 'px';
           dy = sign * (last.from.y - last.to.y) * cellPx + 'px';
-          const isKnight = (p.t === PT.KNIGHT);
-          klass = isKnight ? 'anim-hop' : 'anim-slide';
-          // Promotion pop layers on top of the slide/hop that just carried
+          // Every piece — knights included — glides in a plain straight
+          // line; no separate bounce/scale treatment for knights (matches
+          // the reference: a knight move reads as the same smooth slide as
+          // any other piece, not a distinct "hop").
+          klass = 'anim-slide';
+          // Promotion pop layers on top of the slide that just carried
           // the pawn to this square — see the .piece.anim-promo rule for
-          // the timing (it starts right as the slide/hop finishes).
+          // the timing (it starts right as the slide finishes).
           if (last.promo) klass += ' anim-promo';
         }
 
@@ -1352,7 +1358,7 @@ export async function initUI() {
   function lockForAnimation() {
     if (!isAnimationEnabled()) return;
     animLock = true;
-    setTimeout(() => { animLock = false; }, 260); // covers slide/hop + promo-pop
+    setTimeout(() => { animLock = false; }, 260); // covers the slide + promo-pop
   }
 
   // Short shake/reject cue for an illegal-move attempt (item 18) — the

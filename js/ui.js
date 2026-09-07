@@ -99,24 +99,47 @@ function loadSettings() {
 class AudioBeeper {
   constructor() {
     this.enabled = true;
-    this.bank = {
-      move:    new Audio('assets/sfx/move.mp3'),
-      capture: new Audio('assets/sfx/capture.mp3'),
-      select:  new Audio('assets/sfx/select.mp3'),
-      error:   new Audio('assets/sfx/error.mp3'),
-      check:   new Audio('assets/sfx/check.mp3'),
+    const SOURCES = {
+      move:    'assets/sfx/move.mp3',
+      capture: 'assets/sfx/capture.mp3',
+      select:  'assets/sfx/select.mp3',
+      error:   'assets/sfx/error.mp3',
+      check:   'assets/sfx/check.mp3',
       // No dedicated clips are shipped for every event below; reuse the
       // closest existing sfx as a stand-in rather than shipping new assets.
-      lose:     new Audio('assets/sfx/error.mp3'),
-      promotion:new Audio('assets/sfx/capture.mp3'),
-      draw:     new Audio('assets/sfx/select.mp3'),
+      lose:      'assets/sfx/error.mp3',
+      promotion: 'assets/sfx/capture.mp3',
+      draw:      'assets/sfx/select.mp3',
     };
-    for (const k in this.bank) this.bank[k].preload = 'auto';
+    // A small fixed-size, round-robin pool of real <audio> elements per
+    // sound, built once and reused for the whole session — instead of
+    // cloneNode()-ing a brand new element on every single play(). A real
+    // game easily plays 50+ sounds, and WebKit/iOS Safari handles many
+    // short-lived audio elements far worse than Chromium: that unbounded
+    // per-move object creation is what read as the game gradually getting
+    // laggier the longer a game went on, especially on iPhone. POOL_SIZE
+    // only needs to comfortably exceed how many instances of the SAME
+    // sound could ever legitimately overlap (never more than 1-2 here).
+    const POOL_SIZE = 3;
+    this.pools = {};
+    this.poolIdx = {};
+    for (const name in SOURCES) {
+      this.pools[name] = Array.from({ length: POOL_SIZE }, () => {
+        const a = new Audio(SOURCES[name]);
+        a.preload = 'auto';
+        return a;
+      });
+      this.poolIdx[name] = 0;
+    }
   }
   play(name, vol = 1) {
     if (!this.enabled) return;
-    const src = this.bank[name]; if (!src) return;
-    const a = src.cloneNode(true); a.volume = Math.max(0, Math.min(1, vol));
+    const pool = this.pools[name]; if (!pool) return;
+    const a = pool[this.poolIdx[name]];
+    this.poolIdx[name] = (this.poolIdx[name] + 1) % pool.length;
+    a.pause();
+    a.currentTime = 0;
+    a.volume = Math.max(0, Math.min(1, vol));
     a.play().catch(()=>{});
   }
   move(){ this.play('move', .9); }

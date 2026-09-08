@@ -1154,7 +1154,15 @@ export async function initUI() {
   // this is display/input-gating only; the server (ouk-ai-backend's
   // /api/games/:id/move, reusing the exact same rules engine) is what
   // actually validates and applies every move.
-  function applyOnlineGameState(g) {
+  // `skipVisualReplay` — true only when this call is confirming a move the
+  // mover already applied optimistically in onOnlineCellTap() below (same
+  // from/to as what the server just echoed back): the board already shows
+  // it and was already animated/beeped once, so render()/sound/haptic are
+  // skipped here to avoid replaying the slide animation a second time for
+  // a position that hasn't actually changed. Every other call site (the
+  // 3000ms→1000ms opponent-move poll, and the post-error re-sync in
+  // attemptOnlineMove) omits it and gets the normal full replay.
+  function applyOnlineGameState(g, { skipVisualReplay = false } = {}) {
     const prevUpdatedAt = onlineState?.updatedAt;
     onlineState = g;
     game.board = g.board;
@@ -1178,7 +1186,7 @@ export async function initUI() {
 
     if (g.status === 'active') {
       renderOnlineBanner();
-      render();
+      if (!skipVisualReplay) render();
       setBoardBusy(!g.myTurn);
     } else if (g.status === 'pending') {
       renderOnlineBanner();
@@ -1188,7 +1196,7 @@ export async function initUI() {
       onlineFinished = true;
       stopOnlinePolling();
       setBoardBusy(false);
-      render();
+      if (!skipVisualReplay) render();
       const myWon = (g.result === 'white' && g.myColor === 'w') || (g.result === 'black' && g.myColor === 'b');
       const isDraw = g.result === 'draw';
       // Online games carry no explicit "why did it end" field, but it's
@@ -1223,7 +1231,7 @@ export async function initUI() {
       });
       // Real online wins are intentionally excluded from AI-specific Daily
       // Rewards objectives — Rewards.notifyGameResult only counts mode:'ai'.
-    } else if (prevUpdatedAt !== g.updatedAt && g.history?.length) {
+    } else if (!skipVisualReplay && prevUpdatedAt !== g.updatedAt && g.history?.length) {
       // Sound and Haptic are independent settings — each is gated by its
       // own toggle, never by the other (beeper.* already checks
       // beeper.enabled internally; triggerHaptic() checks isHapticEnabled()).
@@ -1246,11 +1254,30 @@ export async function initUI() {
     setBoardBusy(true);
     try {
       const { game: g } = await Api.makeGameMove(onlineGameId, from, to);
-      applyOnlineGameState(g);
+      // If the server echoes back exactly the move we already applied
+      // optimistically in onOnlineCellTap(), the board is already showing
+      // it (and already got its sound/haptic/animation) — skip replaying
+      // that visually. Any other outcome (shouldn't normally happen, since
+      // both sides run the same rules engine, but covers edge cases like a
+      // promotion choice mismatch) falls back to the normal full replay.
+      const last = g.history?.[g.history.length - 1];
+      const confirmsOptimistic = !!last
+        && last.from.x === from.x && last.from.y === from.y
+        && last.to.x === to.x && last.to.y === to.y;
+      applyOnlineGameState(g, { skipVisualReplay: confirmsOptimistic });
     } catch (err) {
       beeper.error(); triggerHaptic('error');
       if (err.status !== 400 && err.status !== 409) showToast(err.message || 'Move failed', 'error');
-      setBoardBusy(!onlineState.myTurn);
+      // Roll back the optimistic local move: re-sync from the server's
+      // authoritative state, since the client's guess (board/turn/counting)
+      // may now be wrong — e.g. the opponent's move landed first and this
+      // one was rejected as out of turn.
+      try {
+        const { game: g } = await Api.getGame(onlineGameId);
+        applyOnlineGameState(g);
+      } catch {
+        setBoardBusy(!onlineState.myTurn);
+      }
     }
   }
 
@@ -1273,8 +1300,34 @@ export async function initUI() {
     }
     const from = { ...selected }, to = { x, y };
     selected = null; legal = []; clearHints();
+
+    // Optimistic update (online-friend latency audit, Phase 2): apply the
+    // move locally right away with the same shared rules engine used for
+    // legal-move hints (game.js, kept in sync with the server's
+    // gameEngine.js), instead of waiting on the full network round trip
+    // to see it. The server call below remains authoritative — on success
+    // this just gets silently confirmed (see attemptOnlineMove), and on
+    // failure it gets rolled back by re-syncing from the server.
+    const optimistic = game.move(from, to);
+    if (optimistic.ok) {
+      render();
+      if (optimistic.captured) beeper.capture(); else beeper.move();
+      triggerHaptic(optimistic.captured ? 'capture' : 'move');
+      if (optimistic.promo) { beeper.promotion(); triggerHaptic('promotion'); }
+      if (optimistic.status?.state === 'check') { beeper.check(); triggerHaptic('check'); }
+      applyCountingFeedback(optimistic.counting);
+    }
     attemptOnlineMove(from, to);
   }
+
+  // 1000ms (was 3000ms) — the online-friend performance audit measured
+  // this interval as the dominant source of "feels slow" for the
+  // receiving player: at a flat N-ms interval, average opponent-move
+  // detection latency is ~N/2 and worst case is N, regardless of how fast
+  // the network/backend/DB actually are. 1000ms trades roughly 3x the
+  // poll request volume for cutting that average from ~1500ms to ~500ms
+  // and the worst case from 3000ms to 1000ms.
+  const ONLINE_POLL_MS = 1000;
 
   function startOnlinePolling() {
     onlinePollHandle = setInterval(async () => {
@@ -1283,7 +1336,7 @@ export async function initUI() {
         const { game: g } = await Api.getGame(onlineGameId);
         if (g.updatedAt !== onlineState.updatedAt || g.status !== onlineState.status) applyOnlineGameState(g);
       } catch { /* transient — try again next tick */ }
-    }, 3000);
+    }, ONLINE_POLL_MS);
   }
 
   // Real chat, reusing the same friend-chat backend the Friend tab's

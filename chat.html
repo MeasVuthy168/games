@@ -92,6 +92,66 @@
       padding:.2rem 1rem .4rem; font-size:.78rem; font-style:italic; opacity:.65; min-height:1.1em;
     }
     .typing-indicator:empty, .typing-indicator[hidden]{ display:none; }
+
+    /* Pinned message banner */
+    .pinned-banner{
+      display:block; width:100%; text-align:left; border:none; border-bottom:1px solid rgba(13,45,92,.08);
+      background:var(--bubble-bg); color:var(--ink); padding:.5rem 1rem; font-size:.8rem;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;
+    }
+
+    /* Reply quote shown inside a bubble that IS a reply */
+    .reply-quote{
+      font-size:.78rem; opacity:.75; border-left:2px solid currentColor; padding:.1rem .5rem;
+      margin-bottom:.3rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%;
+    }
+    .msg-bubble-text{ white-space:pre-wrap; overflow-wrap:break-word; }
+    .msg-bubble-text.is-deleted{ font-style:italic; opacity:.65; }
+
+    /* Reply preview above the composer, while composing a reply */
+    .reply-preview{
+      display:flex; align-items:center; gap:.6rem; padding:.5rem 1rem;
+      border-top:1px solid rgba(13,45,92,.08); background:var(--bubble-bg);
+    }
+    .reply-preview-text{ flex:1; min-width:0; }
+    .reply-preview-label{ font-size:.7rem; font-weight:700; opacity:.6; }
+    .reply-preview-body{ font-size:.82rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .reply-preview-cancel{
+      flex:none; border:none; background:none; font-size:1rem; opacity:.6; cursor:pointer; padding:.2rem .4rem;
+    }
+
+    /* Long-press action menu (bottom sheet) */
+    .msg-menu-overlay{
+      position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:flex-end;
+      z-index:50;
+    }
+    .msg-menu-overlay[hidden]{ display:none; }
+    .msg-menu{
+      width:100%; background:var(--panel); border-radius:1rem 1rem 0 0; padding:.4rem 0 calc(.4rem + env(safe-area-inset-bottom));
+      box-shadow:var(--shadow); max-height:70vh; overflow-y:auto;
+    }
+    .msg-menu-item{
+      display:block; width:100%; text-align:left; border:none; background:none; color:var(--ink);
+      font:inherit; font-size:.95rem; padding:.85rem 1.2rem; cursor:pointer;
+    }
+    .msg-menu-item:active{ background:var(--bubble-bg); }
+
+    /* Message info modal */
+    .info-modal-overlay{
+      position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
+      z-index:50; padding:1rem;
+    }
+    .info-modal-overlay[hidden]{ display:none; }
+    .info-modal{
+      width:100%; max-width:320px; background:var(--panel); border-radius:1rem; padding:1.1rem;
+      box-shadow:var(--shadow);
+    }
+    .info-modal h3{ margin:0 0 .7rem; font-size:1rem; }
+    .info-row{ display:flex; justify-content:space-between; font-size:.85rem; padding:.3rem 0; opacity:.85; }
+    .info-modal-close{
+      margin-top:.8rem; width:100%; padding:.55rem; border-radius:.8rem; border:none;
+      background:var(--blue); color:#fff; font-weight:700; cursor:pointer;
+    }
   </style>
 </head>
 <body>

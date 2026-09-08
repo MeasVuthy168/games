@@ -184,8 +184,8 @@ export async function getMessages(friendId, opts = {}) {
   return { messages: data.messages, hasMore: !!data.hasMore };
 }
 
-export async function sendMessage(friendId, body) {
-  return request(`/api/chat/${friendId}/messages`, { method: 'POST', body: { body } });
+export async function sendMessage(friendId, body, replyToId) {
+  return request(`/api/chat/${friendId}/messages`, { method: 'POST', body: replyToId ? { body, replyToId } : { body } });
 }
 
 export async function markThreadRead(friendId) {
@@ -198,6 +198,25 @@ export async function getChatPresence(friendId) {
 
 export async function sendTyping(friendId, isTyping) {
   return request(`/api/chat/${friendId}/typing`, { method: 'POST', body: { typing: isTyping } });
+}
+
+// scope: 'me' (hides it from just this account's view) or 'everyone'
+// (server-validated — only the original sender's request is honored).
+export async function deleteMessage(friendId, messageId, scope) {
+  return request(`/api/chat/${friendId}/messages/${messageId}`, { method: 'DELETE', body: { scope } });
+}
+
+export async function pinMessage(friendId, messageId) {
+  return request(`/api/chat/${friendId}/messages/${messageId}/pin`, { method: 'POST' });
+}
+
+export async function unpinMessage(friendId, messageId) {
+  return request(`/api/chat/${friendId}/messages/${messageId}/pin`, { method: 'DELETE' });
+}
+
+export async function getPinnedMessage(friendId) {
+  const data = await request(`/api/chat/${friendId}/pinned`);
+  return data.pinned;
 }
 
 // Mints a short-lived, single-use ticket for opening the chat SSE stream

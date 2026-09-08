@@ -14,7 +14,7 @@ const RECONNECT_MAX_MS = 15000;
 
 // Every event type the backend's src/realtime.js/routes/chat.js can push.
 const EVENT_TYPES = [
-  'message:new', 'message:delivered', 'message:read',
+  'message:new', 'message:delivered', 'message:read', 'message:deleted', 'message:pinned', 'message:unpinned',
   'typing:start', 'typing:stop',
   'presence:online', 'presence:offline',
 ];

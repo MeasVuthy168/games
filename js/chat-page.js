@@ -121,15 +121,29 @@ async function renderThread(friendId) {
           <span class="thread-presence" id="presenceStatus"></span>
         </div>
       </div>
+      <button type="button" class="pinned-banner" id="pinnedBanner" hidden></button>
       <div class="thread-msgs" id="threadMsgs">
         <div class="load-older-spinner" id="loadOlderSpinner" hidden>${t('chat.loadingOlder')}</div>
       </div>
       <div class="typing-indicator" id="typingIndicator" hidden></div>
       <button type="button" class="new-msgs-pill" id="newMsgsPill" hidden>↓ <span data-i18n="chat.newMessages">${t('chat.newMessages')}</span></button>
+      <div class="reply-preview" id="replyPreview" hidden>
+        <div class="reply-preview-text">
+          <div class="reply-preview-label">${t('chat.replyingTo')}</div>
+          <div class="reply-preview-body" id="replyPreviewBody"></div>
+        </div>
+        <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" aria-label="Cancel">✕</button>
+      </div>
       <form class="thread-composer" id="composerForm">
         <input type="text" id="composerInput" maxlength="2000" placeholder="Message…" autocomplete="off" />
         <button type="submit" id="composerSend">Send</button>
       </form>
+    </div>
+    <div class="msg-menu-overlay" id="msgMenuOverlay" hidden>
+      <div class="msg-menu" id="msgMenu"></div>
+    </div>
+    <div class="info-modal-overlay" id="infoModalOverlay" hidden>
+      <div class="info-modal" id="infoModal"></div>
     </div>
   `;
 
@@ -138,9 +152,17 @@ async function renderThread(friendId) {
   const newMsgsPill = $('#newMsgsPill');
   const typingEl = $('#typingIndicator');
   const presenceEl = $('#presenceStatus');
+  const pinnedBanner = $('#pinnedBanner');
+  const replyPreview = $('#replyPreview');
+  const replyPreviewBody = $('#replyPreviewBody');
+  const menuOverlay = $('#msgMenuOverlay');
+  const menuEl = $('#msgMenu');
+  const infoOverlay = $('#infoModalOverlay');
+  const infoModal = $('#infoModal');
 
   // ---- state ----
   const nodesById = new Map();   // message id (real or temp) -> row element
+  const dataById = new Map();    // message id -> last-known full message object (for the long-press menu/reply/info)
   let order = [];                // ids, ascending chronological
   let oldestId = null;           // for before= pagination
   let hasMoreOlder = false;
@@ -204,7 +226,26 @@ async function renderThread(friendId) {
     meta.textContent = `${fmtTime(createdAt)} · ${statusTicks(status)}`;
   }
 
+  // (Re)renders the bubble's content area (reply-quote + body/deleted-
+  // placeholder) from `m` — split out from buildRow() so a later delete/pin
+  // SSE event can update an EXISTING row in place without rebuilding it.
+  function renderBubbleContent(bubble, m) {
+    bubble.innerHTML = '';
+    if (m.replyTo) {
+      const quote = document.createElement('div');
+      quote.className = 'reply-quote';
+      quote.textContent = m.replyTo.deleted ? t('chat.deletedMessage') : (m.replyTo.body || '');
+      bubble.appendChild(quote);
+    }
+    const text = document.createElement('div');
+    text.className = 'msg-bubble-text';
+    if (m.deleted) { text.classList.add('is-deleted'); text.textContent = t('chat.deletedMessage'); }
+    else { text.textContent = m.body; }
+    bubble.appendChild(text);
+  }
+
   function buildRow(m) {
+    dataById.set(m.id, m);
     const row = document.createElement('div');
     row.className = 'msg-row' + (m.fromMe ? ' me' : '');
     row.dataset.day = dayKey(m.createdAt);
@@ -216,16 +257,185 @@ async function renderThread(friendId) {
     group.className = 'msg-group';
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
-    bubble.textContent = m.body;
+    renderBubbleContent(bubble, m);
     const meta = document.createElement('div');
     meta.className = 'msg-time';
     group.appendChild(bubble);
     group.appendChild(meta);
     row.appendChild(group);
+    attachLongPress(bubble, row);
 
     updateRowMeta(row, { fromMe: m.fromMe, createdAt: m.createdAt, status: row.dataset.status });
     return row;
   }
+
+  // ---- long-press message menu (Phase 7) ----
+  const LONG_PRESS_MS = 550;
+  let replyTarget = null; // the message object currently being replied to, or null
+
+  // Takes the ROW element (not a fixed id) and reads its current
+  // data-msg-id at the moment the press actually fires — a fixed id
+  // captured at attach time would go stale the instant an optimistic
+  // send's temp id gets renamed to its real one by reconcileTemp().
+  function attachLongPress(el, row) {
+    let timer = null;
+    let moved = false;
+    const start = (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return; // long-press via left-click-hold only, for desktop parity
+      moved = false;
+      timer = setTimeout(() => { if (!moved) openMenu(row.dataset.msgId); }, LONG_PRESS_MS);
+    };
+    const cancel = () => { clearTimeout(timer); timer = null; };
+    const onMove = () => { moved = true; cancel(); };
+    el.addEventListener('pointerdown', start);
+    el.addEventListener('pointerup', cancel);
+    el.addEventListener('pointercancel', cancel);
+    el.addEventListener('pointermove', onMove);
+  }
+
+  function closeMenu() {
+    menuOverlay.hidden = true;
+    menuEl.innerHTML = '';
+  }
+
+  function menuItem(label, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'msg-menu-item';
+    btn.textContent = label;
+    btn.addEventListener('click', () => { closeMenu(); onClick(); });
+    return btn;
+  }
+
+  function openMenu(id) {
+    const m = dataById.get(id);
+    if (!m || m.id.startsWith('local-')) return; // no menu on a still-pending optimistic bubble
+    menuEl.innerHTML = '';
+    if (!m.deleted) {
+      menuEl.appendChild(menuItem(t('chat.menuCopy'), () => copyMessage(m)));
+      menuEl.appendChild(menuItem(t('chat.menuReply'), () => startReply(m)));
+      menuEl.appendChild(menuItem(m.pinned ? t('chat.menuUnpin') : t('chat.menuPin'), () => togglePin(m)));
+    }
+    if (m.fromMe) menuEl.appendChild(menuItem(t('chat.menuInfo'), () => showInfo(id)));
+    if (!m.deleted) {
+      menuEl.appendChild(menuItem(t('chat.menuDeleteMe'), () => confirmDelete(m, 'me')));
+      if (m.fromMe) menuEl.appendChild(menuItem(t('chat.menuDeleteEveryone'), () => confirmDelete(m, 'everyone')));
+    }
+    menuEl.appendChild(menuItem(t('chat.menuCancel'), () => {}));
+    menuOverlay.hidden = false;
+  }
+  menuOverlay.addEventListener('click', (e) => { if (e.target === menuOverlay) closeMenu(); });
+
+  async function copyMessage(m) {
+    try { await navigator.clipboard.writeText(m.body || ''); showToast(t('chat.copied'), 'success'); }
+    catch { showToast(t('chat.copied'), 'success'); /* clipboard permission denied — still non-fatal */ }
+  }
+
+  function startReply(m) {
+    replyTarget = m;
+    replyPreviewBody.textContent = m.deleted ? t('chat.deletedMessage') : m.body;
+    replyPreview.hidden = false;
+    $('#composerInput').focus();
+  }
+  function clearReply() {
+    replyTarget = null;
+    replyPreview.hidden = true;
+  }
+  $('#replyPreviewCancel').addEventListener('click', clearReply);
+
+  async function togglePin(m) {
+    try {
+      if (m.pinned) await Api.unpinMessage(friendId, m.id);
+      else await Api.pinMessage(friendId, m.id);
+    } catch { showToast(t('chat.pinFailed'), 'error'); }
+  }
+
+  async function confirmDelete(m, scope) {
+    if (!window.confirm(t('chat.deleteConfirm'))) return;
+    try {
+      await Api.deleteMessage(friendId, m.id, scope);
+      if (scope === 'everyone') applyDeleted(m.id);
+      else removeRowLocally(m.id);
+    } catch { showToast(t('chat.deleteFailed'), 'error'); }
+  }
+
+  function applyDeleted(id) {
+    const row = nodesById.get(id);
+    const m = dataById.get(id);
+    if (!row || !m) return;
+    m.deleted = true;
+    m.body = null;
+    dataById.set(id, m);
+    const bubble = row.querySelector('.msg-bubble');
+    if (bubble) renderBubbleContent(bubble, m);
+    if (m.pinned) { m.pinned = false; refreshPinnedBanner(); }
+  }
+
+  function removeRowLocally(id) {
+    const row = nodesById.get(id);
+    if (row) row.remove();
+    nodesById.delete(id);
+    dataById.delete(id);
+    const idx = order.indexOf(id);
+    if (idx !== -1) order.splice(idx, 1);
+    refreshDateSeparators();
+    applyGrouping();
+  }
+
+  function setPinnedFlag(id, pinned) {
+    // At most one pinned message per conversation server-side — mirror
+    // that locally by clearing any other row's pinned flag first.
+    if (pinned) for (const [otherId, data] of dataById) if (data.pinned && otherId !== id) { data.pinned = false; }
+    const m = dataById.get(id);
+    if (m) m.pinned = pinned;
+    refreshPinnedBanner();
+  }
+
+  async function refreshPinnedBanner() {
+    const pinnedEntry = [...dataById.values()].find(m => m.pinned);
+    if (!pinnedEntry) {
+      // Might be pinned further back than what's currently loaded (e.g.
+      // right after opening the thread) — check the server once.
+      try {
+        const pinned = await Api.getPinnedMessage(friendId);
+        if (pinned) {
+          pinnedBanner.hidden = false;
+          pinnedBanner.textContent = `📌 ${pinned.deleted ? t('chat.deletedMessage') : pinned.body}`;
+          pinnedBanner.dataset.msgId = pinned.id;
+          return;
+        }
+      } catch { /* leave banner as-is */ }
+      pinnedBanner.hidden = true;
+      pinnedBanner.textContent = '';
+      return;
+    }
+    pinnedBanner.hidden = false;
+    pinnedBanner.textContent = `📌 ${pinnedEntry.deleted ? t('chat.deletedMessage') : pinnedEntry.body}`;
+    pinnedBanner.dataset.msgId = pinnedEntry.id;
+  }
+  pinnedBanner.addEventListener('click', () => {
+    const id = pinnedBanner.dataset.msgId;
+    const row = id && nodesById.get(id);
+    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  function showInfo(id) {
+    const row = nodesById.get(id);
+    const m = dataById.get(id);
+    if (!row || !m) return;
+    const status = row.dataset.status;
+    const line = (label, shown) => `<div class="info-row"><span>${label}</span><span>${shown}</span></div>`;
+    infoModal.innerHTML = `
+      <h3>${t('chat.infoTitle')}</h3>
+      ${line(t('chat.infoSent'), fmtTime(m.createdAt))}
+      ${line(t('chat.infoDelivered'), (status === 'delivered' || status === 'read') ? fmtTime(m.createdAt) : t('chat.infoNotYet'))}
+      ${line(t('chat.infoRead'), status === 'read' ? fmtTime(m.createdAt) : t('chat.infoNotYet'))}
+      <button type="button" class="info-modal-close" id="infoModalClose">${t('chat.close')}</button>
+    `;
+    infoOverlay.hidden = false;
+    $('#infoModalClose').addEventListener('click', () => { infoOverlay.hidden = true; });
+  }
+  infoOverlay.addEventListener('click', (e) => { if (e.target === infoOverlay) infoOverlay.hidden = true; });
 
   // Never downgrades (e.g. a late 'delivered' push arriving after we
   // already know a message was read shouldn't un-blue its ticks).
@@ -286,6 +496,9 @@ async function renderThread(friendId) {
     const idx = order.indexOf(tempId);
     if (idx !== -1) order[idx] = real.id;
     nodesById.set(real.id, row);
+    const data = dataById.get(tempId);
+    dataById.delete(tempId);
+    if (data) { data.id = real.id; dataById.set(real.id, data); }
     row.dataset.msgId = real.id;
     row.dataset.createdAt = real.createdAt;
     const status = real.delivered ? 'delivered' : 'sent';
@@ -433,6 +646,7 @@ async function renderThread(friendId) {
 
   await loadInitial();
   await loadPresence();
+  refreshPinnedBanner();
   presenceRefreshTimer = setInterval(renderPresence, PRESENCE_REFRESH_MS);
 
   const stream = connectChatStream({
@@ -445,6 +659,18 @@ async function renderThread(friendId) {
           // of the SENDER'S OWN account also renders its own message on
           // the right, not just the recipient's tab.
           const isMine = data.fromUserId === myId;
+          // The SSE payload only carries a bare replyToId (not the
+          // resolved {body, fromMe} snippet the REST endpoints join in) —
+          // build it from whatever's already rendered in this thread. If
+          // the replied-to message isn't currently loaded (rare — replying
+          // to something further back than what's on screen), the quote
+          // is simply omitted for this live-rendered instance; the next
+          // full fetch (reload, or scrolling that message into view via
+          // pagination) shows it correctly either way.
+          const cachedReply = data.replyToId ? dataById.get(data.replyToId) : null;
+          const replyTo = cachedReply
+            ? { id: data.replyToId, body: cachedReply.deleted ? null : cachedReply.body, deleted: !!cachedReply.deleted, fromMe: cachedReply.fromMe }
+            : null;
           // If this is an echo of a send THIS tab made, reconcile the
           // pending optimistic row first — whichever of the POST response
           // or this SSE echo happens to arrive first (see reconcileTemp's
@@ -453,7 +679,7 @@ async function renderThread(friendId) {
           // then a safe no-op either way, since insertInOrder() already
           // dedupes by id and reconcileTemp() just claimed that id.
           if (isMine) reconcileTemp({ id: data.id, createdAt: data.createdAt, delivered: false });
-          addIncoming({ ...data, fromMe: isMine });
+          addIncoming({ ...data, fromMe: isMine, replyTo });
           if (!isMine) markReadIfViewing();
           break;
         }
@@ -462,6 +688,15 @@ async function renderThread(friendId) {
           break;
         case 'message:read':
           for (const id of data.ids || []) setStatus(id, 'read');
+          break;
+        case 'message:deleted':
+          if (data.scope === 'everyone') applyDeleted(data.id);
+          break;
+        case 'message:pinned':
+          setPinnedFlag(data.id, true);
+          break;
+        case 'message:unpinned':
+          setPinnedFlag(data.id, false);
           break;
         case 'typing:start':
           if (data.userId === friendId) showFriendTyping();
@@ -499,13 +734,19 @@ async function renderThread(friendId) {
     input.value = '';
     stopTypingSignal();
 
+    const replyingTo = replyTarget; // snapshot — clearReply() below resets the module-level one
+    clearReply();
+
     const tempId = `local-${Date.now()}-${nextTempSeq++}`;
     tempIdQueue.push(tempId);
-    const optimistic = { id: tempId, fromMe: true, body, createdAt: new Date().toISOString(), status: 'sending' };
+    const optimistic = {
+      id: tempId, fromMe: true, body, createdAt: new Date().toISOString(), status: 'sending',
+      replyTo: replyingTo ? { id: replyingTo.id, body: replyingTo.deleted ? null : replyingTo.body, deleted: !!replyingTo.deleted, fromMe: replyingTo.fromMe } : null,
+    };
     addIncoming(optimistic, { forceScroll: true });
 
     try {
-      const res = await Api.sendMessage(friendId, body);
+      const res = await Api.sendMessage(friendId, body, replyingTo?.id);
       // Reconcile the temp row to its real id — a no-op if the SSE echo of
       // this same send already won that race and did it first (see the
       // 'message:new' case above); either way, apply the definitive

@@ -192,6 +192,14 @@ export async function markThreadRead(friendId) {
   return request(`/api/chat/${friendId}/read`, { method: 'POST' });
 }
 
+export async function getChatPresence(friendId) {
+  return request(`/api/chat/${friendId}/presence`);
+}
+
+export async function sendTyping(friendId, isTyping) {
+  return request(`/api/chat/${friendId}/typing`, { method: 'POST', body: { typing: isTyping } });
+}
+
 // Mints a short-lived, single-use ticket for opening the chat SSE stream
 // (see js/chat-realtime.js) — EventSource can't send an Authorization
 // header, so this is how it authenticates instead.

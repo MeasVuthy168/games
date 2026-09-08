@@ -12,14 +12,22 @@ import * as Api from './api.js';
 const RECONNECT_BASE_MS = 1000;
 const RECONNECT_MAX_MS = 15000;
 
-// onMessage(data) — fired for every 'message:new' event, already
-// JSON-parsed. onOpen() — fired on every successful (re)connect, including
-// after a drop; the caller uses this to backfill anything missed while
-// disconnected (via the existing since= REST fallback) rather than trusting
-// SSE alone to never miss an event. Returns { stop() } — call it when
-// leaving the page/conversation to close the connection and cancel any
-// pending reconnect timer (no dangling timers/connections).
-export function connectChatStream({ onMessage, onOpen } = {}) {
+// Every event type the backend's src/realtime.js/routes/chat.js can push.
+const EVENT_TYPES = [
+  'message:new', 'message:delivered', 'message:read',
+  'typing:start', 'typing:stop',
+  'presence:online', 'presence:offline',
+];
+
+// onEvent(type, data) — fired for every server-pushed event, already
+// JSON-parsed (type is e.g. 'message:new', 'typing:start', ...). onOpen() —
+// fired on every successful (re)connect, including after a drop; the caller
+// uses this to backfill anything missed while disconnected (via the
+// existing since= REST fallback) rather than trusting SSE alone to never
+// miss an event. Returns { stop() } — call it when leaving the page/
+// conversation to close the connection and cancel any pending reconnect
+// timer (no dangling timers/connections).
+export function connectChatStream({ onEvent, onOpen } = {}) {
   let es = null;
   let stopped = false;
   let reconnectTimer = null;
@@ -37,9 +45,11 @@ export function connectChatStream({ onMessage, onOpen } = {}) {
     if (stopped) return;
 
     es = new EventSource(`${Api.getApiBase()}/api/chat/stream?ticket=${encodeURIComponent(ticket)}`);
-    es.addEventListener('message:new', (e) => {
-      try { onMessage?.(JSON.parse(e.data)); } catch { /* malformed event — ignore */ }
-    });
+    for (const type of EVENT_TYPES) {
+      es.addEventListener(type, (e) => {
+        try { onEvent?.(type, JSON.parse(e.data)); } catch { /* malformed event — ignore */ }
+      });
+    }
     es.onopen = () => { attempt = 0; onOpen?.(); };
     es.onerror = () => {
       // A single-use ticket means there's no reconnecting THIS EventSource

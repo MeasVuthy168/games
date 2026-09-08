@@ -167,6 +167,11 @@ export const translations = {
     'chat.sendFailed': 'Message failed to send',
     'chat.retry': 'Retry',
     'chat.loadingOlder': 'Loading…',
+    'chat.lastSeenJustNow': 'Last seen just now',
+    'chat.lastSeenMinAgo': 'Last seen {n} min ago',
+    'chat.lastSeenHoursAgo': 'Last seen {n}h ago',
+    'chat.lastSeenYesterday': 'Last seen yesterday',
+    'chat.lastSeenDate': 'Last seen {date}',
   },
   km: {
     'nav.home': 'ទំព័រដើម',
@@ -323,7 +328,7 @@ export const translations = {
     'chat.yesterday': 'ម្សិលមិញ',
     'chat.newMessages': 'សារថ្មី',
     'chat.typing': 'កំពុងវាយ...',
-    'chat.online': 'កំពុងលេង',
+    'chat.online': 'កំពុងអនឡាញ',
     'chat.sending': 'កំពុងផ្ញើ...',
     'chat.sent': 'បានផ្ញើ',
     'chat.delivered': 'បានទទួល',
@@ -331,6 +336,11 @@ export const translations = {
     'chat.sendFailed': 'ផ្ញើសារបរាជ័យ',
     'chat.retry': 'ព្យាយាមម្តងទៀត',
     'chat.loadingOlder': 'កំពុងផ្ទុក...',
+    'chat.lastSeenJustNow': 'ឃើញចុងក្រោយបន្តិចនេះ',
+    'chat.lastSeenMinAgo': 'ឃើញចុងក្រោយ {n} នាទីមុន',
+    'chat.lastSeenHoursAgo': 'ឃើញចុងក្រោយ {n} ម៉ោងមុន',
+    'chat.lastSeenYesterday': 'ឃើញចុងក្រោយម្សិលមិញ',
+    'chat.lastSeenDate': 'ឃើញចុងក្រោយ {date}',
   },
 };
 

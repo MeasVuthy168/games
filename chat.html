@@ -42,7 +42,10 @@
     .thread-wrap{ position:relative; display:flex; flex-direction:column; height:calc(100dvh - 130px); }
     .thread-header{ display:flex; align-items:center; gap:.6rem; padding:.8rem 1rem; border-bottom:1px solid rgba(13,45,92,.08); }
     .thread-header a{ color:var(--blue); font-weight:800; text-decoration:none; font-size:1.2rem; }
+    .thread-header-meta{ display:flex; flex-direction:column; line-height:1.25; min-width:0; }
     .thread-header .thread-name{ font-weight:800; }
+    .thread-presence{ font-size:.72rem; opacity:.6; }
+    .thread-presence.is-online{ opacity:1; color:var(--blue); font-weight:700; }
     .thread-msgs{ flex:1; overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:.5rem; }
     .msg-row{ display:flex; }
     .msg-row.me{ justify-content:flex-end; }
@@ -83,6 +86,12 @@
     .msg-row.is-pending .msg-bubble{ opacity:.65; }
     .msg-row.is-failed .msg-bubble{ outline:1px solid #d33; }
     .msg-row.is-failed .msg-time{ color:#d33; opacity:1; }
+    .msg-row.status-read .msg-time{ color:var(--blue); opacity:1; }
+
+    .typing-indicator{
+      padding:.2rem 1rem .4rem; font-size:.78rem; font-style:italic; opacity:.65; min-height:1.1em;
+    }
+    .typing-indicator:empty, .typing-indicator[hidden]{ display:none; }
   </style>
 </head>
 <body>

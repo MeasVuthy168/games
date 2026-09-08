@@ -266,6 +266,14 @@ class Clocks {
   start() {
     if (this.running) return; this.running = true;
     let last = performance.now();
+    // Ticks at ~10Hz (matching format()'s own tenths-of-a-second display
+    // precision below), not requestAnimationFrame's 60Hz+ — the display
+    // never showed anything finer than 0.1s anyway, so the extra frames
+    // were pure continuous CPU/DOM-update overhead for the entire game's
+    // duration, not a visible improvement. Elapsed time itself still comes
+    // from a real performance.now() delta each tick (not a fixed 100ms
+    // assumption), so the countdown stays accurate regardless of any
+    // scheduling jitter — only the update RATE changed, not the accuracy.
     const tick = () => {
       if (!this.running) return;
       const now = performance.now(); const dt = now - last; last = now;
@@ -273,11 +281,10 @@ class Clocks {
       else this.msB = Math.max(0, this.msB - dt);
       this._u(this.msW, this.msB);
       if (this.msW <= 0 || this.msB <= 0){ this.stop(); return; }
-      this._t = requestAnimationFrame(tick);
     };
-    this._t = requestAnimationFrame(tick);
+    this._t = setInterval(tick, 100);
   }
-  stop(){ this.running = false; if (this._t) cancelAnimationFrame(this._t); this._t=null; }
+  stop(){ this.running = false; if (this._t) clearInterval(this._t); this._t=null; }
   pauseResume(){ this.running ? this.stop() : this.start(); }
   switchedByMove(prev) {
     if (prev === COLORS.WHITE) this.msW += this.increment;

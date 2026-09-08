@@ -136,6 +136,10 @@ function ensureBadgeEl() {
   return badge;
 }
 
+// Set once the first refreshNotifBadge() of this page load has completed —
+// see the comment below on why that first call never toasts/alerts.
+let hasPolledThisPageLoad = false;
+
 export async function refreshNotifBadge() {
   const badge = ensureBadgeEl();
   if (!Api.isSignedIn() || !notificationsEnabled()) { if (badge) badge.hidden = true; return; }
@@ -151,14 +155,24 @@ export async function refreshNotifBadge() {
     }
 
     // Toast + native notification for anything genuinely new since the
-    // last poll. Skipped entirely on the very first time this ever runs
-    // on a device (nothing to compare against yet), so opening the app
-    // for the first time doesn't dump a wall of toasts for old activity —
-    // and skipped on notifications.html itself, which already shows a
-    // live list of the same things.
+    // last poll. Skipped on the very first time this EVER runs on a device
+    // (nothing to compare against yet, so a first-ever app open doesn't
+    // dump a wall of toasts for old activity) — and skipped on the FIRST
+    // poll of every page load/app open, not just the device's first-ever
+    // one: anything unread at that point either already reached the user
+    // via a real OS push while the app was closed (js/push-client.js +
+    // sw.js's `push` handler — that path runs in the Service Worker, which
+    // has no access to this page's localStorage/SEEN_KEY, so it can never
+    // mark those ids "seen" itself) or will be visible via the badge/
+    // notifications page — without this, every app reopen re-toasted AND
+    // re-fired a native notification for whatever had just arrived while
+    // closed, on top of the push that already showed it once (reported as
+    // the same alert appearing 3 times: once closed, twice on reopen).
+    // Also skipped on notifications.html, which already shows a live list
+    // of the same things.
     const hasRunBefore = localStorage.getItem(SEEN_KEY) !== null;
     const onNotifPage = (location.pathname.split('/').pop() || '') === 'notifications.html';
-    if (hasRunBefore && !onNotifPage) {
+    if (hasRunBefore && !onNotifPage && hasPolledThisPageLoad) {
       const seen = getSeenIds();
       // game_move ("it's your move against X") is already visible live on
       // the board itself for anyone actually in that game — toasting it
@@ -171,6 +185,7 @@ export async function refreshNotifBadge() {
       }
     }
     markSeen(notifications.map(n => n.id));
+    hasPolledThisPageLoad = true;
   } catch {
     // transient network hiccup — leave the badge showing whatever it last had
   }

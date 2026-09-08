@@ -1430,15 +1430,8 @@ export async function initUI() {
   let legal = [];
   let premove = null; // queued move while AI thinks
 
-  // Clears both the click-based hint classes AND the drag-based ones
-  // ('drag-legal'/'drag-target') — local (non-online) play runs the
-  // click/tap-to-move handler (onCellTap/showHints) and the pointer-based
-  // drag-and-drop handler (startDrag/endDrag) side by side on the same
-  // cells, so a selection made through EITHER path must wipe whatever the
-  // OTHER path left behind, or the two pieces' legal-move sets stay
-  // visible at once (see startDrag()'s own call to this).
   const clearHints = () => {
-    for (const c of cells) c.classList.remove('selected','hint-move','hint-capture','drag-legal','drag-target');
+    for (const c of cells) c.classList.remove('selected','hint-move','hint-capture');
   };
 
   const hintsEnabled = () => settings.hints !== false;
@@ -1606,12 +1599,6 @@ export async function initUI() {
   function startDrag(x, y, clientX, clientY, pointerId){
     const p = game.at(x, y); if (!p) return;
     if (p.c !== game.turn) return;
-    // A prior click-based selection (onCellTap/showHints) may still have
-    // 'hint-move'/'hint-capture' dots showing for a DIFFERENT piece —
-    // without clearing them here, starting a drag on this piece just adds
-    // its own 'drag-legal' dots on top, showing both pieces' legal moves
-    // at once (visually "hints shown everywhere").
-    clearHints();
     dragging = { from:{x,y}, legal: legalForSquare(x,y) };
     dragPointerId = pointerId;
 

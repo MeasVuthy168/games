@@ -557,27 +557,9 @@ body{
   mix-blend-mode: normal;
 }
 
-/* Hints / captures
-   top/left/transform (rather than relying on .cell's flex centering for
-   an unpositioned ::before) is required, not decorative: .selected/
-   .last-from/.last-to/.in-check(-mate) each put their OWN ::before on
-   the same element with an explicit inset:3px. Only one ::before box
-   can exist per cell, and CSS cascades per PROPERTY, not per rule — so
-   whichever of those classes also happens to be on a legal-destination
-   square (e.g. the just-vacated .last-from square, extremely common as
-   a legal quiet destination for another piece right after any move)
-   left this dot's own top/right/bottom/left unset, letting that other
-   rule's inset:3px leak straight through uncontested. Combined with
-   this rule's own explicit width/height, the box became over-constrained
-   and rendered squashed into the cell's top-left corner — visually lost
-   under that other highlight — instead of centered, on exactly those
-   squares. Explicitly owning top/left here (cascading after, and so
-   winning over, every one of those inset:3px rules for the properties
-   that matter) makes the centering correct regardless of whatever else
-   is also on the cell. */
+/* Hints / captures (unchanged) */
 .cell.hint-move::before{
-  content:""; position:absolute; top:50%; left:50%; width:24%; height:24%;
-  transform:translate(-50%,-50%);
+  content:""; position:absolute; width:24%; height:24%;
   background:var(--legal); border-radius:50%; opacity:.8;
 }
 .cell.hint-capture{ outline:3px solid var(--danger) }
@@ -684,15 +666,8 @@ body.ai-thinking #board{
   transform: translate(-50%,-50%) scale(1.04);
 }
 .cell.drag-target{ outline:4px solid rgba(132,202,255,.95) }
-/* Same explicit top/left/transform centering, and for the same reason,
-   as .hint-move::before above — this is the drag-and-drop path's own
-   equivalent legal-move dot, shown while an active drag is in progress,
-   and was just as vulnerable to a coexisting .last-from/.last-to/
-   .selected/.in-check(-mate) class's inset:3px leaking into this
-   otherwise-unpositioned ::before. */
 .cell.drag-legal::before{
-  content:""; position:absolute; top:50%; left:50%; width:22%; height:22%;
-  transform:translate(-50%,-50%);
+  content:""; position:absolute; width:22%; height:22%;
   background:var(--legal); border-radius:50%; opacity:.9; box-shadow:0 0 0 6px rgba(0,0,0,.05) inset;
 }
 

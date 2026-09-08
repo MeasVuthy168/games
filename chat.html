@@ -39,7 +39,7 @@
     .empty-note{ padding:1rem; text-align:center; opacity:.6; font-size:.88rem; }
 
     /* Thread view */
-    .thread-wrap{ display:flex; flex-direction:column; height:calc(100dvh - 130px); }
+    .thread-wrap{ position:relative; display:flex; flex-direction:column; height:calc(100dvh - 130px); }
     .thread-header{ display:flex; align-items:center; gap:.6rem; padding:.8rem 1rem; border-bottom:1px solid rgba(13,45,92,.08); }
     .thread-header a{ color:var(--blue); font-weight:800; text-decoration:none; font-size:1.2rem; }
     .thread-header .thread-name{ font-weight:800; }
@@ -59,6 +59,30 @@
     .thread-composer button{
       padding:.55rem 1.1rem; border-radius:1.2rem; border:none; background:var(--blue); color:#fff; font-weight:800; cursor:pointer;
     }
+    /* Consecutive messages from the same sender sit closer together —
+       Phase 15 grouping (still gets its own timestamp line, just tighter). */
+    .msg-row.grouped{ margin-top:-.3rem; }
+
+    .date-sep{
+      align-self:center; font-size:.72rem; font-weight:700; opacity:.55;
+      background:var(--bubble-bg); border-radius:999px; padding:.2rem .7rem;
+      margin:.4rem 0;
+    }
+
+    .load-older-spinner{
+      align-self:center; font-size:.75rem; opacity:.55; padding:.3rem 0;
+    }
+
+    .new-msgs-pill{
+      position:absolute; left:50%; transform:translateX(-50%); bottom:78px;
+      background:var(--blue); color:#fff; border:none; border-radius:999px;
+      padding:.4rem .9rem; font-size:.78rem; font-weight:700; box-shadow:var(--shadow);
+      cursor:pointer; z-index:2;
+    }
+
+    .msg-row.is-pending .msg-bubble{ opacity:.65; }
+    .msg-row.is-failed .msg-bubble{ outline:1px solid #d33; }
+    .msg-row.is-failed .msg-time{ color:#d33; opacity:1; }
   </style>
 </head>
 <body>

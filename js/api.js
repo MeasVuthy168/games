@@ -171,10 +171,17 @@ export async function getConversations() {
   return data.conversations;
 }
 
-export async function getMessages(friendId, since) {
-  const q = since ? `?since=${encodeURIComponent(since)}` : '';
+// `opts.since` (ISO timestamp) — messages strictly after it, ascending
+// (reconnect gap-fill). `opts.before` (a message id) — the page of
+// messages immediately before it, ascending (infinite-scroll-up). Neither
+// — the most recent page (initial load). Returns { messages, hasMore }.
+export async function getMessages(friendId, opts = {}) {
+  const params = new URLSearchParams();
+  if (opts.since) params.set('since', opts.since);
+  if (opts.before) params.set('before', opts.before);
+  const q = params.toString() ? `?${params}` : '';
   const data = await request(`/api/chat/${friendId}/messages${q}`);
-  return data.messages;
+  return { messages: data.messages, hasMore: !!data.hasMore };
 }
 
 export async function sendMessage(friendId, body) {
@@ -183,6 +190,14 @@ export async function sendMessage(friendId, body) {
 
 export async function markThreadRead(friendId) {
   return request(`/api/chat/${friendId}/read`, { method: 'POST' });
+}
+
+// Mints a short-lived, single-use ticket for opening the chat SSE stream
+// (see js/chat-realtime.js) — EventSource can't send an Authorization
+// header, so this is how it authenticates instead.
+export async function getChatStreamTicket() {
+  const data = await request('/api/chat/stream-ticket', { method: 'POST' });
+  return data.ticket;
 }
 
 /* ---------------- notifications ---------------- */

@@ -26,10 +26,13 @@
        page never needs to scroll at all — locking it stops an accidental
        drag near the board's edge from nudging the whole page instead of
        just interacting with the board. Online games DO have a real chat
-       form that can sit below the fold, so js/ui.js only adds this class
-       when it's NOT an online game (see applyPlayerLabels() area). */
+       form that can sit below the fold (#chatCard is a sibling of #app
+       for exactly this reason — it can extend the page past #app's
+       fixed one-viewport height without shrinking the board; see
+       styles.css's .app/.board-panel/.board rules), so js/ui.js only
+       adds this class when it's NOT an online game (see
+       applyPlayerLabels() area). */
     html.board-locked, body.board-locked{ height:100%; overflow:hidden; }
-    body.board-locked .app{ height:100dvh; min-height:0; }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -116,17 +119,6 @@
           </div>
         </div>
 
-        <!-- Chat: only real when playing an online friend — js/ui.js
-             replaces this with the real thread and un-hides it; every
-             other mode (AI, local pass & play) has no chat, so this stays
-             hidden rather than showing a "coming soon" placeholder. -->
-        <section id="chatCard" class="panel card chat-panel card-full" hidden>
-          <div class="card-left">
-            <div class="card-title">សន្ទនា (Chat)</div>
-            <div class="card-sub">coming soon</div>
-          </div>
-        </section>
-
       </section>
     </main>
 
@@ -140,6 +132,22 @@
     </footer>
     <div id="bottomSpacer" aria-hidden="true"></div>
   </div>
+
+  <!-- Chat: only real when playing an online friend — js/ui.js replaces
+       this with the real thread and un-hides it; every other mode (AI,
+       local pass & play) has no chat, so this stays hidden rather than
+       showing a "coming soon" placeholder. Deliberately a sibling of
+       #app (not nested inside .board-panel) so that when it IS visible,
+       it simply extends the page below #app's fixed one-viewport game
+       area for normal scrolling, instead of competing with the board for
+       the same fixed vertical space — see styles.css's .app/.board rules
+       and initUI()'s applyPlayerLabels() area in js/ui.js. -->
+  <section id="chatCard" class="panel card chat-panel card-full" hidden>
+    <div class="card-left">
+      <div class="card-title">សន្ទនា (Chat)</div>
+      <div class="card-sub">coming soon</div>
+    </div>
+  </section>
 
   <!-- Portrait-only overlay -->
   <div class="orientation-blocker" id="orientationBlock" aria-hidden="true">

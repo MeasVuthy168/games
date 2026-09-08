@@ -1627,11 +1627,25 @@ export async function initUI() {
 
   function endDrag(px, py){
     const d = dragging; dragging = null;
-    for (const c of cells) c.classList.remove('drag-target','drag-legal','selected');
     if (d?.ghost){ d.ghost.remove(); }
     if (!d) return;
 
     const dest = cellAtXY(px, py);
+
+    // A release with no real movement (still on the origin square) is a
+    // plain tap-to-select, not a move attempt — a piece's own square is
+    // never one of its own legal destinations, so falling through to the
+    // "illegal destination" branch below fired a spurious error beep/
+    // haptic/shake on every single tap-to-select on touch devices,
+    // immediately followed by the separate click-based tap-to-move
+    // handler (onCellTap) correctly selecting the piece and playing its
+    // own select sound right after — a jarring error-then-select double
+    // cue for what the player experiences as one simple tap. The
+    // 'selected'/'drag-legal' highlighting startDrag() already applied
+    // is exactly right as-is, so just leave it alone.
+    if (dest && dest.x === d.from.x && dest.y === d.from.y) return;
+
+    for (const c of cells) c.classList.remove('drag-target','drag-legal','selected');
     if (!dest){ beeper.error(); triggerHaptic('error'); return; }
     const ok = d.legal.some(m => m.x===dest.x && m.y===dest.y);
     if (!ok){ beeper.error(); triggerHaptic('error'); flashIllegal(dest.x, dest.y); return; }
@@ -1648,13 +1662,24 @@ export async function initUI() {
     if (!concludeIfOver(res)) { thinkAndPlay(); }
   }
 
+  // Only decides whether a REAL DRAG should start — it must never fire its
+  // own error feedback for "no drag here", since the click-based tap-to-
+  // move handler (onCellTap, registered on the very same cells further
+  // below) already runs for every tap that doesn't start a drag and
+  // already gives correct feedback for every case (premove select/error
+  // during the AI's turn, select/error/move otherwise). Firing beeper.error()
+  // here too used to double-beep error+correct-sound on nearly every tap
+  // that wasn't the start of a drag on your own piece — including the
+  // destination tap of a normal two-tap move and every premove-select tap
+  // during the AI's turn — since a bare tap always fails the "is this
+  // draggable" check even when onCellTap is about to handle it correctly.
   function onCellPointerDown(e){
     if (animLock) return; // an animation is still visually settling
     if (game.winner) return; // game already over (checkmate/stalemate/Counting Draw) — input locked
-    if (isAITurn() || AILock) { beeper.error(); triggerHaptic('error'); return; }
+    if (isAITurn() || AILock) return; // premove selection is handled entirely by onCellTap
     const x = +e.currentTarget.dataset.x, y = +e.currentTarget.dataset.y;
     const p = game.at(x,y);
-    if (!p || p.c !== game.turn){ beeper.error(); return; }
+    if (!p || p.c !== game.turn) return; // not a draggable piece — let onCellTap process this tap instead
     e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId);
     startDrag(x,y, e.clientX, e.clientY, e.pointerId);
   }

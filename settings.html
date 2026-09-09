@@ -54,6 +54,28 @@
     .about-row strong{ min-width:130px }
     .about-row a{ color:#2b4f9e; text-decoration:none }
     .about-row a:hover{ text-decoration:underline }
+
+    /* Board theme picker: a grid of tappable cards, each a small 2x2
+       checkerboard swatch (built from the theme's own light/dark tile
+       images — no extra preview assets needed) plus its name, so a
+       theme is chosen by what it looks like rather than by cycling
+       blind through names on Prev/Next. */
+    .board-theme-grid{
+      display:grid; grid-template-columns:repeat(2,1fr); gap:.6rem; margin:.2rem 0 0;
+    }
+    .board-theme-choice{
+      display:flex; flex-direction:column; align-items:center; gap:.4rem;
+      padding:.6rem; border-radius:.8rem; border:2px solid #e6ecf7;
+      background:#f7f9fd; cursor:pointer; font:inherit; color:var(--ink);
+    }
+    .board-theme-choice.selected{ border-color:var(--blue); background:#eef4ff; }
+    .board-theme-swatch{
+      width:56px; height:56px; border-radius:.4rem; overflow:hidden;
+      display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr;
+      box-shadow:0 2px 6px rgba(0,0,0,.12); flex:none;
+    }
+    .board-theme-swatch span{ background-size:cover; background-position:center; }
+    .board-theme-choice-name{ font-size:.78rem; font-weight:700; text-align:center; }
   </style>
 </head>
 <body>
@@ -182,12 +204,7 @@
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <div class="row-inline" style="align-items:center;justify-content:space-between">
-              <button class="secondary" id="boardThemePrev" data-i18n="settings.theme.prev">‹ Previous</button>
-              <strong id="boardThemeName">Wood</strong>
-              <button class="secondary" id="boardThemeNext" data-i18n="settings.theme.next">Next ›</button>
-            </div>
-            <div class="card-sub" id="boardThemeOnlyOne" data-i18n="settings.theme.onlyOne">Only one option is available today — more are coming later.</div>
+            <div class="board-theme-grid" id="boardThemeGrid"></div>
           </div>
         </details>
 

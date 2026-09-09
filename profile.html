@@ -30,7 +30,15 @@
     .profile-hero .avatar{
       width:104px; height:104px; border-radius:50%;
       border:3px solid rgba(13,45,92,.12); box-shadow:0 6px 16px rgba(0,0,0,.08);
-      background:#fff; font-size:2.6rem;
+      /* background-color, not the `background` shorthand: shorthand resets
+         every background-* sub-property it doesn't mention (size, position,
+         image...) back to its initial value. This selector ties in
+         specificity with styles.css's .avatar.avatar-image{background-size:
+         cover;...} and loads after it, so the shorthand was silently
+         winning that tie and forcing uploaded photos back to
+         background-size:auto — showing only their native-size top-left
+         corner instead of a properly covered/centered circle. */
+      background-color:#fff; font-size:2.6rem;
     }
     .edit-fab{
       position:absolute; right:-2px; bottom:-2px; width:30px; height:30px;

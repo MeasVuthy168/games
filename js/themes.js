@@ -1,7 +1,7 @@
 // js/themes.js — data-driven piece & board theme registries.
 //
 // Only one real piece art set ships with the app today, so pieceThemes has
-// exactly one entry; boardThemes has two. The shapes are deliberately
+// exactly one entry; boardThemes has three. The shapes are deliberately
 // generic (id/name + how to resolve an asset) so a theme can be appended
 // here without touching any selection/UI code in ui.js or settings.js —
 // nothing here is a placeholder for fake content.
@@ -15,6 +15,7 @@ export const pieceThemes = [
 export const boardThemes = [
   { id: 'wood', name: 'Wood', light: 'assets/board/wood_light.jpg', dark: 'assets/board/wood_dark.jpg' },
   { id: 'green', name: 'Classic Green', light: 'assets/board/green_light.jpg', dark: 'assets/board/green_dark.jpg' },
+  { id: 'marble', name: 'Marble', light: 'assets/board/marble_light.jpg', dark: 'assets/board/marble_dark.jpg' },
 ];
 
 // Resolves a piece image path for a given theme entry. `colorLetter` is

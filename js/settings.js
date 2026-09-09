@@ -67,15 +67,26 @@ document.addEventListener('DOMContentLoaded', ()=>{
   // profile.js); signed out, this is the purely local guest profile.
   const profName = document.getElementById('profName');
   const profAvatar = document.getElementById('profAvatar');
-  if (Api.isSignedIn()) {
-    const u = Api.getCurrentUser();
-    if (profName) profName.textContent = u?.displayName || 'Player';
-    applyAvatarToElement(profAvatar, u?.avatarUrl ? { type: 'image', value: u.avatarUrl } : { type: 'emoji', value: u?.avatarEmoji || '🐯' });
-  } else {
-    const profile = getProfile();
-    if (profName) profName.textContent = profile.name;
-    applyAvatarToElement(profAvatar, profile.avatar);
+  function renderProfileBar() {
+    if (Api.isSignedIn()) {
+      const u = Api.getCurrentUser();
+      if (profName) profName.textContent = u?.displayName || 'Player';
+      applyAvatarToElement(profAvatar, u?.avatarUrl ? { type: 'image', value: u.avatarUrl } : { type: 'emoji', value: u?.avatarEmoji || '🐯' });
+    } else {
+      const profile = getProfile();
+      if (profName) profName.textContent = profile.name;
+      applyAvatarToElement(profAvatar, profile.avatar);
+    }
   }
+  renderProfileBar();
+  // This is a separate .html page, not a route in an SPA — navigating
+  // "back" from profile.html after editing the avatar there often restores
+  // this page from the browser's back/forward cache (bfcache) instead of
+  // re-running this script, so it kept showing whatever avatar was current
+  // when the page was first left. pageshow with event.persisted fires on
+  // exactly that bfcache restore and nowhere else, so this only re-renders
+  // when the stale-DOM situation can actually happen.
+  window.addEventListener('pageshow', (e) => { if (e.persisted) renderProfileBar(); });
 
   // Elements
   const soundToggle = document.getElementById('soundToggle');

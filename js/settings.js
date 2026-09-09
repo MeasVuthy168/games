@@ -105,6 +105,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const boardThemeName = document.getElementById('boardThemeName');
   const boardThemePrev = document.getElementById('boardThemePrev');
   const boardThemeNext = document.getElementById('boardThemeNext');
+  const boardThemeOnlyOne = document.getElementById('boardThemeOnlyOne');
 
   // Init UI states
   soundToggle.checked = !!s.sound;
@@ -119,12 +120,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
   function renderThemeSteppers(){
     if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
     if (boardThemeName) boardThemeName.textContent = boardThemes[s.boardTheme]?.name || boardThemes[0].name;
-    // Only one real theme ships today — Prev/Next are wired but a no-op
-    // until more are registered in js/themes.js.
+    // Only one real piece theme ships today — its Prev/Next stay a no-op
+    // until more are registered in js/themes.js. Board themes now has two,
+    // so its stepper is live and the "only one option" note is hidden.
     if (pieceThemePrev) pieceThemePrev.disabled = pieceThemes.length <= 1;
     if (pieceThemeNext) pieceThemeNext.disabled = pieceThemes.length <= 1;
     if (boardThemePrev) boardThemePrev.disabled = boardThemes.length <= 1;
     if (boardThemeNext) boardThemeNext.disabled = boardThemes.length <= 1;
+    if (boardThemeOnlyOne) boardThemeOnlyOne.hidden = boardThemes.length > 1;
   }
   renderThemeSteppers();
 

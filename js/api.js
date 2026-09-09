@@ -171,18 +171,60 @@ export async function getConversations() {
   return data.conversations;
 }
 
-export async function getMessages(friendId, since) {
-  const q = since ? `?since=${encodeURIComponent(since)}` : '';
+// `opts.since` (ISO timestamp) — messages strictly after it, ascending
+// (reconnect gap-fill). `opts.before` (a message id) — the page of
+// messages immediately before it, ascending (infinite-scroll-up). Neither
+// — the most recent page (initial load). Returns { messages, hasMore }.
+export async function getMessages(friendId, opts = {}) {
+  const params = new URLSearchParams();
+  if (opts.since) params.set('since', opts.since);
+  if (opts.before) params.set('before', opts.before);
+  const q = params.toString() ? `?${params}` : '';
   const data = await request(`/api/chat/${friendId}/messages${q}`);
-  return data.messages;
+  return { messages: data.messages, hasMore: !!data.hasMore };
 }
 
-export async function sendMessage(friendId, body) {
-  return request(`/api/chat/${friendId}/messages`, { method: 'POST', body: { body } });
+export async function sendMessage(friendId, body, replyToId) {
+  return request(`/api/chat/${friendId}/messages`, { method: 'POST', body: replyToId ? { body, replyToId } : { body } });
 }
 
 export async function markThreadRead(friendId) {
   return request(`/api/chat/${friendId}/read`, { method: 'POST' });
+}
+
+export async function getChatPresence(friendId) {
+  return request(`/api/chat/${friendId}/presence`);
+}
+
+export async function sendTyping(friendId, isTyping) {
+  return request(`/api/chat/${friendId}/typing`, { method: 'POST', body: { typing: isTyping } });
+}
+
+// scope: 'me' (hides it from just this account's view) or 'everyone'
+// (server-validated — only the original sender's request is honored).
+export async function deleteMessage(friendId, messageId, scope) {
+  return request(`/api/chat/${friendId}/messages/${messageId}`, { method: 'DELETE', body: { scope } });
+}
+
+export async function pinMessage(friendId, messageId) {
+  return request(`/api/chat/${friendId}/messages/${messageId}/pin`, { method: 'POST' });
+}
+
+export async function unpinMessage(friendId, messageId) {
+  return request(`/api/chat/${friendId}/messages/${messageId}/pin`, { method: 'DELETE' });
+}
+
+export async function getPinnedMessage(friendId) {
+  const data = await request(`/api/chat/${friendId}/pinned`);
+  return data.pinned;
+}
+
+// Mints a short-lived, single-use ticket for opening the chat SSE stream
+// (see js/chat-realtime.js) — EventSource can't send an Authorization
+// header, so this is how it authenticates instead.
+export async function getChatStreamTicket() {
+  const data = await request('/api/chat/stream-ticket', { method: 'POST' });
+  return data.ticket;
 }
 
 /* ---------------- notifications ---------------- */

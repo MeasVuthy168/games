@@ -1376,7 +1376,7 @@ export async function initUI() {
 
     async function loadInitial() {
       try {
-        const messages = await Api.getMessages(opponentId);
+        const { messages } = await Api.getMessages(opponentId);
         for (const m of messages) appendMsg(m);
         msgsEl.scrollTop = msgsEl.scrollHeight;
         await Api.markThreadRead(opponentId);
@@ -1385,7 +1385,7 @@ export async function initUI() {
 
     async function poll() {
       try {
-        const messages = await Api.getMessages(opponentId, lastTs);
+        const { messages } = await Api.getMessages(opponentId, { since: lastTs });
         if (messages.length) {
           for (const m of messages) appendMsg(m);
           msgsEl.scrollTop = msgsEl.scrollHeight;

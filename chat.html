@@ -57,11 +57,24 @@
     }
     .msg-row.me .msg-bubble{ background:var(--blue); color:#fff; }
     .msg-time{ font-size:.68rem; opacity:.55; margin:.2rem .35rem 0; }
-    .thread-composer{ display:flex; gap:.5rem; padding:.7rem 1rem; border-top:1px solid rgba(13,45,92,.08); }
-    .thread-composer input{ flex:1; padding:.6rem .8rem; border-radius:1.2rem; border:1px solid #d7dee8; font:inherit; }
+    .thread-composer{ display:flex; align-items:center; gap:.5rem; padding:.7rem 1rem; border-top:1px solid rgba(13,45,92,.08); }
+    .thread-composer input{ flex:1; min-width:0; padding:.6rem .8rem; border-radius:1.2rem; border:1px solid #d7dee8; font:inherit; }
     .thread-composer button{
-      padding:.55rem 1.1rem; border-radius:1.2rem; border:none; background:var(--blue); color:#fff; font-weight:800; cursor:pointer;
+      flex:none; padding:.55rem 1.1rem; border-radius:1.2rem; border:none; background:var(--blue); color:#fff; font-weight:800; cursor:pointer;
     }
+    .emoji-btn{
+      flex:none; background:none !important; border:none; font-size:1.4rem; line-height:1; padding:.2rem .3rem !important;
+      cursor:pointer;
+    }
+    .emoji-panel{
+      display:grid; grid-template-columns:repeat(8, 1fr); gap:.15rem; padding:.6rem;
+      max-height:220px; overflow-y:auto; border-top:1px solid rgba(13,45,92,.08); background:var(--panel);
+    }
+    .emoji-panel[hidden]{ display:none; }
+    .emoji-item{
+      border:none; background:none; font-size:1.4rem; line-height:1; padding:.35rem; border-radius:.5rem; cursor:pointer;
+    }
+    .emoji-item:active{ background:var(--bubble-bg); }
     /* Consecutive messages from the same sender sit closer together —
        Phase 15 grouping (still gets its own timestamp line, just tighter). */
     .msg-row.grouped{ margin-top:-.3rem; }

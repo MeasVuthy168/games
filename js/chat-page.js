@@ -22,6 +22,18 @@ const TYPING_IDLE_MS = 2500;   // stop signaling "typing" after this much idle t
 const TYPING_HIDE_MS = 5000;   // hide the friend's indicator if 'stop' is ever lost
 const PRESENCE_REFRESH_MS = 60000; // re-render "last seen X ago" text periodically
 
+// A small hand-picked set rather than a full emoji-picker library/dependency
+// (Phase 13: "do not add a huge dependency unless necessary") — these render
+// correctly from each platform's own system emoji font on both iPhone and
+// Android without pulling in any image/sprite assets.
+const EMOJI_LIST = [
+  '😀','😂','🥹','😍','😘','😉','😊','🙂','😅','😭',
+  '😢','😡','😱','🥳','😴','🤔','😎','🙄','😬','🤗',
+  '👍','👎','👏','🙏','💪','🤝','👋','✌️','🤞','👌',
+  '❤️','🧡','💛','💚','💙','💜','🖤','💔','💕','💯',
+  '🔥','⭐','✨','🎉','🎂','☕','🍕','⚽','♟️','🤦',
+];
+
 function fmtTime(iso) {
   const d = new Date(iso);
   return isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -134,7 +146,9 @@ async function renderThread(friendId) {
         </div>
         <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" aria-label="Cancel">✕</button>
       </div>
+      <div class="emoji-panel" id="emojiPanel" hidden></div>
       <form class="thread-composer" id="composerForm">
+        <button type="button" class="emoji-btn" id="emojiBtn" aria-label="${t('chat.emoji')}">😊</button>
         <input type="text" id="composerInput" maxlength="2000" placeholder="Message…" autocomplete="off" />
         <button type="submit" id="composerSend">Send</button>
       </form>
@@ -643,6 +657,34 @@ async function renderThread(friendId) {
   });
   newMsgsPill.addEventListener('click', scrollToBottom);
   $('#composerInput').addEventListener('input', onComposerInput);
+
+  // ---- emoji picker (Phase 13) ----
+  const emojiBtn = $('#emojiBtn');
+  const emojiPanel = $('#emojiPanel');
+  if (!emojiPanel.childElementCount) {
+    for (const em of EMOJI_LIST) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'emoji-item';
+      b.textContent = em;
+      b.addEventListener('click', () => insertEmoji(em));
+      emojiPanel.appendChild(b);
+    }
+  }
+  function insertEmoji(em) {
+    const input = $('#composerInput');
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = input.value.slice(0, start) + em + input.value.slice(end);
+    const caret = start + em.length;
+    input.focus();
+    input.setSelectionRange(caret, caret);
+    onComposerInput(); // an emoji counts as "typing" too, same debounce as text
+  }
+  emojiBtn.addEventListener('click', () => { emojiPanel.hidden = !emojiPanel.hidden; });
+  document.addEventListener('click', (e) => {
+    if (!emojiPanel.hidden && !emojiPanel.contains(e.target) && e.target !== emojiBtn) emojiPanel.hidden = true;
+  });
 
   await loadInitial();
   await loadPresence();

@@ -193,6 +193,7 @@ export const translations = {
     'chat.infoRead': 'Read',
     'chat.infoNotYet': 'Not yet',
     'chat.close': 'Close',
+    'chat.emoji': 'Emoji',
   },
   km: {
     'nav.home': 'ទំព័រដើម',
@@ -383,6 +384,7 @@ export const translations = {
     'chat.infoRead': 'បានអាន',
     'chat.infoNotYet': 'មិនទាន់',
     'chat.close': 'បិទ',
+    'chat.emoji': 'សញ្ញាអារម្មណ៍',
   },
 };
 

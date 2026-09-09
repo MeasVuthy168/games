@@ -102,10 +102,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const pieceThemeName = document.getElementById('pieceThemeName');
   const pieceThemePrev = document.getElementById('pieceThemePrev');
   const pieceThemeNext = document.getElementById('pieceThemeNext');
-  const boardThemeName = document.getElementById('boardThemeName');
-  const boardThemePrev = document.getElementById('boardThemePrev');
-  const boardThemeNext = document.getElementById('boardThemeNext');
-  const boardThemeOnlyOne = document.getElementById('boardThemeOnlyOne');
+  const boardThemeGrid = document.getElementById('boardThemeGrid');
 
   // Init UI states
   soundToggle.checked = !!s.sound;
@@ -119,17 +116,50 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function renderThemeSteppers(){
     if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
-    if (boardThemeName) boardThemeName.textContent = boardThemes[s.boardTheme]?.name || boardThemes[0].name;
     // Only one real piece theme ships today — its Prev/Next stay a no-op
-    // until more are registered in js/themes.js. Board themes now has two,
-    // so its stepper is live and the "only one option" note is hidden.
+    // until more are registered in js/themes.js.
     if (pieceThemePrev) pieceThemePrev.disabled = pieceThemes.length <= 1;
     if (pieceThemeNext) pieceThemeNext.disabled = pieceThemes.length <= 1;
-    if (boardThemePrev) boardThemePrev.disabled = boardThemes.length <= 1;
-    if (boardThemeNext) boardThemeNext.disabled = boardThemes.length <= 1;
-    if (boardThemeOnlyOne) boardThemeOnlyOne.hidden = boardThemes.length > 1;
   }
   renderThemeSteppers();
+
+  // Board theme: a tappable grid of swatches (each a small 2x2 checkerboard
+  // built from that theme's own light/dark tile images) instead of a blind
+  // Prev/Next cycle — rebuilt from js/themes.js's boardThemes on every
+  // render so a theme added there needs no markup changes here.
+  function renderBoardThemeGrid(){
+    if (!boardThemeGrid) return;
+    boardThemeGrid.innerHTML = '';
+    boardThemes.forEach((theme, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'board-theme-choice' + (s.boardTheme === idx ? ' selected' : '');
+
+      const swatch = document.createElement('div');
+      swatch.className = 'board-theme-swatch';
+      for (let cell = 0; cell < 4; cell++) {
+        const span = document.createElement('span');
+        const isLight = cell === 0 || cell === 3; // alternating checker pattern
+        span.style.backgroundImage = `url("${isLight ? theme.light : theme.dark}")`;
+        swatch.appendChild(span);
+      }
+
+      const label = document.createElement('div');
+      label.className = 'board-theme-choice-name';
+      label.textContent = theme.name;
+
+      btn.appendChild(swatch);
+      btn.appendChild(label);
+      btn.addEventListener('click', () => {
+        if (s.boardTheme === idx) return;
+        s.boardTheme = idx;
+        saveSettings(s);
+        renderBoardThemeGrid();
+      });
+      boardThemeGrid.appendChild(btn);
+    });
+  }
+  renderBoardThemeGrid();
 
   // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });
@@ -154,8 +184,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   }
   pieceThemePrev?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, -1));
   pieceThemeNext?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, 1));
-  boardThemePrev?.addEventListener('click', ()=> stepTheme('boardTheme', boardThemes, -1));
-  boardThemeNext?.addEventListener('click', ()=> stepTheme('boardTheme', boardThemes, 1));
 
   btnSaveTimer.addEventListener('click', ()=>{
     const m = Math.max(1, Math.min(180, parseInt(minutesInput.value||'10',10)));

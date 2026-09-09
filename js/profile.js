@@ -14,6 +14,7 @@ import * as Api from './api.js';
 import { showToast } from './toast.js';
 import { getCoins, syncCoinsFromServer } from './coins.js';
 import { getHistory, computeWinRate, syncHistoryFromServer } from './history.js';
+import { openAvatarCropEditor } from './avatar-crop.js';
 
 recordLoginToday();
 
@@ -23,28 +24,15 @@ function loadSettings() {
   catch { return {}; }
 }
 
-// Resize+compress client-side before ever touching localStorage or the
-// network — an unresized phone photo can be several MB, which is both
-// slow to upload and needlessly close to the backend's avatar size cap.
-function resizeImageToDataUrl(file, maxSize = 256, quality = 0.82) {
+// The crop editor (avatar-crop.js) already resizes/crops/compresses to a
+// single 512x512 JPEG Blob — this just converts that Blob to the data:
+// URL shape the backend's avatarUrl field expects.
+function blobToDataUrl(blob) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that file'));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error('Could not read that image'));
-      img.onload = () => {
-        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
-        const w = Math.max(1, Math.round(img.width * scale));
-        const h = Math.max(1, Math.round(img.height * scale));
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve(canvas.toDataURL('image/jpeg', quality));
-      };
-      img.src = String(reader.result);
-    };
-    reader.readAsDataURL(file);
+    reader.onerror = () => reject(new Error('Could not read that photo'));
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
   });
 }
 
@@ -237,7 +225,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const file = avatarUpload.files && avatarUpload.files[0];
     if (!file) return;
     try {
-      const dataUrl = await resizeImageToDataUrl(file);
+      // Selecting a file never saves immediately — it opens the crop
+      // editor first. A null result means the user cancelled: leave the
+      // existing avatar untouched and don't call the API at all.
+      const blob = await openAvatarCropEditor(file);
+      if (!blob) return;
+      const dataUrl = await blobToDataUrl(blob);
       if (Api.isSignedIn()) {
         await Api.updateProfile({ avatarUrl: dataUrl });
       } else {

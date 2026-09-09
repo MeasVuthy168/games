@@ -54,6 +54,54 @@
     }
     .upload-label{ margin-top:.7rem; cursor:pointer; display:inline-flex; }
 
+    /* Crop editor — full-screen overlay, separate from the small
+       Change-Avatar dialog above (deliberately not the shared .modal-card
+       pattern: the crop canvas needs real screen space, especially on a
+       small phone). */
+    .crop-overlay{
+      position:fixed; inset:0; z-index:1100; background:var(--panel);
+      display:flex; flex-direction:column;
+      padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+    }
+    .crop-overlay[hidden]{ display:none; }
+    .crop-topbar{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:.7rem 1rem; border-bottom:1px solid rgba(13,45,92,.08); flex:none;
+    }
+    .crop-topbar h3{ margin:0; font-size:1.05rem; color:var(--blue); }
+    .crop-stage{
+      flex:1; min-height:0; display:flex; align-items:center; justify-content:center;
+      background:#15181f; overflow:hidden;
+    }
+    #cropCanvas{
+      touch-action:none; /* no page scroll while dragging/pinching */
+      max-width:min(320px, 84vw); max-height:min(320px, 84vw);
+      width:min(320px, 84vw); height:min(320px, 84vw);
+      border-radius:.6rem; cursor:grab;
+    }
+    #cropCanvas:active{ cursor:grabbing; }
+    .crop-controls{ flex:none; padding:.8rem 1.2rem 1.1rem; }
+    .crop-zoom-row{ display:flex; align-items:center; gap:.6rem; margin-bottom:.6rem; }
+    .crop-zoom-row input[type="range"]{ flex:1; }
+    .crop-zoom-btn{
+      flex:none; width:32px; height:32px; border-radius:50%; border:1px solid #d7dee8;
+      background:var(--bubble-bg); color:var(--ink); font-size:1.1rem; line-height:1; cursor:pointer;
+    }
+    .crop-rotate-btn{ display:flex; margin:0 auto .8rem; }
+    .crop-preview-row{
+      display:flex; align-items:center; justify-content:center; gap:.6rem;
+      font-size:.78rem; opacity:.7; margin-bottom:.6rem;
+    }
+    .crop-preview-circle{
+      width:44px; height:44px; border-radius:50%; overflow:hidden; border:2px solid rgba(13,45,92,.12);
+    }
+    .crop-status{ min-height:1.1em; font-size:.8rem; color:#d33; text-align:center; margin-bottom:.4rem; }
+    .crop-actions{ display:flex; gap:.6rem; }
+    .crop-actions button{ flex:1; text-align:center; }
+    .crop-cancel{ background:var(--bubble-bg); color:var(--ink); }
+    .crop-save{ background:var(--blue); color:#fff; font-weight:800; }
+    .crop-save:disabled{ opacity:.5; cursor:default; }
+
     .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.6rem; padding:0 1rem 1.1rem; }
     .stat-tile{
       background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
@@ -181,6 +229,37 @@
             <span data-i18n="profile.uploadPhoto">Upload photo…</span>
             <input type="file" id="avatarUpload" accept="image/*" style="display:none" />
           </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Crop editor — a dedicated full-screen step for "Upload photo…"
+         only; the Change Avatar modal above (presets + the Upload photo
+         button) is untouched. js/avatar-crop.js drives everything here. -->
+    <div class="crop-overlay" id="cropModalOverlay" hidden aria-hidden="true">
+      <header class="crop-topbar">
+        <button type="button" class="icon-btn" id="cropCancelBtn" aria-label="Cancel">‹</button>
+        <h3 data-i18n="profile.editPhoto">Edit photo</h3>
+        <button type="button" class="icon-btn" id="cropCloseBtn" aria-label="Close">✖</button>
+      </header>
+      <div class="crop-stage" id="cropStage">
+        <canvas id="cropCanvas" width="320" height="320"></canvas>
+      </div>
+      <div class="crop-controls">
+        <div class="crop-zoom-row">
+          <button type="button" class="crop-zoom-btn" id="cropZoomOut" aria-label="Zoom out">−</button>
+          <input type="range" id="cropZoomSlider" min="1" max="4" step="0.01" value="1" aria-label="Zoom" />
+          <button type="button" class="crop-zoom-btn" id="cropZoomIn" aria-label="Zoom in">+</button>
+        </div>
+        <button type="button" class="pill crop-rotate-btn" id="cropRotateBtn">↻ <span data-i18n="profile.rotate">Rotate</span></button>
+        <div class="crop-preview-row">
+          <span data-i18n="profile.previewLabel">Preview</span>
+          <div class="crop-preview-circle"><canvas id="cropPreviewCanvas" width="72" height="72"></canvas></div>
+        </div>
+        <div class="crop-status" id="cropStatus"></div>
+        <div class="crop-actions">
+          <button type="button" class="pill crop-cancel" id="cropCancelBottomBtn" data-i18n="profile.cancel">Cancel</button>
+          <button type="button" class="pill crop-save" id="cropSaveBtn" data-i18n="profile.save">Save</button>
         </div>
       </div>
     </div>

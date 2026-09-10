@@ -665,11 +665,18 @@ export async function initUI() {
   lastMoveArrowSvg.id = 'lastMoveArrow';
   lastMoveArrowSvg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
   lastMoveArrowSvg.setAttribute('preserveAspectRatio', 'none');
+  // fill="none" is set inline (not just via styles.css) so this path can
+  // never render as a solid filled wedge -- an SVG <path> defaults to a
+  // BLACK fill, and a filled 3-point knight-arrow path draws as a solid
+  // triangle (its open ends implicitly closed for fill purposes). Same
+  // for the marker's own fill="none" is NOT needed there since that one
+  // IS meant to be filled (it's the solid arrowhead), but this line
+  // itself must stay unfilled regardless of stylesheet load timing.
   lastMoveArrowSvg.innerHTML =
     '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="7" refY="5" ' +
     'markerWidth="4" markerHeight="4" orient="auto-start-reverse">' +
     '<path class="last-move-arrowhead" d="M0,0 L10,5 L0,10 Z"/></marker></defs>' +
-    '<path class="last-move-arrow-line" d="" opacity="0" marker-end="url(#lastMoveArrowhead)" />';
+    '<path class="last-move-arrow-line" fill="none" d="" opacity="0" marker-end="url(#lastMoveArrowhead)" />';
   elBoard.appendChild(lastMoveArrowSvg);
   const lastMoveArrowLine = lastMoveArrowSvg.querySelector('.last-move-arrow-line');
 
@@ -690,7 +697,12 @@ export async function initUI() {
     return { x: from.x + dx * t, y: from.y + dy * t };
   }
 
-  const ARROW_INSET = 0.22; // grid units pulled back from each square's true center
+  // Grid units pulled back from each square's true center — kept small
+  // and deliberately NOT scaled by move distance, so both ends read as
+  // "the center of the square" as directly as possible while still
+  // leaving a sliver of daylight for the line/arrowhead to stay visually
+  // distinct from the piece glyph sitting on top of it.
+  const ARROW_INSET = 0.08;
 
   // Points the arrow from mv.from -> mv.to, or hides it when mv is
   // falsy (fresh game / undo back past the first move). A straight move

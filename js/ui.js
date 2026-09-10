@@ -657,6 +657,50 @@ export async function initUI() {
     }
   }
 
+  // Last-move arrow: a single thin SVG line overlaid across the whole
+  // grid (see styles.css's #lastMoveArrow for why it's its own
+  // grid-spanning item, not position:absolute pixel math). Built once
+  // here; render() below just moves its endpoints and toggles opacity.
+  const lastMoveArrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  lastMoveArrowSvg.id = 'lastMoveArrow';
+  lastMoveArrowSvg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
+  lastMoveArrowSvg.setAttribute('preserveAspectRatio', 'none');
+  lastMoveArrowSvg.innerHTML =
+    '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="7" refY="5" ' +
+    'markerWidth="4" markerHeight="4" orient="auto-start-reverse">' +
+    '<path class="last-move-arrowhead" d="M0,0 L10,5 L0,10 Z"/></marker></defs>' +
+    '<line class="last-move-arrow-line" x1="0" y1="0" x2="0" y2="0" ' +
+    'opacity="0" marker-end="url(#lastMoveArrowhead)" />';
+  elBoard.appendChild(lastMoveArrowSvg);
+  const lastMoveArrowLine = lastMoveArrowSvg.querySelector('.last-move-arrow-line');
+
+  // Visual (flip-aware) column/row for a board square — the same
+  // mirroring gridSlot() applies, so the arrow always points the way the
+  // move actually reads on screen even when the board is flipped for an
+  // online Black player.
+  const visualCol = (x) => (flipped ? SIZE - 1 - x : x);
+  const visualRow = (y) => (flipped ? SIZE - 1 - y : y);
+
+  // Points the arrow from mv.from -> mv.to, or hides it when mv is
+  // falsy (fresh game / undo back past the first move). Both ends are
+  // pulled in a bit from the square centers so the line travels the gap
+  // between the two pieces rather than piercing through their glyphs —
+  // purely cosmetic, keeps it thin and out of the pieces' way even for a
+  // one-square move.
+  function updateLastMoveArrow(mv) {
+    if (!mv) { lastMoveArrowLine.setAttribute('opacity', '0'); return; }
+    const fx = visualCol(mv.from.x) + 0.5, fy = visualRow(mv.from.y) + 0.5;
+    const tx = visualCol(mv.to.x)   + 0.5, ty = visualRow(mv.to.y)   + 0.5;
+    const dx = tx - fx, dy = ty - fy;
+    const len = Math.hypot(dx, dy) || 1;
+    const inset = Math.min(0.3, len * 0.22);
+    lastMoveArrowLine.setAttribute('x1', fx + (dx / len) * inset);
+    lastMoveArrowLine.setAttribute('y1', fy + (dy / len) * inset);
+    lastMoveArrowLine.setAttribute('x2', tx - (dx / len) * inset);
+    lastMoveArrowLine.setAttribute('y2', ty - (dy / len) * inset);
+    lastMoveArrowLine.setAttribute('opacity', '1');
+  }
+
   function applyTurnClass() {
     elBoard.classList.toggle('turn-white', game.turn === COLORS.WHITE);
     elBoard.classList.toggle('turn-black', game.turn === COLORS.BLACK);
@@ -998,7 +1042,7 @@ export async function initUI() {
   function render() {
     const animate = isAnimationEnabled();
     for (const c of cells) {
-      c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture');
+      c.classList.remove('selected','hint-move','hint-capture','last-from','last-to','last-capture','last-move-pulse');
     }
 
     const last = game.history[game.history.length - 1];
@@ -1074,7 +1118,15 @@ export async function initUI() {
             [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0,0)' }],
             { duration: SLIDE_MS, easing: 'ease-out', fill: 'both' }
           );
-          slideAnim.finished.then(() => cell.classList.remove('cell-sliding')).catch(() => {});
+          // Last-move pulse (item 4: "let the piece move, THEN briefly
+          // pulse the destination square") is chained off this same
+          // .finished promise rather than a fixed CSS animation-delay,
+          // so it stays exactly in sync with the slide even if the
+          // browser throttles/pauses it (backgrounded tab, etc.).
+          slideAnim.finished.then(() => {
+            cell.classList.remove('cell-sliding');
+            cell.classList.add('last-move-pulse');
+          }).catch(() => {});
           // Promotion pop layers on top of the slide that just carried the
           // pawn to this square, timed to start right as the slide finishes.
           if (last.promo) {
@@ -1102,6 +1154,7 @@ export async function initUI() {
         cells[toIdx]?.appendChild(rp); setTimeout(()=> rp.remove(), 350);
       }
     }
+    updateLastMoveArrow(last);
 
     applyCheckHighlight();
     renderCounting();

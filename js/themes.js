@@ -1,15 +1,15 @@
 // js/themes.js — data-driven piece & board theme registries.
 //
-// Only one real piece art set ships with the app today, so pieceThemes has
-// exactly one entry; boardThemes has five. The shapes are deliberately
-// generic (id/name + how to resolve an asset) so a theme can be appended
-// here without touching any selection/UI code in ui.js or settings.js —
-// nothing here is a placeholder for fake content.
+// pieceThemes has two entries, boardThemes has five. The shapes are
+// deliberately generic (id/name + how to resolve an asset) so a theme can
+// be appended here without touching any selection/UI code in ui.js or
+// settings.js — nothing here is a placeholder for fake content.
 
 const PIECE_FILE_KEY = { K: 'king', M: 'queen', S: 'bishop', R: 'rook', N: 'knight', P: 'pawn' };
 
 export const pieceThemes = [
   { id: 'classic', name: 'Classic', dir: 'assets/pieces' },
+  { id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain' },
 ];
 
 export const boardThemes = [

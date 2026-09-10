@@ -672,8 +672,16 @@ export async function initUI() {
   // for the marker's own fill="none" is NOT needed there since that one
   // IS meant to be filled (it's the solid arrowhead), but this line
   // itself must stay unfilled regardless of stylesheet load timing.
+  // refX="10" (not the arrowhead triangle's own midpoint) anchors the
+  // marker at its visual TIP -- (10,5) is the pointed vertex of the
+  // M0,0 L10,5 L0,10 Z triangle below -- so the path's endpoint
+  // coordinate IS where the tip is drawn, not somewhere back along the
+  // shaft. Without this the tip visibly overshoots past wherever the
+  // path math says it should stop, which is what made the arrow miss
+  // the square's true center despite the endpoint being pulled in to
+  // sit right on it.
   lastMoveArrowSvg.innerHTML =
-    '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="7" refY="5" ' +
+    '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="10" refY="5" ' +
     'markerWidth="4" markerHeight="4" orient="auto-start-reverse">' +
     '<path class="last-move-arrowhead" d="M0,0 L10,5 L0,10 Z"/></marker></defs>' +
     '<path class="last-move-arrow-line" fill="none" d="" opacity="0" marker-end="url(#lastMoveArrowhead)" />';
@@ -697,12 +705,13 @@ export async function initUI() {
     return { x: from.x + dx * t, y: from.y + dy * t };
   }
 
-  // Grid units pulled back from each square's true center — kept small
-  // and deliberately NOT scaled by move distance, so both ends read as
-  // "the center of the square" as directly as possible while still
-  // leaving a sliver of daylight for the line/arrowhead to stay visually
-  // distinct from the piece glyph sitting on top of it.
-  const ARROW_INSET = 0.08;
+  // Grid units pulled back from each square's true center. Deliberately
+  // tiny and NOT scaled by move distance -- the explicit ask was for
+  // both ends to land AT the true center of their square, not just
+  // "near" it, so this is only enough to keep the path's own endpoint
+  // (and its round linecap) from poking out past the now-correctly-
+  // anchored arrowhead marker (see refX="10" above).
+  const ARROW_INSET = 0.03;
 
   // Points the arrow from mv.from -> mv.to, or hides it when mv is
   // falsy (fresh game / undo back past the first move). A straight move

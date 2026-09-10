@@ -494,34 +494,40 @@ body{
 }
 
 
-/* ===== LAST MOVE — subtle gold/amber tint, distinct from blue=selected
-   and green=legal-move =====
-   Deliberately NOT a ::before corner-bracket like .selected/.in-check
-   above (that layer stays reserved for those) — instead a translucent
-   color stacked as an EXTRA background-image layer in front of the
-   square's own wood/board texture. That keeps it a background-layer
-   effect: it paints behind the piece image and behind the ::before
-   corner marks (both painted later, in later stacking steps), so a
-   simultaneously-selected or legal-destination square still shows its
-   normal blue/green marks on top, unobscured — matching the requested
-   piece > last-move tint > selected/legal visual hierarchy. Two color
-   layers (from/to) at different alpha, and separate light/dark-square
-   pairs since .cell.light/.dark each already own `background-image`. */
-.cell.light.last-from{ background-image: linear-gradient(rgba(255,193,7,.20), rgba(255,193,7,.20)), var(--board-light-img); }
-.cell.dark.last-from { background-image: linear-gradient(rgba(255,193,7,.24), rgba(255,193,7,.24)), var(--board-dark-img); }
-.cell.light.last-to  { background-image: linear-gradient(rgba(255,193,7,.34), rgba(255,193,7,.34)), var(--board-light-img); }
-.cell.dark.last-to   { background-image: linear-gradient(rgba(255,193,7,.38), rgba(255,193,7,.38)), var(--board-dark-img); }
+/* ===== LAST MOVE — bold solid yellow (origin) / red (destination),
+   distinct from blue=selected and green=legal-move =====
+   Matches the reference screenshot: a strong, opaque fill on both
+   squares (not a subtle tint) so the last move reads instantly, with
+   the destination in a different, higher-alert color than the origin
+   so which square the piece actually landed ON is unambiguous even
+   before you spot the arrow. Deliberately NOT a ::before corner-bracket
+   like .selected/.in-check above (that layer stays reserved for those)
+   — instead a color stacked as an EXTRA background-image layer in
+   front of the square's own wood/board texture. That keeps it a
+   background-layer effect: it paints behind the piece image and behind
+   the ::before corner marks (both painted later, in later stacking
+   steps), so a simultaneously-selected or legal-destination square
+   still shows its normal blue/green marks on top, unobscured —
+   matching the requested piece > last-move fill > selected/legal
+   visual hierarchy. Separate light/dark-square pairs since
+   .cell.light/.dark each already own `background-image`. */
+.cell.light.last-from{ background-image: linear-gradient(rgba(255,235,59,.82), rgba(255,235,59,.82)), var(--board-light-img); }
+.cell.dark.last-from { background-image: linear-gradient(rgba(255,235,59,.82), rgba(255,235,59,.82)), var(--board-dark-img); }
+.cell.light.last-to  { background-image: linear-gradient(rgba(239,68,68,.82), rgba(239,68,68,.82)), var(--board-light-img); }
+.cell.dark.last-to   { background-image: linear-gradient(rgba(239,68,68,.82), rgba(239,68,68,.82)), var(--board-dark-img); }
 
 /* Brief pulse on the destination square, added by ui.js's render() right
    as the piece's own slide-in animation finishes (Animation setting off
    → skipped entirely, same gate as the slide itself: see isMoveDest in
-   ui.js). Fades to nothing on its own; no removal needed, same pattern
-   as .last-capture's capFlash below. */
+   ui.js). A bright white ring reads clearly against the now-solid red
+   fill above (a same-hue pulse would just blend in). Fades to nothing
+   on its own; no removal needed, same pattern as .last-capture's
+   capFlash below. */
 .cell.last-move-pulse{ animation: lastMovePulse .4s ease-out; }
 @keyframes lastMovePulse{
-  0%  { box-shadow: inset 0 0 0 0 rgba(255,193,7,.55); }
-  35% { box-shadow: inset 0 0 0 5px rgba(255,193,7,.4); }
-  100%{ box-shadow: inset 0 0 0 0 rgba(255,193,7,0); }
+  0%  { box-shadow: inset 0 0 0 0 rgba(255,255,255,.9); }
+  35% { box-shadow: inset 0 0 0 6px rgba(255,255,255,.7); }
+  100%{ box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
 }
 
 /* Hints / captures
@@ -584,13 +590,13 @@ body{
 }
 .last-move-arrow-line{
   fill: none;
-  stroke: rgba(255,176,32,.55);
-  stroke-width: 0.09;
+  stroke: rgba(255,145,0,.9);
+  stroke-width: 0.16;
   stroke-linecap: round;
   stroke-linejoin: round;
   transition: opacity .18s ease;
 }
-.last-move-arrowhead{ fill: rgba(255,176,32,.65); }
+.last-move-arrowhead{ fill: rgba(255,145,0,.9); }
 
 /* === AI thinking visual ===================================== */
 body.ai-thinking #board{

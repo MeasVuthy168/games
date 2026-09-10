@@ -569,11 +569,13 @@ body{
    once). inset:var(--frame-thickness) matches .board::before just above
    -- the same "where the squares actually start" inset already used to
    line up that pseudo-element with the grid content box. ui.js's
-   render() keeps the <line> endpoints in sync with the current last
-   move (or hides it via opacity when there's none). z-index above
-   .cell's own (1) so it reads as a single thin stroke over the squares/
-   pieces rather than getting clipped inside one cell's own stacking
-   context. */
+   render() keeps the arrow's <path> `d` in sync with the current last
+   move (or hides it via opacity when there's none) -- a straight
+   1-2-segment path, never a closed shape, so fill:none matters here or
+   the browser's default SVG path fill (solid black) would paint over
+   the board. z-index above .cell's own (1) so it reads as a single thin
+   stroke over the squares/pieces rather than getting clipped inside one
+   cell's own stacking context. */
 #lastMoveArrow{
   position: absolute;
   inset: var(--frame-thickness);
@@ -581,9 +583,11 @@ body{
   z-index: 2;
 }
 .last-move-arrow-line{
+  fill: none;
   stroke: rgba(255,176,32,.55);
   stroke-width: 0.09;
   stroke-linecap: round;
+  stroke-linejoin: round;
   transition: opacity .18s ease;
 }
 .last-move-arrowhead{ fill: rgba(255,176,32,.65); }

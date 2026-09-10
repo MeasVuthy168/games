@@ -322,13 +322,6 @@
       function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
       if (document.readyState === 'complete') setSpacer(); else window.addEventListener('load', setSpacer);
       window.addEventListener('resize', setSpacer);
-
-      let last = window.scrollY;
-      window.addEventListener('scroll', () => {
-        const y = window.scrollY;
-        bar.style.transform = (y > last) ? 'translateY(110%)' : 'translateY(0)';
-        last = y;
-      }, { passive:true });
     })();
   </script>
 </body>

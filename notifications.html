@@ -108,13 +108,6 @@
       for(const a of bar.querySelectorAll('a')){
         if(a.getAttribute('href') === page) a.classList.add('active');
       }
-
-      let last = window.scrollY;
-      window.addEventListener('scroll', () => {
-        const y = window.scrollY;
-        bar.style.transform = (y > last) ? 'translateY(110%)' : 'translateY(0)';
-        last = y;
-      }, { passive:true });
     })();
   </script>
 </body>

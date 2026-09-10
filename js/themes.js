@@ -12,34 +12,36 @@ const PIECE_FILE_KEY = { K: 'king', M: 'queen', S: 'bishop', R: 'rook', N: 'knig
 // Gold and Red & Blue clearly aren't either of those) — `short` matches the
 // compact " · ខ្មៅ"-style suffix already used on the Play page header,
 // `label` the fuller "ខ្មៅ (Black)" form used in the Home page's color-pick
-// buttons, `hex` a representative swatch color for that same picker.
+// buttons when the UI language is Khmer, `labelEn` the same but for English
+// UI (matches the existing home.roleWhite/roleBlack English dictionary
+// strings), `hex` a representative swatch color for that same picker.
 export const pieceThemes = [
   {
     id: 'classic', name: 'Classic', dir: 'assets/pieces',
     colors: {
-      w: { short: 'ស', label: 'ស (White)', hex: '#fdfdfd' },
-      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', hex: '#20242c' },
+      w: { short: 'ស', label: 'ស (White)', labelEn: 'White', hex: '#fdfdfd' },
+      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', labelEn: 'Black', hex: '#20242c' },
     },
   },
   {
     id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain',
     colors: {
-      w: { short: 'ស', label: 'ស (White)', hex: '#fdfdfd' },
-      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', hex: '#20242c' },
+      w: { short: 'ស', label: 'ស (White)', labelEn: 'White', hex: '#fdfdfd' },
+      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', labelEn: 'Black', hex: '#20242c' },
     },
   },
   {
     id: 'silver-gold', name: 'Silver & Gold', dir: 'assets/pieces-silver-gold',
     colors: {
-      w: { short: 'ប្រាក់', label: 'ប្រាក់ (Silver)', hex: '#c7cdd6' },
-      b: { short: 'មាស', label: 'មាស (Gold)', hex: '#c9971f' },
+      w: { short: 'ប្រាក់', label: 'ប្រាក់ (Silver)', labelEn: 'Silver', hex: '#c7cdd6' },
+      b: { short: 'មាស', label: 'មាស (Gold)', labelEn: 'Gold', hex: '#c9971f' },
     },
   },
   {
     id: 'red-blue', name: 'Red & Blue', dir: 'assets/pieces-red-blue',
     colors: {
-      w: { short: 'ខៀវ', label: 'ខៀវ (Blue)', hex: '#2255aa' },
-      b: { short: 'ក្រហម', label: 'ក្រហម (Red)', hex: '#a3231f' },
+      w: { short: 'ខៀវ', label: 'ខៀវ (Blue)', labelEn: 'Blue', hex: '#2255aa' },
+      b: { short: 'ក្រហម', label: 'ក្រហម (Red)', labelEn: 'Red', hex: '#a3231f' },
     },
   },
 ];

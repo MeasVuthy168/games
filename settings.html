@@ -114,6 +114,13 @@
       background-repeat:no-repeat; background-size:contain; background-position:center;
     }
     .piece-theme-choice-name{ font-size:.78rem; font-weight:700; text-align:center; }
+
+    /* Language radio flags: a real flag icon per option instead of text
+       alone, so the choice reads at a glance. */
+    .lang-flag{
+      width:26px; height:18px; border-radius:.2rem; object-fit:cover;
+      box-shadow:0 0 0 1px rgba(13,45,92,.15); flex:none;
+    }
   </style>
 </head>
 <body>
@@ -225,8 +232,8 @@
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
-            <label class="radio"><input type="radio" name="language" value="en" /> <span data-i18n="settings.language.en">English</span></label>
-            <label class="radio"><input type="radio" name="language" value="km" /> <span data-i18n="settings.language.km">Khmer</span></label>
+            <label class="radio"><input type="radio" name="language" value="en" /> <img class="lang-flag" src="assets/ui/flags/en.svg" alt="" /> <span data-i18n="settings.language.en">English</span></label>
+            <label class="radio"><input type="radio" name="language" value="km" /> <img class="lang-flag" src="assets/ui/flags/km.svg" alt="" /> <span data-i18n="settings.language.km">Khmer</span></label>
           </div>
         </details>
 

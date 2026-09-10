@@ -124,10 +124,22 @@ self.addEventListener('fetch', (e) => {
   // any online load gets the current code; images/fonts/audio below keep
   // the original cache-first behavior since those rarely change and
   // refetching them on every load would be wasteful.
+  //
+  // { cache: 'reload' } here (matching the navigate/document branch above)
+  // is required, not decorative: a plain fetch() still honors the
+  // browser's OWN HTTP cache underneath this handler, so "network-first"
+  // at the service-worker level was quietly being defeated by ordinary
+  // HTTP caching whenever the origin's response allowed it — a shipped
+  // code change (a new js/ui.js or styles.css) could sit invisible behind
+  // a stale styles.css or ui.js on a returning visitor's device even
+  // though this handler believed it was always fetching fresh. This is
+  // exactly the bug behind several "the fix isn't showing up on my phone"
+  // reports — the deployed code was correct, the device just never
+  // actually re-fetched it.
   if (req.destination === 'script' || req.destination === 'style') {
     e.respondWith((async () => {
       try {
-        const fresh = await fetch(req);
+        const fresh = await fetch(req, { cache: 'reload' });
         if (fresh && fresh.status === 200) {
           const c = await caches.open(CACHE);
           c.put(req, fresh.clone());

@@ -714,36 +714,21 @@ export async function initUI() {
   const ARROW_INSET = 0.03;
 
   // Points the arrow from mv.from -> mv.to, or hides it when mv is
-  // falsy (fresh game / undo back past the first move). A straight move
-  // (every piece but the knight only ever moves in a straight line) is
-  // one segment between the two square centers, each end pulled in a
-  // bit so the line travels the gap between the pieces rather than
-  // piercing through their glyphs. A knight's actual path is an L, not
-  // a diagonal -- drawing it as a straight line cuts across whatever
-  // piece happens to sit on that diagonal, which is exactly the
-  // "arrow doesn't match how the piece actually moved" complaint this
-  // fixes. Bent at the corner of the knight's own 2x1 box (long leg
-  // first, short leg into the destination), matching how lichess/
-  // chess.com draw knight-move arrows.
+  // falsy (fresh game / undo back past the first move). Always a single
+  // straight segment directly between the two square centers, for every
+  // piece including the knight -- an earlier version bent the knight's
+  // arrow into an L to trace its actual move shape, but the user's own
+  // reference (a hand-drawn straight diagonal arrow over a screenshot of
+  // that L-bend) asked for a plain straight line regardless of piece
+  // type, so that's what this draws now. Each end is pulled in a hair
+  // from the true center per updateLastMoveArrow's own ARROW_INSET.
   function updateLastMoveArrow(mv) {
     if (!mv) { lastMoveArrowLine.setAttribute('d', ''); lastMoveArrowLine.setAttribute('opacity', '0'); return; }
     const from = { x: visualCol(mv.from.x) + 0.5, y: visualRow(mv.from.y) + 0.5 };
     const to   = { x: visualCol(mv.to.x)   + 0.5, y: visualRow(mv.to.y)   + 0.5 };
-    const dx = mv.to.x - mv.from.x, dy = mv.to.y - mv.from.y;
-    const isKnightMove = (Math.abs(dx) === 2 && Math.abs(dy) === 1) || (Math.abs(dx) === 1 && Math.abs(dy) === 2);
-
-    let d;
-    if (isKnightMove) {
-      const bend = Math.abs(dx) === 2 ? { x: to.x, y: from.y } : { x: from.x, y: to.y };
-      const start = pullToward(from, bend, ARROW_INSET);
-      const end   = pullToward(to, bend, ARROW_INSET);
-      d = `M ${start.x} ${start.y} L ${bend.x} ${bend.y} L ${end.x} ${end.y}`;
-    } else {
-      const start = pullToward(from, to, ARROW_INSET);
-      const end   = pullToward(to, from, ARROW_INSET);
-      d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-    }
-    lastMoveArrowLine.setAttribute('d', d);
+    const start = pullToward(from, to, ARROW_INSET);
+    const end   = pullToward(to, from, ARROW_INSET);
+    lastMoveArrowLine.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
     lastMoveArrowLine.setAttribute('opacity', '1');
   }
 

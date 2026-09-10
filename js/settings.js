@@ -1,5 +1,5 @@
 // Settings controller
-import { pieceThemes, boardThemes } from './themes.js';
+import { pieceThemes, boardThemes, pieceImageUrl } from './themes.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, applyTranslations } from './i18n.js';
 import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL } from './ai-engine.js';
@@ -99,10 +99,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const btnResetTimer = document.getElementById('btnResetTimer');
   const themeRadios = Array.from(document.querySelectorAll('input[name="theme"]'));
   const languageRadios = Array.from(document.querySelectorAll('input[name="language"]'));
-  const pieceThemeName = document.getElementById('pieceThemeName');
-  const pieceThemePrev = document.getElementById('pieceThemePrev');
-  const pieceThemeNext = document.getElementById('pieceThemeNext');
-  const pieceThemeOnlyOne = document.getElementById('pieceThemeOnlyOne');
+  const pieceThemeGrid = document.getElementById('pieceThemeGrid');
   const boardThemeGrid = document.getElementById('boardThemeGrid');
 
   // Init UI states
@@ -115,13 +112,42 @@ document.addEventListener('DOMContentLoaded', ()=>{
   (themeRadios.find(r=>r.value===getTheme())||themeRadios[0]).checked = true;
   (languageRadios.find(r=>r.value===s.language)||languageRadios[0]).checked = true;
 
-  function renderThemeSteppers(){
-    if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
-    if (pieceThemePrev) pieceThemePrev.disabled = pieceThemes.length <= 1;
-    if (pieceThemeNext) pieceThemeNext.disabled = pieceThemes.length <= 1;
-    if (pieceThemeOnlyOne) pieceThemeOnlyOne.hidden = pieceThemes.length > 1;
+  // Piece theme: a tappable grid of swatches (each a small side-by-side
+  // preview of that theme's own King artwork, light + dark) instead of a
+  // blind Prev/Next cycle — rebuilt from js/themes.js's pieceThemes on
+  // every render so a theme added there needs no markup changes here.
+  function renderPieceThemeGrid(){
+    if (!pieceThemeGrid) return;
+    pieceThemeGrid.innerHTML = '';
+    pieceThemes.forEach((theme, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'piece-theme-choice' + (s.pieceTheme === idx ? ' selected' : '');
+
+      const swatch = document.createElement('div');
+      swatch.className = 'piece-theme-swatch';
+      for (const color of ['w', 'b']) {
+        const span = document.createElement('span');
+        span.style.backgroundImage = `url("${pieceImageUrl(theme, color, 'K')}")`;
+        swatch.appendChild(span);
+      }
+
+      const label = document.createElement('div');
+      label.className = 'piece-theme-choice-name';
+      label.textContent = theme.name;
+
+      btn.appendChild(swatch);
+      btn.appendChild(label);
+      btn.addEventListener('click', () => {
+        if (s.pieceTheme === idx) return;
+        s.pieceTheme = idx;
+        saveSettings(s);
+        renderPieceThemeGrid();
+      });
+      pieceThemeGrid.appendChild(btn);
+    });
   }
-  renderThemeSteppers();
+  renderPieceThemeGrid();
 
   // Board theme: a tappable grid of swatches (each a small 2x2 checkerboard
   // built from that theme's own light/dark tile images) instead of a blind
@@ -175,15 +201,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
       applyTranslations();
     })
   );
-
-  function stepTheme(key, themes, delta){
-    if (themes.length <= 1) return; // nothing to step to yet
-    s[key] = (s[key] + delta + themes.length) % themes.length;
-    saveSettings(s);
-    renderThemeSteppers();
-  }
-  pieceThemePrev?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, -1));
-  pieceThemeNext?.addEventListener('click', ()=> stepTheme('pieceTheme', pieceThemes, 1));
 
   btnSaveTimer.addEventListener('click', ()=>{
     const m = Math.max(1, Math.min(180, parseInt(minutesInput.value||'10',10)));

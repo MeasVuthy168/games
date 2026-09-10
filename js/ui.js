@@ -669,8 +669,7 @@ export async function initUI() {
     '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="7" refY="5" ' +
     'markerWidth="4" markerHeight="4" orient="auto-start-reverse">' +
     '<path class="last-move-arrowhead" d="M0,0 L10,5 L0,10 Z"/></marker></defs>' +
-    '<line class="last-move-arrow-line" x1="0" y1="0" x2="0" y2="0" ' +
-    'opacity="0" marker-end="url(#lastMoveArrowhead)" />';
+    '<path class="last-move-arrow-line" d="" opacity="0" marker-end="url(#lastMoveArrowhead)" />';
   elBoard.appendChild(lastMoveArrowSvg);
   const lastMoveArrowLine = lastMoveArrowSvg.querySelector('.last-move-arrow-line');
 
@@ -681,23 +680,49 @@ export async function initUI() {
   const visualCol = (x) => (flipped ? SIZE - 1 - x : x);
   const visualRow = (y) => (flipped ? SIZE - 1 - y : y);
 
-  // Points the arrow from mv.from -> mv.to, or hides it when mv is
-  // falsy (fresh game / undo back past the first move). Both ends are
-  // pulled in a bit from the square centers so the line travels the gap
-  // between the two pieces rather than piercing through their glyphs —
-  // purely cosmetic, keeps it thin and out of the pieces' way even for a
-  // one-square move.
-  function updateLastMoveArrow(mv) {
-    if (!mv) { lastMoveArrowLine.setAttribute('opacity', '0'); return; }
-    const fx = visualCol(mv.from.x) + 0.5, fy = visualRow(mv.from.y) + 0.5;
-    const tx = visualCol(mv.to.x)   + 0.5, ty = visualRow(mv.to.y)   + 0.5;
-    const dx = tx - fx, dy = ty - fy;
+  // Pulls `from` toward `to` by `amount` grid units, capped at 40% of
+  // that pair's own distance so a short segment (e.g. a knight arrow's
+  // 1-square closing leg) never gets eaten away to nothing.
+  function pullToward(from, to, amount) {
+    const dx = to.x - from.x, dy = to.y - from.y;
     const len = Math.hypot(dx, dy) || 1;
-    const inset = Math.min(0.3, len * 0.22);
-    lastMoveArrowLine.setAttribute('x1', fx + (dx / len) * inset);
-    lastMoveArrowLine.setAttribute('y1', fy + (dy / len) * inset);
-    lastMoveArrowLine.setAttribute('x2', tx - (dx / len) * inset);
-    lastMoveArrowLine.setAttribute('y2', ty - (dy / len) * inset);
+    const t = Math.min(amount, len * 0.4) / len;
+    return { x: from.x + dx * t, y: from.y + dy * t };
+  }
+
+  const ARROW_INSET = 0.22; // grid units pulled back from each square's true center
+
+  // Points the arrow from mv.from -> mv.to, or hides it when mv is
+  // falsy (fresh game / undo back past the first move). A straight move
+  // (every piece but the knight only ever moves in a straight line) is
+  // one segment between the two square centers, each end pulled in a
+  // bit so the line travels the gap between the pieces rather than
+  // piercing through their glyphs. A knight's actual path is an L, not
+  // a diagonal -- drawing it as a straight line cuts across whatever
+  // piece happens to sit on that diagonal, which is exactly the
+  // "arrow doesn't match how the piece actually moved" complaint this
+  // fixes. Bent at the corner of the knight's own 2x1 box (long leg
+  // first, short leg into the destination), matching how lichess/
+  // chess.com draw knight-move arrows.
+  function updateLastMoveArrow(mv) {
+    if (!mv) { lastMoveArrowLine.setAttribute('d', ''); lastMoveArrowLine.setAttribute('opacity', '0'); return; }
+    const from = { x: visualCol(mv.from.x) + 0.5, y: visualRow(mv.from.y) + 0.5 };
+    const to   = { x: visualCol(mv.to.x)   + 0.5, y: visualRow(mv.to.y)   + 0.5 };
+    const dx = mv.to.x - mv.from.x, dy = mv.to.y - mv.from.y;
+    const isKnightMove = (Math.abs(dx) === 2 && Math.abs(dy) === 1) || (Math.abs(dx) === 1 && Math.abs(dy) === 2);
+
+    let d;
+    if (isKnightMove) {
+      const bend = Math.abs(dx) === 2 ? { x: to.x, y: from.y } : { x: from.x, y: to.y };
+      const start = pullToward(from, bend, ARROW_INSET);
+      const end   = pullToward(to, bend, ARROW_INSET);
+      d = `M ${start.x} ${start.y} L ${bend.x} ${bend.y} L ${end.x} ${end.y}`;
+    } else {
+      const start = pullToward(from, to, ARROW_INSET);
+      const end   = pullToward(to, from, ARROW_INSET);
+      d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+    }
+    lastMoveArrowLine.setAttribute('d', d);
     lastMoveArrowLine.setAttribute('opacity', '1');
   }
 

@@ -657,9 +657,9 @@ export async function initUI() {
     }
   }
 
-  // Last-move arrow: a single thin SVG line overlaid across the whole
-  // grid (see styles.css's #lastMoveArrow for why it's its own
-  // grid-spanning item, not position:absolute pixel math). Built once
+  // Last-move arrow: a single thin SVG line overlaid across the board's
+  // content area (see styles.css's #lastMoveArrow for why it's
+  // position:absolute rather than a grid-spanning item). Built once
   // here; render() below just moves its endpoints and toggles opacity.
   const lastMoveArrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   lastMoveArrowSvg.id = 'lastMoveArrow';
@@ -699,6 +699,23 @@ export async function initUI() {
     lastMoveArrowLine.setAttribute('x2', tx - (dx / len) * inset);
     lastMoveArrowLine.setAttribute('y2', ty - (dy / len) * inset);
     lastMoveArrowLine.setAttribute('opacity', '1');
+  }
+
+  // Single place that ever touches .last-from/.last-to + the arrow, for
+  // BOTH the real last move (render(), driven by game.history) and the
+  // premove preview (onCellTap's isAITurn() branch below, which queues a
+  // move while the AI thinks). Routing both through here is what keeps
+  // them from drifting apart — a premove that only updated the gold
+  // squares and left the arrow pointing at the previous real move (or
+  // vice versa) is exactly the "arrow doesn't match the highlighted
+  // squares" bug this fixes.
+  function applyLastMoveHighlight(mv) {
+    for (const c of cells) c.classList.remove('last-from', 'last-to');
+    if (mv) {
+      cells[gridSlot(mv.from.x, mv.from.y)]?.classList.add('last-from');
+      cells[gridSlot(mv.to.x, mv.to.y)]?.classList.add('last-to');
+    }
+    updateLastMoveArrow(mv);
   }
 
   function applyTurnClass() {
@@ -1143,18 +1160,13 @@ export async function initUI() {
       }
     }
 
-    if (last) {
-      const fromIdx = gridSlot(last.from.x, last.from.y);
-      const toIdx   = gridSlot(last.to.x, last.to.y);
-      cells[fromIdx]?.classList.add('last-from');
-      cells[toIdx]?.classList.add('last-to');
-      if (last.captured && animate){
-        cells[toIdx]?.classList.add('last-capture');
-        const rp = document.createElement('div'); rp.className = 'capture-ripple';
-        cells[toIdx]?.appendChild(rp); setTimeout(()=> rp.remove(), 350);
-      }
+    applyLastMoveHighlight(last);
+    if (last?.captured && animate){
+      const toIdx = gridSlot(last.to.x, last.to.y);
+      cells[toIdx]?.classList.add('last-capture');
+      const rp = document.createElement('div'); rp.className = 'capture-ripple';
+      cells[toIdx]?.appendChild(rp); setTimeout(()=> rp.remove(), 350);
     }
-    updateLastMoveArrow(last);
 
     applyCheckHighlight();
     renderCounting();
@@ -1653,12 +1665,25 @@ export async function initUI() {
     // If AI turn → allow premove selection for the human's own color
     if (isAITurn() || AILock) {
       if (p && p.c === humanColor()){
-        if (!selected){ selected = {x,y}; showHints(x,y); beeper.select(); triggerHaptic('select'); return; }
+        if (!selected){
+          selected = {x,y}; showHints(x,y);
+          // Picking a NEW piece to premove (after already queuing a
+          // different one) previously left the OLD premove's gold
+          // squares on the board, stale and unrelated to whatever gets
+          // queued next. Reset back to the real last move first — a
+          // completed premove below re-applies its own highlight right
+          // over this, so there's nothing to undo in the normal case.
+          applyLastMoveHighlight(game.history[game.history.length - 1]);
+          beeper.select(); triggerHaptic('select'); return;
+        }
         const ok = legal.some(m => m.x===x && m.y===y);
         if (ok){
           premove = { from:{...selected}, to:{x,y} };
-          cells[gridSlot(selected.x, selected.y)].classList.add('last-from');
-          cells[gridSlot(x, y)].classList.add('last-to');
+          // Same shared helper render() uses for the real last move, so
+          // the gold squares and the arrow can never drift apart here
+          // either. render() overwrites this with the real AI move the
+          // moment its reply actually lands.
+          applyLastMoveHighlight(premove);
           beeper.select(); triggerHaptic('select');
         } else { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); }
       } else { beeper.error(); triggerHaptic('error'); flashIllegal(x, y); }

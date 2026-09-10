@@ -7,11 +7,41 @@
 
 const PIECE_FILE_KEY = { K: 'king', M: 'queen', S: 'bishop', R: 'rook', N: 'knight', P: 'pawn' };
 
+// `colors` names each side by what this theme's pieces actually look like
+// (Classic/Plain Wood keep the traditional ស/ខ្មៅ "White/Black" — Silver &
+// Gold and Red & Blue clearly aren't either of those) — `short` matches the
+// compact " · ខ្មៅ"-style suffix already used on the Play page header,
+// `label` the fuller "ខ្មៅ (Black)" form used in the Home page's color-pick
+// buttons, `hex` a representative swatch color for that same picker.
 export const pieceThemes = [
-  { id: 'classic', name: 'Classic', dir: 'assets/pieces' },
-  { id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain' },
-  { id: 'silver-gold', name: 'Silver & Gold', dir: 'assets/pieces-silver-gold' },
-  { id: 'red-blue', name: 'Red & Blue', dir: 'assets/pieces-red-blue' },
+  {
+    id: 'classic', name: 'Classic', dir: 'assets/pieces',
+    colors: {
+      w: { short: 'ស', label: 'ស (White)', hex: '#fdfdfd' },
+      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', hex: '#20242c' },
+    },
+  },
+  {
+    id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain',
+    colors: {
+      w: { short: 'ស', label: 'ស (White)', hex: '#fdfdfd' },
+      b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', hex: '#20242c' },
+    },
+  },
+  {
+    id: 'silver-gold', name: 'Silver & Gold', dir: 'assets/pieces-silver-gold',
+    colors: {
+      w: { short: 'ប្រាក់', label: 'ប្រាក់ (Silver)', hex: '#c7cdd6' },
+      b: { short: 'មាស', label: 'មាស (Gold)', hex: '#c9971f' },
+    },
+  },
+  {
+    id: 'red-blue', name: 'Red & Blue', dir: 'assets/pieces-red-blue',
+    colors: {
+      w: { short: 'ខៀវ', label: 'ខៀវ (Blue)', hex: '#2255aa' },
+      b: { short: 'ក្រហម', label: 'ក្រហម (Red)', hex: '#a3231f' },
+    },
+  },
 ];
 
 export const boardThemes = [
@@ -35,6 +65,13 @@ export function pieceImageUrl(theme, colorLetter, typeLetter) {
 export function clampThemeIndex(i, themes) {
   const n = i | 0;
   return n >= 0 && n < themes.length ? n : 0;
+}
+
+// The persisted piece-theme index, resolved to its actual theme entry
+// (clamped, so a stale/out-of-range setting from before a theme was
+// removed never throws) — the one lookup every consumer of `colors` needs.
+export function activePieceTheme(pieceThemeIndex) {
+  return pieceThemes[clampThemeIndex(pieceThemeIndex, pieceThemes)];
 }
 
 // js/ui.js's render() wipes and recreates every `.piece` div from scratch on

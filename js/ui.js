@@ -7,7 +7,7 @@ import * as History from './history.js';
 import * as Tournament from './tournament.js';
 import * as Rewards from './rewards.js';
 import * as Api from './api.js';
-import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex, preloadPieceImages } from './themes.js';
+import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex, preloadPieceImages, activePieceTheme } from './themes.js';
 import { showToast } from './toast.js';
 import { initTranslations, t } from './i18n.js';
 
@@ -435,8 +435,6 @@ export async function initUI() {
   const clockB   = document.getElementById('clockB');
 
   const KH = {
-    white: 'ស',
-    black: 'ខ្មៅ',
     check: 'អុក',
     checkmate: 'អុកស្លាប់',
     stalemate: 'អាប់'
@@ -581,6 +579,12 @@ export async function initUI() {
     const elAvatarBottom = document.getElementById('avatarWhite');
     const elResign = document.getElementById('btnResign');
     if (!elNameTop || !elNameBottom) return;
+    // Which side is called what depends on the chosen piece theme — Silver
+    // & Gold's pieces aren't literally "White"/"Black", so the label
+    // shouldn't say so (a Red & Blue player seeing their opponent
+    // labeled "· ខ្មៅ" while the AI's pieces are visibly red was the
+    // original bug report this fixes).
+    const pieceColors = activePieceTheme(settings.pieceTheme).colors;
     if (onlineMode) {
       // The board is flipped for Black (see `flipped` above) so your own
       // pieces always end up at the bottom — keep these labels in sync.
@@ -589,8 +593,8 @@ export async function initUI() {
       // of its own separate control row above everything.
       const meIsWhite = onlineState.myColor === COLORS.WHITE;
       const me = Api.getCurrentUser();
-      elNameTop.textContent    = onlineState.opponentName + (meIsWhite ? ' · ខ្មៅ' : ' · ស');
-      elNameBottom.textContent = 'អ្នក (You)' + (meIsWhite ? ' · ស' : ' · ខ្មៅ');
+      elNameTop.textContent    = onlineState.opponentName + (meIsWhite ? ` · ${pieceColors.b.short}` : ` · ${pieceColors.w.short}`);
+      elNameBottom.textContent = 'អ្នក (You)' + (meIsWhite ? ` · ${pieceColors.w.short}` : ` · ${pieceColors.b.short}`);
       setAvatar(elAvatarTop, { emoji: onlineState.opponentAvatar, url: onlineState.opponentAvatarUrl });
       setAvatar(elAvatarBottom, { emoji: me?.avatarEmoji, url: me?.avatarUrl });
       if (elAvatarTop) elAvatarTop.hidden = false;
@@ -598,14 +602,14 @@ export async function initUI() {
       if (elResign) elResign.hidden = false;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
-      elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ' · ខ្មៅ';
-      elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ' · ស';
+      elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ` · ${pieceColors.b.short}`;
+      elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ` · ${pieceColors.w.short}`;
       if (elAvatarTop) elAvatarTop.hidden = true;
       if (elAvatarBottom) elAvatarBottom.hidden = true;
       if (elResign) elResign.hidden = true;
     } else {
-      elNameTop.textContent    = 'អ្នកទី១ · ខ្មៅ (Black)';
-      elNameBottom.textContent = 'អ្នកទី២ · ស (White)';
+      elNameTop.textContent    = `អ្នកទី១ · ${pieceColors.b.label}`;
+      elNameBottom.textContent = `អ្នកទី២ · ${pieceColors.w.label}`;
       if (elAvatarTop) elAvatarTop.hidden = true;
       if (elAvatarBottom) elAvatarBottom.hidden = true;
       if (elResign) elResign.hidden = true;
@@ -673,10 +677,13 @@ export async function initUI() {
   }
 
   function khTurnLabel() {
-    const side = game.turn === COLORS.WHITE ? KH.white : KH.black;
+    // Same reasoning as applyPlayerLabels(): which side is called what
+    // depends on the chosen piece theme, not a fixed ស/ខ្មៅ.
+    const pieceColors = activePieceTheme(settings.pieceTheme).colors;
+    const side = game.turn === COLORS.WHITE ? pieceColors.w.short : pieceColors.b.short;
     const st = game.status();
     if (st.state === 'checkmate') {
-      const w = side === 'ស' ? 'ខ្មៅ' : 'ស';
+      const w = game.turn === COLORS.WHITE ? pieceColors.b.short : pieceColors.w.short;
       return `វេនខាង (${side}) · ${KH.checkmate} · ${w} ឈ្នះ`;
     }
     if (st.state === 'stalemate') return KH.stalemate;
@@ -882,7 +889,8 @@ export async function initUI() {
         // single "the player" to show a personalized WIN/LOSS for, so this
         // keeps the existing side-based win announcement, just through the
         // same new timing/celebration pipeline as every other ending.
-        const sideTxt = winnerColor === COLORS.WHITE ? 'ស' : 'ខ្មៅ';
+        const pieceColors = activePieceTheme(settings.pieceTheme).colors;
+        const sideTxt = winnerColor === COLORS.WHITE ? pieceColors.w.short : pieceColors.b.short;
         presentGameResult({
           result: 'WIN',
           reason: 'CHECKMATE',

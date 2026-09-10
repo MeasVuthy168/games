@@ -102,6 +102,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const pieceThemeName = document.getElementById('pieceThemeName');
   const pieceThemePrev = document.getElementById('pieceThemePrev');
   const pieceThemeNext = document.getElementById('pieceThemeNext');
+  const pieceThemeOnlyOne = document.getElementById('pieceThemeOnlyOne');
   const boardThemeGrid = document.getElementById('boardThemeGrid');
 
   // Init UI states
@@ -116,10 +117,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   function renderThemeSteppers(){
     if (pieceThemeName) pieceThemeName.textContent = pieceThemes[s.pieceTheme]?.name || pieceThemes[0].name;
-    // Only one real piece theme ships today — its Prev/Next stay a no-op
-    // until more are registered in js/themes.js.
     if (pieceThemePrev) pieceThemePrev.disabled = pieceThemes.length <= 1;
     if (pieceThemeNext) pieceThemeNext.disabled = pieceThemes.length <= 1;
+    if (pieceThemeOnlyOne) pieceThemeOnlyOne.hidden = pieceThemes.length > 1;
   }
   renderThemeSteppers();
 

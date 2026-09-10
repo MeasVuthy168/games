@@ -601,6 +601,13 @@ body.ai-thinking #board{
 }
 
 /* ===== Bottom nav ===== */
+/* Fixed to the viewport bottom; js/tabbar-fix.js additionally keeps its
+   `bottom` offset matched to the browser's actual visible area (see that
+   file's header comment for why plain position:fixed alone isn't always
+   enough in a mobile browser/WebView). Nothing here ever hides this bar —
+   there used to be an unused #appTabbar.is-hidden rule with no code
+   anywhere that ever applied it; removed rather than left to imply an
+   auto-hide behavor that doesn't exist. */
 #appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:#fff; border-top:1px solid #e6e6e6;
@@ -608,10 +615,6 @@ body.ai-thinking #board{
   gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.06);
-  transition: transform .25s ease, opacity .25s ease;
-}
-#appTabbar.is-hidden{
-  transform:translateY(100%); opacity:0; pointer-events:none;
 }
 .nav-item{
   position:relative;

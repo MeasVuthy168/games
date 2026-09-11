@@ -514,8 +514,16 @@ body{
    since .cell.light/.dark each already own `background-image`. */
 .cell.light.last-from{ background-image: linear-gradient(rgba(250,204,21,.10), rgba(250,204,21,.10)), var(--board-light-img); }
 .cell.dark.last-from { background-image: linear-gradient(rgba(250,204,21,.10), rgba(250,204,21,.10)), var(--board-dark-img); }
-.cell.light.last-to  { background-image: linear-gradient(rgba(250,204,21,.18), rgba(250,204,21,.18)), var(--board-light-img); }
-.cell.dark.last-to   { background-image: linear-gradient(rgba(250,204,21,.18), rgba(250,204,21,.18)), var(--board-dark-img); }
+
+/* Destination gets its own soft radial glow rather than the flat,
+   hard-edged tint used for the origin -- an ellipse (matching this
+   board's own non-square cell proportions) fading out from a ~20%-alpha
+   core to nothing by the square's edge reads as a gentle glow, not a
+   rectangle with a border, while still never spilling past the cell's
+   own box (no box-shadow involved, so no "large glow" bleeding onto
+   neighboring squares). */
+.cell.light.last-to{ background-image: radial-gradient(ellipse at center, rgba(250,204,21,.20) 0%, rgba(250,204,21,.20) 35%, rgba(250,204,21,.06) 70%, rgba(250,204,21,0) 100%), var(--board-light-img); }
+.cell.dark.last-to { background-image: radial-gradient(ellipse at center, rgba(250,204,21,.20) 0%, rgba(250,204,21,.20) 35%, rgba(250,204,21,.06) 70%, rgba(250,204,21,0) 100%), var(--board-dark-img); }
 
 /* Brief, gentle pulse on the destination square, added by ui.js's
    render() right as the piece's own slide-in animation finishes

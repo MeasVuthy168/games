@@ -657,96 +657,21 @@ export async function initUI() {
     }
   }
 
-  // Last-move arrow: a single thin SVG line overlaid across the board's
-  // content area (see styles.css's #lastMoveArrow for why it's
-  // position:absolute rather than a grid-spanning item). Built once
-  // here; render() below just moves its endpoints and toggles opacity.
-  const lastMoveArrowSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  lastMoveArrowSvg.id = 'lastMoveArrow';
-  lastMoveArrowSvg.setAttribute('viewBox', `0 0 ${SIZE} ${SIZE}`);
-  lastMoveArrowSvg.setAttribute('preserveAspectRatio', 'none');
-  // fill="none" is set inline (not just via styles.css) so this path can
-  // never render as a solid filled wedge -- an SVG <path> defaults to a
-  // BLACK fill, and a filled 3-point knight-arrow path draws as a solid
-  // triangle (its open ends implicitly closed for fill purposes). Same
-  // for the marker's own fill="none" is NOT needed there since that one
-  // IS meant to be filled (it's the solid arrowhead), but this line
-  // itself must stay unfilled regardless of stylesheet load timing.
-  // refX="10" (not the arrowhead triangle's own midpoint) anchors the
-  // marker at its visual TIP -- (10,5) is the pointed vertex of the
-  // M0,0 L10,5 L0,10 Z triangle below -- so the path's endpoint
-  // coordinate IS where the tip is drawn, not somewhere back along the
-  // shaft. Without this the tip visibly overshoots past wherever the
-  // path math says it should stop, which is what made the arrow miss
-  // the square's true center despite the endpoint being pulled in to
-  // sit right on it.
-  lastMoveArrowSvg.innerHTML =
-    '<defs><marker id="lastMoveArrowhead" viewBox="0 0 10 10" refX="10" refY="5" ' +
-    'markerWidth="4" markerHeight="4" orient="auto-start-reverse">' +
-    '<path class="last-move-arrowhead" d="M0,0 L10,5 L0,10 Z"/></marker></defs>' +
-    '<path class="last-move-arrow-line" fill="none" d="" opacity="0" marker-end="url(#lastMoveArrowhead)" />';
-  elBoard.appendChild(lastMoveArrowSvg);
-  const lastMoveArrowLine = lastMoveArrowSvg.querySelector('.last-move-arrow-line');
-
-  // Visual (flip-aware) column/row for a board square — the same
-  // mirroring gridSlot() applies, so the arrow always points the way the
-  // move actually reads on screen even when the board is flipped for an
-  // online Black player.
-  const visualCol = (x) => (flipped ? SIZE - 1 - x : x);
-  const visualRow = (y) => (flipped ? SIZE - 1 - y : y);
-
-  // Pulls `from` toward `to` by `amount` grid units, capped at 40% of
-  // that pair's own distance so a short segment (e.g. a knight arrow's
-  // 1-square closing leg) never gets eaten away to nothing.
-  function pullToward(from, to, amount) {
-    const dx = to.x - from.x, dy = to.y - from.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const t = Math.min(amount, len * 0.4) / len;
-    return { x: from.x + dx * t, y: from.y + dy * t };
-  }
-
-  // Grid units pulled back from each square's true center. Deliberately
-  // tiny and NOT scaled by move distance -- the explicit ask was for
-  // both ends to land AT the true center of their square, not just
-  // "near" it, so this is only enough to keep the path's own endpoint
-  // (and its round linecap) from poking out past the now-correctly-
-  // anchored arrowhead marker (see refX="10" above).
-  const ARROW_INSET = 0.03;
-
-  // Points the arrow from mv.from -> mv.to, or hides it when mv is
-  // falsy (fresh game / undo back past the first move). Always a single
-  // straight segment directly between the two square centers, for every
-  // piece including the knight -- an earlier version bent the knight's
-  // arrow into an L to trace its actual move shape, but the user's own
-  // reference (a hand-drawn straight diagonal arrow over a screenshot of
-  // that L-bend) asked for a plain straight line regardless of piece
-  // type, so that's what this draws now. Each end is pulled in a hair
-  // from the true center per updateLastMoveArrow's own ARROW_INSET.
-  function updateLastMoveArrow(mv) {
-    if (!mv) { lastMoveArrowLine.setAttribute('d', ''); lastMoveArrowLine.setAttribute('opacity', '0'); return; }
-    const from = { x: visualCol(mv.from.x) + 0.5, y: visualRow(mv.from.y) + 0.5 };
-    const to   = { x: visualCol(mv.to.x)   + 0.5, y: visualRow(mv.to.y)   + 0.5 };
-    const start = pullToward(from, to, ARROW_INSET);
-    const end   = pullToward(to, from, ARROW_INSET);
-    lastMoveArrowLine.setAttribute('d', `M ${start.x} ${start.y} L ${end.x} ${end.y}`);
-    lastMoveArrowLine.setAttribute('opacity', '1');
-  }
-
-  // Single place that ever touches .last-from/.last-to + the arrow, for
-  // BOTH the real last move (render(), driven by game.history) and the
-  // premove preview (onCellTap's isAITurn() branch below, which queues a
-  // move while the AI thinks). Routing both through here is what keeps
-  // them from drifting apart — a premove that only updated the gold
-  // squares and left the arrow pointing at the previous real move (or
-  // vice versa) is exactly the "arrow doesn't match the highlighted
-  // squares" bug this fixes.
+  // Single place that ever touches .last-from/.last-to, for BOTH the real
+  // last move (render(), driven by game.history) and the premove preview
+  // (onCellTap's isAITurn() branch below, which queues a move while the
+  // AI thinks). Routing both through here is what keeps a premove from
+  // leaving a stale highlight behind when a different piece gets queued
+  // instead — squares are addressed via gridSlot(), the exact same
+  // board-coordinate-to-DOM-cell mapping every piece/selection/legal-move
+  // highlight already uses, so this can never land on the wrong cell
+  // regardless of screen size, board flip, or zoom.
   function applyLastMoveHighlight(mv) {
     for (const c of cells) c.classList.remove('last-from', 'last-to');
     if (mv) {
       cells[gridSlot(mv.from.x, mv.from.y)]?.classList.add('last-from');
       cells[gridSlot(mv.to.x, mv.to.y)]?.classList.add('last-to');
     }
-    updateLastMoveArrow(mv);
   }
 
   function applyTurnClass() {

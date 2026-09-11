@@ -668,9 +668,26 @@ export async function initUI() {
   // regardless of screen size, board flip, or zoom.
   function applyLastMoveHighlight(mv) {
     for (const c of cells) c.classList.remove('last-from', 'last-to');
+    // The FROM-square center dot is a real (tiny) DOM element, not a
+    // class-driven ::before — remove any leftover one explicitly. It
+    // can't be relied on to get cleared by render()'s own piece loop:
+    // that loop only touches cell.innerHTML for squares whose piece
+    // actually changed, so a dot sitting in an otherwise-untouched empty
+    // square (nothing ever moves there again) would sit there forever.
+    elBoard.querySelector('.last-move-dot')?.remove();
     if (mv) {
-      cells[gridSlot(mv.from.x, mv.from.y)]?.classList.add('last-from');
-      cells[gridSlot(mv.to.x, mv.to.y)]?.classList.add('last-to');
+      const fromCell = cells[gridSlot(mv.from.x, mv.from.y)];
+      const toCell = cells[gridSlot(mv.to.x, mv.to.y)];
+      fromCell?.classList.add('last-from');
+      toCell?.classList.add('last-to');
+      // The origin square is always empty right after a legal move (the
+      // piece that stood there just left), but guard anyway rather than
+      // assume it — the dot must never sit on top of a piece.
+      if (fromCell && !fromCell.querySelector('.piece')) {
+        const dot = document.createElement('div');
+        dot.className = 'last-move-dot';
+        fromCell.appendChild(dot);
+      }
     }
   }
 

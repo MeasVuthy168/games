@@ -494,45 +494,64 @@ body{
 }
 
 
-/* ===== LAST MOVE — a very subtle gold/yellow tint, distinct from
-   blue=selected and green=legal-move =====
-   Deliberately faint (8-12% on the origin, 15-20% on the destination)
-   so it reads as a quiet board-state indicator, not a design element
-   competing with the pieces — three earlier rounds of feedback on this
-   (corner brackets, then a bold opaque yellow/red fill, then a large
-   arrow) all landed on "too bold/too much" or "arrow doesn't line up",
-   so this intentionally undershoots rather than overshoots. Not a
-   ::before corner-bracket like .selected/.in-check above (that layer
-   stays reserved for those) — instead a color stacked as an EXTRA
-   background-image layer in front of the square's own wood/board
-   texture. That keeps it a background-layer effect: it paints behind
-   the piece image and behind the ::before corner marks (both painted
-   later, in later stacking steps), so a simultaneously-selected or
-   legal-destination square still shows its normal blue/green marks on
-   top, unobscured — matching the requested piece > last-move tint >
-   selected/legal visual hierarchy. Separate light/dark-square pairs
-   since .cell.light/.dark each already own `background-image`. */
-.cell.light.last-from{ background-image: linear-gradient(rgba(250,204,21,.10), rgba(250,204,21,.10)), var(--board-light-img); }
-.cell.dark.last-from { background-image: linear-gradient(rgba(250,204,21,.10), rgba(250,204,21,.10)), var(--board-dark-img); }
+/* ===== LAST MOVE — persistent gold tint, distinct from blue=selected
+   and green=legal-move =====
+   FROM ~18%, TO ~28% -- bumped up from an earlier, fainter pass (8-12%/
+   15-20%) that turned out to disappear into this board's own wood
+   texture: the tint itself was never actually removed (still just
+   .last-from/.last-to, applied once per move by applyLastMoveHighlight
+   in ui.js and never touched again until the NEXT move), but a tint
+   faint enough to lose to wood grain reads as "disappeared" regardless
+   of what the code is actually doing. Not a ::before corner-bracket
+   like .selected/.in-check above (that layer stays reserved for those)
+   — instead a color stacked as an EXTRA background-image layer in
+   front of the square's own wood/board texture. That keeps it a
+   background-layer effect: it paints behind the piece image and behind
+   the ::before corner marks (both painted later, in later stacking
+   steps), so a simultaneously-selected or legal-destination square
+   still shows its normal blue/green marks on top, unobscured —
+   matching the requested piece > last-move tint > selected/legal
+   visual hierarchy. Separate light/dark-square pairs since
+   .cell.light/.dark each already own `background-image`. */
+.cell.light.last-from{ background-image: linear-gradient(rgba(255,215,0,.18), rgba(255,215,0,.18)), var(--board-light-img); }
+.cell.dark.last-from { background-image: linear-gradient(rgba(255,215,0,.18), rgba(255,215,0,.18)), var(--board-dark-img); }
 
 /* Destination gets its own soft radial glow rather than the flat,
    hard-edged tint used for the origin -- an ellipse (matching this
-   board's own non-square cell proportions) fading out from a ~20%-alpha
+   board's own non-square cell proportions) fading out from a ~28%-alpha
    core to nothing by the square's edge reads as a gentle glow, not a
    rectangle with a border, while still never spilling past the cell's
    own box (no box-shadow involved, so no "large glow" bleeding onto
    neighboring squares). */
-.cell.light.last-to{ background-image: radial-gradient(ellipse at center, rgba(250,204,21,.20) 0%, rgba(250,204,21,.20) 35%, rgba(250,204,21,.06) 70%, rgba(250,204,21,0) 100%), var(--board-light-img); }
-.cell.dark.last-to { background-image: radial-gradient(ellipse at center, rgba(250,204,21,.20) 0%, rgba(250,204,21,.20) 35%, rgba(250,204,21,.06) 70%, rgba(250,204,21,0) 100%), var(--board-dark-img); }
+.cell.light.last-to{ background-image: radial-gradient(ellipse at center, rgba(255,215,0,.28) 0%, rgba(255,215,0,.28) 35%, rgba(255,215,0,.08) 70%, rgba(255,215,0,0) 100%), var(--board-light-img); }
+.cell.dark.last-to { background-image: radial-gradient(ellipse at center, rgba(255,215,0,.28) 0%, rgba(255,215,0,.28) 35%, rgba(255,215,0,.08) 70%, rgba(255,215,0,0) 100%), var(--board-dark-img); }
+
+/* Small center dot on the FROM square -- "this is where the piece
+   started," readable even at a glance without needing to compare two
+   squares' tint strength. A real (tiny) DOM element, not a ::before --
+   ::before on .cell is already spoken for by .selected/.in-check, and
+   overriding it here would make a re-selected last-moved square lose
+   its blue selection ring. Inserted/removed by ui.js's
+   applyLastMoveHighlight(), never via CSS alone. */
+.last-move-dot{
+  position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+  width:clamp(6px,1.6vw,10px); height:clamp(6px,1.6vw,10px);
+  border-radius:50%;
+  background:rgba(255,215,0,.55);
+  pointer-events:none;
+}
 
 /* Brief, gentle pulse on the destination square, added by ui.js's
    render() right as the piece's own slide-in animation finishes
    (Animation setting off → skipped entirely, same gate as the slide
    itself: see isMoveDest in ui.js). A one-shot ring that fades to
-   nothing on its own in ~350ms — not a repeating/flashing effect, and
-   deliberately lighter than earlier versions of this pulse so it reads
-   as a brief acknowledgment, not an alert. No removal needed, same
-   pattern as .last-capture's capFlash below. */
+   nothing on its own in ~350ms — not a repeating/flashing effect. This
+   is layered ON TOP of the persistent .last-to fill above, purely as an
+   arrival accent; it never controls whether that fill is present, and
+   removing/finishing this animation does NOT remove .last-to — that
+   class only ever changes on the NEXT move (see applyLastMoveHighlight
+   in ui.js). No removal needed here either, same pattern as
+   .last-capture's capFlash below. */
 .cell.last-move-pulse{ animation: lastMovePulse .35s ease-out; }
 @keyframes lastMovePulse{
   0%  { box-shadow: inset 0 0 0 0 rgba(255,255,255,.55); }

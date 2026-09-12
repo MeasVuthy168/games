@@ -73,33 +73,44 @@ document.addEventListener('DOMContentLoaded', () => {
   renderProfile();
   applyTranslations();
 
-  /* ---------------- coins / AI level / win rate + history ---------------- */
+  /* ---------------- coins / games / win rate + history ---------------- */
   // Local-device stats only (see api.js's header comment) — coins/history
   // never sync per-account, so this is the same regardless of which
   // account is signed in. Moved here from settings.html per user request.
   const statCoins = document.getElementById('statCoins');
-  const statAILevel = document.getElementById('statAILevel');
+  const statGames = document.getElementById('statGames');
   const statWinRate = document.getElementById('statWinRate');
   const historyList = document.getElementById('historyList');
 
-  function renderStats() {
+  // Games and Win Rate are both derived from the exact same completed-games
+  // array passed in here (one localStorage read per render, via
+  // getHistory() in js/history.js — never a reset/abandoned game), so the
+  // two numbers can never disagree with each other the way two
+  // independently-tracked counters could.
+  function renderStats(games) {
     if (statCoins) statCoins.textContent = String(getCoins());
-    const lvl = parseInt(settings.aiLevel, 10);
-    if (statAILevel) statAILevel.textContent = Number.isInteger(lvl) && lvl >= 1 && lvl <= 10 ? String(lvl) : '5';
-    if (statWinRate) {
-      const rate = computeWinRate();
-      statWinRate.textContent = rate === null ? t('profile.notRated') : `${rate}%`;
-    }
+    if (statGames) statGames.textContent = String(games.length);
+    if (statWinRate) statWinRate.textContent = `${computeWinRate(games) ?? 0}%`;
   }
 
-  function renderHistory() {
+  function renderHistory(games) {
     if (!historyList) return;
-    const games = getHistory();
     historyList.innerHTML = '';
     if (games.length === 0) {
       const empty = document.createElement('div');
-      empty.className = 'card-sub';
-      empty.textContent = t('profile.history.empty');
+      empty.className = 'history-empty';
+      empty.innerHTML = `
+        <div class="history-empty-icon" aria-hidden="true">🎮</div>
+        <div class="history-empty-title"></div>
+        <div class="history-empty-sub"></div>
+      `;
+      empty.querySelector('.history-empty-title').textContent = t('profile.history.emptyTitle');
+      empty.querySelector('.history-empty-sub').textContent = t('profile.history.empty');
+      const cta = document.createElement('a');
+      cta.className = 'primary history-empty-cta';
+      cta.href = 'play.html';
+      cta.textContent = t('profile.history.emptyCta');
+      empty.appendChild(cta);
       historyList.appendChild(empty);
       return;
     }
@@ -130,8 +141,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  renderStats();
-  renderHistory();
+  // One getHistory() read feeds both the stat tiles and the list below, so
+  // there's never a second parse of the same localStorage entry per refresh.
+  function refreshProfile() {
+    const games = getHistory();
+    renderStats(games);
+    renderHistory(games);
+  }
+
+  refreshProfile();
   // Paint instantly from the local cache above, then (once signed in)
   // pull the real per-account numbers from the backend and repaint — the
   // backend is authoritative for a signed-in account, so this can only
@@ -140,10 +158,18 @@ document.addEventListener('DOMContentLoaded', () => {
     Api.getStats().then((stats) => {
       syncCoinsFromServer(stats);
       syncHistoryFromServer(stats);
-      renderStats();
-      renderHistory();
+      refreshProfile();
     }).catch(() => {});
   }
+  // A theme purchase on settings.html or a finished game on play.html both
+  // change what these stats should show, but "back" to this page often
+  // restores it from the browser's bfcache instead of re-running this
+  // script (same bfcache situation settings.js's own profile-bar preview
+  // already guards against) — re-read the local coins/history cache
+  // whenever that happens so a stale balance/count never lingers.
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) refreshProfile();
+  });
 
   /* ---------------- shared modal helpers ---------------- */
   function showModal(modal, show) {

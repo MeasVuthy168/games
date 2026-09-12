@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
+  <script src="js/theme-init.js"></script>
+  <script src="js/topbar-back.js" defer></script>
+  <title>Watch | Khmer Chess</title>
+
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#0d2d5c" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <script src="js/pwa.js" defer></script>
+  <script src="js/tabbar-fix.js" defer></script>
+  <script type="module" src="js/notif-badge.js"></script>
+
+  <link rel="stylesheet" href="styles.css" />
+  <script type="module" src="js/watch.js"></script>
+
+  <!-- Page-specific polish (mirrors settings.html/profile.html's own block) -->
+  <style>
+    .watch-page{ padding-bottom:.5rem; }
+
+    /* Two-tab segmented control — no existing tab component in the app to
+       reuse, so this is new, but built from the same tokens (var(--blue),
+       .card's radius/shadow) every other page's own polish block uses. */
+    .watch-tabs{
+      display:flex; gap:.5rem; margin:0 1rem 1rem; padding:.3rem;
+      background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
+      border:1px solid rgba(13,45,92,.06);
+    }
+    .watch-tab{
+      flex:1; padding:.55rem .5rem; border:none; border-radius:.7rem;
+      background:transparent; color:var(--ink); font-weight:800; font-size:.88rem;
+      cursor:pointer; opacity:.6;
+    }
+    .watch-tab.active{ background:var(--blue); color:#fff; opacity:1; }
+
+    .watch-panel[hidden]{ display:none; }
+
+    /* Loading / empty / error state — same shape as profile.html's history
+       empty state (icon, title, subtext, optional CTA). */
+    .watch-state{
+      display:flex; flex-direction:column; align-items:center; text-align:center;
+      gap:.3rem; padding:2rem 1rem 1.2rem;
+    }
+    .watch-state-icon{ font-size:2.1rem; line-height:1; margin-bottom:.2rem; }
+    .watch-state-title{ font-weight:800; font-size:.95rem; color:var(--ink); }
+    .watch-state-sub{ font-size:.8rem; opacity:.68; max-width:260px; line-height:1.4; }
+    .watch-state .primary, .watch-state .secondary{ margin-top:.6rem; max-width:220px; }
+    .watch-state a.primary{ text-decoration:none; display:inline-flex; align-items:center; justify-content:center; }
+
+    /* Friend Live list row — two names either side of a small "⚔", a LIVE
+       dot, move count, and a Watch button. Built on the shared .card /
+       .clickable primitives (styles.css) rather than inventing a new card
+       shape. */
+    .live-game-row{
+      display:flex; align-items:center; justify-content:space-between; gap:.6rem;
+      padding:.85rem 1rem;
+    }
+    .live-game-info{ min-width:0; flex:1; }
+    .live-badge{
+      display:inline-flex; align-items:center; gap:.3rem; color:#c0392b;
+      font-weight:800; font-size:.72rem; margin-bottom:.3rem;
+    }
+    .live-dot{
+      width:7px; height:7px; border-radius:50%; background:#e0392b; flex:none;
+      animation:liveBlink 1.4s ease-in-out infinite;
+    }
+    @keyframes liveBlink{ 0%,100%{ opacity:1 } 50%{ opacity:.35 } }
+    .live-game-players{
+      font-weight:800; font-size:.92rem; color:var(--ink);
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    .live-game-meta{ font-size:.76rem; opacity:.65; margin-top:.15rem; }
+
+    /* Spectator board view */
+    .spectate-view{ padding:0 1rem 1rem; }
+    .spectate-topbar{
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem;
+    }
+    .spectate-status-banner{
+      margin:0 0 .6rem; padding:.55rem .8rem; border-radius:.7rem;
+      background:#fff3cd; color:#7a5b00; font-weight:700; font-size:.85rem; text-align:center;
+    }
+    .spectate-board-wrap{
+      display:flex; flex-direction:column; gap:.4rem;
+      /* Matches play.html's own .board-panel sizing approach so the board
+         never grows past a comfortable width on a tall/narrow phone. */
+      max-width:480px; margin:0 auto;
+    }
+    .captured-row{
+      display:flex; flex-wrap:wrap; gap:2px; min-height:16px; align-items:center;
+    }
+    .captured-piece{
+      width:16px; height:16px; background-size:contain; background-repeat:no-repeat;
+      background-position:center; opacity:.85;
+    }
+    .spectate-meta-row{
+      display:flex; align-items:center; justify-content:center; gap:.6rem;
+      font-size:.82rem; font-weight:700; opacity:.75; padding:.2rem 0;
+    }
+    .move-history{
+      max-height:120px; overflow-y:auto; font-size:.78rem; opacity:.75;
+      background:var(--panel); border-radius:.7rem; padding:.5rem .7rem;
+      border:1px solid rgba(13,45,92,.06); line-height:1.6;
+    }
+
+    /* AI vs AI panel */
+    .ai-setup{
+      display:flex; flex-direction:column; gap:.7rem; padding:0 1rem 1rem;
+    }
+    .ai-level-row{ display:flex; gap:.6rem; }
+    .ai-level-field{ flex:1; }
+    .ai-level-field label{ font-size:.8rem; font-weight:700; opacity:.75; display:block; margin-bottom:.3rem; }
+    .ai-level-field select{
+      width:100%; font:inherit; padding:.5rem .6rem; border-radius:.6rem;
+      border:1px solid #d7dee8; background:var(--input-bg); color:var(--ink);
+    }
+    .ai-controls-row{ display:flex; gap:.6rem; }
+    .ai-controls-row button{ flex:1; }
+    .ai-result-banner{
+      display:flex; flex-direction:column; align-items:center; gap:.2rem;
+      text-align:center; padding:.9rem 1rem; margin:0 1rem .8rem; border-radius:.9rem;
+      background:var(--panel); box-shadow:var(--shadow); border:1px solid rgba(13,45,92,.06);
+    }
+    .ai-result-title{ font-weight:800; font-size:1.05rem; }
+    .ai-result-sub{ font-size:.85rem; opacity:.7; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <button class="icon-btn topbar-back" type="button" aria-label="Back">‹</button>
+      <h1 data-i18n="watch.title">Watch</h1>
+      <div class="spacer"></div>
+    </header>
+
+    <main class="page watch-page">
+      <div class="watch-tabs" role="tablist">
+        <button class="watch-tab active" id="tabFriend" type="button" role="tab" aria-selected="true">
+          🔴 <span data-i18n="watch.tabFriend">Friends Online</span>
+        </button>
+        <button class="watch-tab" id="tabAI" type="button" role="tab" aria-selected="false">
+          🤖 <span data-i18n="watch.tabAI">AI vs AI</span>
+        </button>
+      </div>
+
+      <!-- Friend Live panel -->
+      <section id="panelFriend" class="watch-panel">
+        <div id="friendListView">
+          <div id="friendState" class="watch-state" hidden></div>
+          <div id="liveGamesList" class="card-list"></div>
+        </div>
+
+        <div id="spectateView" class="spectate-view" hidden>
+          <div class="spectate-topbar">
+            <button class="pill" id="btnBackToList" type="button">‹ <span data-i18n="watch.tabFriend">Friends Online</span></button>
+          </div>
+          <div id="spectateBanner" class="spectate-status-banner" hidden></div>
+          <div class="spectate-board-wrap">
+            <div class="timers">
+              <div class="player-row top">
+                <div class="player-avatar" id="specAvatarBlack" hidden></div>
+                <div class="player-name" id="specNameBlack">—</div>
+              </div>
+              <div class="captured-row" id="specCapturedByWhite"></div>
+            </div>
+
+            <div id="specBoard" class="board board-wood no-coords" aria-label="Spectator board"></div>
+
+            <div class="captured-row" id="specCapturedByBlack"></div>
+            <div class="timers">
+              <div class="player-row bottom">
+                <div class="player-avatar" id="specAvatarWhite" hidden></div>
+                <div class="player-name" id="specNameWhite">—</div>
+              </div>
+            </div>
+
+            <div class="spectate-meta-row">
+              <span class="live-badge"><span class="live-dot"></span><span data-i18n="watch.live">LIVE</span></span>
+              <span id="specMoveLabel"></span>
+            </div>
+            <div class="move-history" id="specHistory"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI vs AI panel -->
+      <section id="panelAI" class="watch-panel" hidden>
+        <div class="ai-setup">
+          <div class="ai-level-row">
+            <div class="ai-level-field">
+              <label data-i18n="watch.white">White</label>
+              <select id="aiLevelWhite"></select>
+            </div>
+            <div class="ai-level-field">
+              <label data-i18n="watch.black">Black</label>
+              <select id="aiLevelBlack"></select>
+            </div>
+          </div>
+          <div class="ai-controls-row">
+            <button class="primary" id="btnAIStart" type="button" data-i18n="watch.startBtn">▶ Start</button>
+            <button class="secondary" id="btnAIPause" type="button" data-i18n="watch.pauseBtn" disabled>⏸ Pause</button>
+            <button class="secondary" id="btnAIRestart" type="button" data-i18n="watch.restartBtn" disabled>🔄 Restart</button>
+          </div>
+        </div>
+
+        <div id="aiResultBanner" class="ai-result-banner" hidden>
+          <div class="ai-result-title" id="aiResultTitle"></div>
+          <div class="ai-result-sub" id="aiResultSub"></div>
+          <button class="pill" id="btnAIWatchAgain" type="button" data-i18n="watch.watchAgain">Watch Again</button>
+        </div>
+
+        <div class="spectate-board-wrap" style="padding:0 1rem;">
+          <div class="timers">
+            <div class="player-row top">
+              <div class="player-name" id="aiNameBlack">ខ្មៅ (Black)</div>
+            </div>
+            <div class="captured-row" id="aiCapturedByWhite"></div>
+          </div>
+
+          <div id="aiBoard" class="board board-wood no-coords" aria-label="AI vs AI board"></div>
+
+          <div class="captured-row" id="aiCapturedByBlack"></div>
+          <div class="timers">
+            <div class="player-row bottom">
+              <div class="player-name" id="aiNameWhite">ស (White)</div>
+            </div>
+          </div>
+
+          <div class="spectate-meta-row">
+            <span id="aiMoveLabel"></span>
+          </div>
+          <div class="move-history" id="aiHistory"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom nav: same 5 items as every other page. Watch isn't a tab of
+         its own — it's reached from the Home 6th card, so Home stays lit. -->
+    <footer id="appTabbar" class="bottom-bar">
+      <a class="nav-item active" href="index.html" aria-current="page">
+        <img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span>
+      </a>
+      <a class="nav-item" href="friends.html">
+        <img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span>
+      </a>
+      <a class="nav-item" href="play.html">
+        <img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span>
+      </a>
+      <a class="nav-item" href="settings.html">
+        <img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span>
+      </a>
+      <a class="nav-item" href="notifications.html">
+        <img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span>
+      </a>
+    </footer>
+    <div id="bottomSpacer" aria-hidden="true"></div>
+  </div>
+
+  <script>
+    (function(){
+      const bar = document.getElementById('appTabbar');
+      const spacer = document.getElementById('bottomSpacer');
+      if(!bar || !spacer) return;
+      function setSpacer(){ spacer.style.height = bar.offsetHeight + 'px'; }
+      if (document.readyState === 'complete') setSpacer(); else window.addEventListener('load', setSpacer);
+      window.addEventListener('resize', setSpacer);
+    })();
+  </script>
+</body>
+</html>

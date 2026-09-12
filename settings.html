@@ -115,6 +115,21 @@
     }
     .piece-theme-choice-name{ font-size:.78rem; font-weight:700; text-align:center; }
 
+    /* Coin balance readout above each theme grid, and the locked/price
+       state on a theme card that hasn't been unlocked yet — dimmed swatch
+       plus a small lock+price badge in place of a plain name. */
+    .theme-coin-balance{
+      display:flex; align-items:center; gap:.35rem; font-size:.82rem;
+      font-weight:700; color:#8a6d1a; margin:0 0 .5rem;
+    }
+    .board-theme-choice.locked, .piece-theme-choice.locked{ opacity:.72; }
+    .board-theme-choice.locked .board-theme-swatch,
+    .piece-theme-choice.locked .piece-theme-swatch{ filter:grayscale(.55); }
+    .theme-choice-price{
+      display:flex; align-items:center; gap:.25rem; justify-content:center;
+      font-size:.78rem; font-weight:700; color:#8a6d1a;
+    }
+
     /* Language radio flags: a real flag icon per option instead of text
        alone, so the choice reads at a glance. */
     .lang-flag{
@@ -243,6 +258,7 @@
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
+            <div class="theme-coin-balance" id="pieceThemeCoins"></div>
             <div class="piece-theme-grid" id="pieceThemeGrid"></div>
           </div>
         </details>
@@ -253,6 +269,7 @@
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
+            <div class="theme-coin-balance" id="boardThemeCoins"></div>
             <div class="board-theme-grid" id="boardThemeGrid"></div>
           </div>
         </details>

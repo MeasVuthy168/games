@@ -6,7 +6,7 @@ const CORE = [
   './tournament.html','./rewards.html','./ai-vs-ai.html',
   './auth.html','./reset-password.html','./verify-email.html','./chat.html',
   './styles.css','./js/main.js','./js/ui.js','./js/ai.js','./js/ai-engine.js','./js/ai-worker.js','./js/game.js','./js/pwa.js','./js/settings.js','./js/profile.js',
-  './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/i18n.js',
+  './js/coins.js','./js/history.js','./js/profile-data.js','./js/themes.js','./js/theme-unlocks.js','./js/i18n.js',
   './js/tournament.js','./js/rewards.js','./js/tournament-page.js','./js/rewards-page.js','./js/ai-vs-ai.js',
   './js/api.js','./js/auth-page.js','./js/reset-password-page.js','./js/verify-email-page.js','./js/friends-page.js','./js/chat-page.js','./js/notifications-page.js','./js/notif-badge.js','./js/push-client.js',
   './js/theme-init.js','./js/toast.js','./js/topbar-back.js',

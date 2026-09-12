@@ -8,25 +8,18 @@
 //   source of truth for both the board and for who is allowed to see it;
 //   this file never renders anything the /spectate endpoint didn't return.
 //
-// - AI vs AI: reuses the exact same chooseAIMove()/Game() pieces that
-//   js/ai-vs-ai.js's dev-only tool already proved out — no second rules
-//   engine, no second AI, and (like ai-vs-ai.js) it never imports
-//   js/history.js, so a watched AI game can never appear in anyone's
-//   personal Games/Win-Rate stats.
+// - AI vs AI: a setup screen only (level pickers + Start) — Start opens
+//   the real play.html?mode=aivsai, which reuses the exact same board/
+//   clocks/checkmate-presentation a real game has (see js/ui.js) instead
+//   of a second, separate board implementation living here.
 import * as Api from './api.js';
 import { initTranslations, t } from './i18n.js';
 import { Game, SIZE, COLORS } from './game.js';
-import { chooseAIMove, resetAI } from './ai.js';
 import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-engine.js';
 import { boardThemes, pieceImageUrl, clampThemeIndex, activePieceTheme } from './themes.js';
 
 const LIVE_LIST_POLL_MS = 4000;
 const SPECTATE_POLL_MS = 1200;
-const AI_MOVE_DELAY_MS = 400;
-// Same safety valve as js/ai-vs-ai.js — Makruk has no repetition/50-move
-// rule in js/game.js, so this adjudicates a draw rather than looping
-// forever if two AIs shuffle pieces indefinitely.
-const AI_MAX_PLIES = 400;
 
 const LS_KEY = 'kc_settings_v1';
 function loadSettings() {
@@ -360,19 +353,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /* ---------------- AI vs AI ---------------- */
+  // A setup screen only — Start opens the real play.html (?mode=aivsai),
+  // so watching two AIs uses the exact same board/clocks/checkmate
+  // presentation a real game does, instead of a second board built here.
   const levelWhiteSel = document.getElementById('aiLevelWhite');
   const levelBlackSel = document.getElementById('aiLevelBlack');
   const btnAIStart = document.getElementById('btnAIStart');
-  const btnAIPause = document.getElementById('btnAIPause');
-  const btnAIRestart = document.getElementById('btnAIRestart');
-  const aiBoardEl = document.getElementById('aiBoard');
-  const aiBoard = createBoard(aiBoardEl);
-  const aiMoveLabel = document.getElementById('aiMoveLabel');
-  const aiHistoryEl = document.getElementById('aiHistory');
-  const aiResultBanner = document.getElementById('aiResultBanner');
-  const aiResultTitle = document.getElementById('aiResultTitle');
-  const aiResultSub = document.getElementById('aiResultSub');
-  const btnAIWatchAgain = document.getElementById('btnAIWatchAgain');
 
   for (const sel of [levelWhiteSel, levelBlackSel]) {
     for (let l = MIN_LEVEL; l <= MAX_LEVEL; l++) {
@@ -384,112 +370,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  let aiGame = null;
-  let aiState = 'idle'; // idle | running | paused | finished
-  let aiRunToken = 0;
-  let aiThinking = false; // guards against ever having two searches in flight
-  let aiPlies = 0;
-
-  function setAIControls() {
-    const busy = aiState === 'running' || aiState === 'paused';
-    levelWhiteSel.disabled = busy;
-    levelBlackSel.disabled = busy;
-    btnAIStart.disabled = busy;
-    btnAIPause.disabled = aiState === 'idle' || aiState === 'finished';
-    btnAIPause.textContent = aiState === 'paused' ? t('watch.resumeBtn') : t('watch.pauseBtn');
-    btnAIRestart.disabled = aiState === 'idle';
-  }
-
-  function renderAIBoardAndMeta() {
-    aiBoard.render(aiGame.board);
-    aiBoard.setTurn(aiGame.turn);
-    const { capturedByWhite, capturedByBlack, historyLines, moveCount } = replayForDisplay(aiGame.history);
-    renderCaptured(document.getElementById('aiCapturedByWhite'), capturedByWhite, COLORS.BLACK);
-    renderCaptured(document.getElementById('aiCapturedByBlack'), capturedByBlack, COLORS.WHITE);
-    aiMoveLabel.textContent = `${t('watch.move')} ${moveCount}`;
-    renderHistoryPanel(aiHistoryEl, historyLines);
-  }
-
-  // Single self-rescheduling step, never a tight while-loop: each step
-  // awaits exactly one chooseAIMove() call, then — only if still the
-  // active run and still `running` — schedules the next step after a
-  // short delay. aiThinking additionally guards the (never expected, but
-  // never assumed away) case of this being invoked twice concurrently, so
-  // there is structurally only ever one search in flight.
-  async function aiStep(myToken) {
-    if (myToken !== aiRunToken || aiState !== 'running' || aiThinking) return;
-
-    const status = aiGame.status();
-    if (status.state === 'checkmate' || status.state === 'stalemate') return finishAI(status);
-    if (aiPlies >= AI_MAX_PLIES) return finishAI({ state: 'ply-limit' });
-
-    const color = aiGame.turn;
-    const level = color === COLORS.WHITE ? parseInt(levelWhiteSel.value, 10) : parseInt(levelBlackSel.value, 10);
-
-    aiThinking = true;
-    let move;
-    try {
-      move = await chooseAIMove(aiGame, { level, aiColor: color });
-    } catch (err) {
-      aiThinking = false;
-      return finishAI({ state: 'error', message: String(err?.message || err) });
-    }
-    aiThinking = false;
-    // Stopped/restarted/paused while thinking — never apply a move that
-    // arrived after the run it belongs to is no longer the active one.
-    if (myToken !== aiRunToken || aiState !== 'running') return;
-    if (!move || !move.from || !move.to) return finishAI({ state: 'no-move', toMove: color });
-
-    const res = aiGame.move(move.from, move.to);
-    if (!res.ok) return finishAI({ state: 'illegal', toMove: color });
-
-    aiPlies++;
-    renderAIBoardAndMeta();
-    setTimeout(() => aiStep(myToken), AI_MOVE_DELAY_MS);
-  }
-
-  function finishAI(status) {
-    aiState = 'finished';
-    aiThinking = false;
-    resetAI();
-    setAIControls();
-
-    let title, sub = '';
-    if (status.state === 'checkmate') {
-      title = status.toMove === COLORS.WHITE ? t('watch.resultBlackWins') : t('watch.resultWhiteWins');
-    } else if (status.state === 'stalemate' || status.state === 'ply-limit') {
-      title = t('watch.resultDraw');
-    } else {
-      title = t('watch.resultDraw');
-      sub = status.message || '';
-    }
-    aiResultTitle.textContent = t('watch.gameOver');
-    aiResultSub.textContent = sub ? `${title} — ${sub}` : title;
-    aiResultBanner.hidden = false;
-  }
-
-  function startAIGame() {
-    aiRunToken++;
-    aiGame = new Game();
-    aiPlies = 0;
-    aiState = 'running';
-    aiThinking = false;
-    aiResultBanner.hidden = true;
-    setAIControls();
-    renderAIBoardAndMeta();
-    aiStep(aiRunToken);
-  }
-
-  btnAIStart.addEventListener('click', () => { if (aiState === 'idle' || aiState === 'finished') startAIGame(); });
-  btnAIRestart.addEventListener('click', startAIGame);
-  btnAIWatchAgain.addEventListener('click', startAIGame);
-  btnAIPause.addEventListener('click', () => {
-    if (aiState === 'running') { aiState = 'paused'; setAIControls(); }
-    else if (aiState === 'paused') { aiState = 'running'; setAIControls(); aiStep(aiRunToken); }
+  btnAIStart.addEventListener('click', () => {
+    const levelWhite = parseInt(levelWhiteSel.value, 10);
+    const levelBlack = parseInt(levelBlackSel.value, 10);
+    location.href = `play.html?mode=aivsai&levelWhite=${levelWhite}&levelBlack=${levelBlack}`;
   });
-
-  setAIControls();
-  aiBoard.render(new Game().board);
 
   /* ---------------- cleanup + init ---------------- */
   // Belt-and-suspenders: this is a static multi-page app (navigating away

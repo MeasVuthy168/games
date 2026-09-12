@@ -12,6 +12,10 @@ import { showToast } from './toast.js';
 import { initTranslations, t } from './i18n.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
+// Natural pacing between plies in AI-vs-AI mode (js/watch.js's own AI vs AI
+// tab uses the same constant) — a real delay, not a tight loop, and never
+// more than one step ever scheduled per completed move (see thinkAndPlay()).
+const AI_VS_AI_MOVE_DELAY_MS = 400;
 
 const LS_KEY   = 'kc_settings_v1';
 const SAVE_KEY = 'kc_game_state_makruk_v1';
@@ -464,6 +468,21 @@ export async function initUI() {
   window.__kcOnlineActive = onlineMode;
   let onlineState = null; // latest {status,myColor,turn,myTurn,board,history,result,opponentId,opponentName,...}
 
+  // AI vs AI mode: watch.html's "Start" sends the viewer here with
+  // ?mode=aivsai&levelWhite=W&levelBlack=B instead of running its own
+  // separate board/game-loop, so watching a match uses this exact same
+  // screen (board, clocks, checkmate/celebration presentation) a real
+  // game does. Both sides are AI, no human input is ever accepted (see
+  // isAITurn()/humanColor()/onCellTap below), and a watched game must
+  // never touch anyone's Games/Win-Rate/Coins — see recordGameEnd()'s own
+  // early return for this mode.
+  const levelWhiteParam = parseInt(urlParams.get('levelWhite'), 10);
+  const levelBlackParam = parseInt(urlParams.get('levelBlack'), 10);
+  const aiVsAiMode = urlParams.get('mode') === 'aivsai' &&
+    Number.isInteger(levelWhiteParam) && levelWhiteParam >= 1 && levelWhiteParam <= 10 &&
+    Number.isInteger(levelBlackParam) && levelBlackParam >= 1 && levelBlackParam <= 10;
+  window.__kcAiVsAiActive = aiVsAiMode;
+
   // Only AI/local-friend games get the page locked (see play.html's
   // .board-locked CSS) — online games have a real chat form that can sit
   // below the fold, so that page must stay scrollable to reach it.
@@ -506,6 +525,14 @@ export async function initUI() {
       game.turn = onlineState.turn;
     }
   }
+  if (aiVsAiMode) {
+    // Always a clean board for a watched match, never a resumed one —
+    // same reasoning as tournamentMode's own clearGameState() above.
+    settings.aiEnabled = true;
+    settings.aiLevelWhite = levelWhiteParam;
+    settings.aiLevelBlack = levelBlackParam;
+    clearGameState();
+  }
   beeper.enabled = !!settings.sound;
   currentSettings = settings; // see isAnimationEnabled()/isHapticEnabled() above
   prefersReducedMotionMQ = window.matchMedia?.('(prefers-reduced-motion: reduce)') || null;
@@ -529,6 +556,14 @@ export async function initUI() {
   // button); a resumed (reloaded) game just restarts the clock from now.
   let gameStartedAt = Date.now();
 
+  // AI vs AI safety valve — same reasoning and value as js/ai-vs-ai.js's
+  // own MAX_PLIES: Makruk has no repetition/50-move draw rule in
+  // js/game.js, and the Counting Draw system doesn't cover every possible
+  // shuffle, so two weak AIs could otherwise play (in principle) forever.
+  // Reset on every fresh game.
+  const AI_VS_AI_MAX_PLIES = 400;
+  let aiVsAiPlies = 0;
+
   function applyBoardTheme() {
     const idx = clampThemeIndex(settings.boardTheme, boardThemes);
     const theme = boardThemes[idx];
@@ -551,14 +586,17 @@ export async function initUI() {
 
   function isAITurn() {
     if (!settings.aiEnabled) return false;
+    if (aiVsAiMode) return true; // both sides are AI — every turn is "the AI's turn"
     if (settings.aiColor === 'w' && game.turn === COLORS.WHITE) return true;
     if (settings.aiColor === 'b' && game.turn === COLORS.BLACK) return true;
     return false;
   }
 
   // The human's own color when playing vs AI (AI takes the other one).
+  // null in AI-vs-AI mode — there is no human seat, so nothing typed here
+  // can ever match a clicked piece's color (see onCellTap's premove gate).
   function humanColor() {
-    if (!settings.aiEnabled) return null;
+    if (!settings.aiEnabled || aiVsAiMode) return null;
     return settings.aiColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
   }
 
@@ -600,6 +638,12 @@ export async function initUI() {
       if (elAvatarTop) elAvatarTop.hidden = false;
       if (elAvatarBottom) elAvatarBottom.hidden = false;
       if (elResign) elResign.hidden = false;
+    } else if (aiVsAiMode) {
+      elNameTop.textContent    = `AI Level ${settings.aiLevelBlack} · ${pieceColors.b.short}`;
+      elNameBottom.textContent = `AI Level ${settings.aiLevelWhite} · ${pieceColors.w.short}`;
+      if (elAvatarTop) elAvatarTop.hidden = true;
+      if (elAvatarBottom) elAvatarBottom.hidden = true;
+      if (elResign) elResign.hidden = true;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
       elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ` · ${pieceColors.b.short}`;
@@ -624,6 +668,14 @@ export async function initUI() {
     document.getElementById('clockB')?.style.setProperty('display', 'none');
     document.getElementById('clockW')?.style.setProperty('display', 'none');
     document.getElementById('localControls')?.setAttribute('hidden', '');
+  }
+  // AI vs AI: Reset ("Restart") and Pause both still make sense (Reset
+  // already starts a fresh isAITurn()-driven game; see thinkAndPlay()'s
+  // aiVsAiMode chaining below) — only Undo doesn't, since there's no
+  // human move to step back from and undoing mid-autonomous-play would
+  // race with the next scheduled AI move.
+  if (aiVsAiMode) {
+    document.getElementById('btnUndo')?.setAttribute('hidden', '');
   }
 
   const clocks = new Clocks((w, b) => {
@@ -705,6 +757,10 @@ export async function initUI() {
   // Who-plays suffix so the current player's role is always explicit,
   // regardless of which color they picked (White or Black).
   function whoSuffix(color) {
+    // No human seat at all — the "AI Level N" name rows (applyPlayerLabels)
+    // already say who's who; a "· វេនអ្នក (You)" suffix here would falsely
+    // claim someone is playing.
+    if (aiVsAiMode) return '';
     if (onlineMode) return color === onlineState.myColor ? ' · វេនអ្នក (You)' : ` · វេន ${onlineState.opponentName}`;
     if (!settings.aiEnabled) return '';
     return color === settings.aiColor ? ' · វេន Master (AI)' : ' · វេនអ្នក (You)';
@@ -863,6 +919,9 @@ export async function initUI() {
   // One js/history.js entry per real completed game — called only from the
   // checkmate/stalemate branches below, never on Reset/Undo.
   function recordGameEnd(kind, matedColor) {
+    // Watching two AIs play is not "playing" — this must never create a
+    // Games/Win-Rate/Coins entry for whoever happens to be watching.
+    if (aiVsAiMode) return null;
     const mode = settings.aiEnabled ? 'ai' : 'friend';
     let result;
     if (kind === 'stalemate' || kind === 'counting') {
@@ -910,7 +969,17 @@ export async function initUI() {
     if (status?.state === 'checkmate') {
       const result = recordGameEnd('checkmate', status.toMove);
       const winnerColor = status.toMove === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
-      if (settings.aiEnabled) {
+      if (aiVsAiMode) {
+        const pieceColors = activePieceTheme(settings.pieceTheme).colors;
+        const winnerText = winnerColor === COLORS.WHITE
+          ? `${t('watch.resultWhiteWins')} (${pieceColors.w.short})`
+          : `${t('watch.resultBlackWins')} (${pieceColors.b.short})`;
+        presentGameResult({
+          result: 'WIN',
+          reason: 'CHECKMATE',
+          extra: { titleOverride: t('watch.gameOver'), descOverride: winnerText, summary: buildSummary(`AI L${settings.aiLevelWhite} vs AI L${settings.aiLevelBlack}`) },
+        });
+      } else if (settings.aiEnabled) {
         const humanWon = winnerColor !== settings.aiColor;
         presentGameResult({
           result: humanWon ? 'WIN' : 'LOSS',
@@ -1468,13 +1537,39 @@ export async function initUI() {
     return moves[(Math.random() * moves.length) | 0];
   }
 
+  // AI vs AI has no human move to trigger the next ply, so this chains
+  // itself — a real delay (not a tight loop), and only ever one step
+  // scheduled per completed move. Checking clocks.running (not just
+  // aiGen) is what makes Pause actually take effect: it stops the chain
+  // after the in-flight move finishes, rather than trying to interrupt a
+  // search already underway. The ply cap adjudicates a draw rather than
+  // ever scheduling a 401st step.
+  function continueAiVsAi(alreadyOver, myGen) {
+    if (!aiVsAiMode || alreadyOver) return;
+    aiVsAiPlies++;
+    if (aiVsAiPlies >= AI_VS_AI_MAX_PLIES) {
+      presentGameResult({
+        result: 'DRAW',
+        reason: 'STALEMATE',
+        extra: { summary: buildSummary(`AI L${settings.aiLevelWhite} vs AI L${settings.aiLevelBlack}`) },
+      });
+      return;
+    }
+    setTimeout(() => { if (aiGen === myGen && clocks.running) thinkAndPlay(); }, AI_VS_AI_MOVE_DELAY_MS);
+  }
+
   async function thinkAndPlay() {
     if (AILock || !isAITurn()) return;
     const myGen = aiGen;
     setBoardBusy(true);
 
     try {
-      const aiOpts = { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
+      // Single-AI modes always think as settings.aiColor; AI vs AI has no
+      // one fixed AI side — it's whichever color is actually on move, at
+      // that side's own configured level.
+      const aiOpts = aiVsAiMode
+        ? { level: game.turn === COLORS.WHITE ? settings.aiLevelWhite : settings.aiLevelBlack, aiColor: game.turn, timeMs: 120 }
+        : { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
       window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
 
@@ -1496,7 +1591,7 @@ export async function initUI() {
 
       if (!res || !res.ok) {
         window.AIDebug?.log('[UI] engine move illegal → fallback random');
-        const fb = pickRandomLegalFor(settings.aiColor);
+        const fb = pickRandomLegalFor(aiVsAiMode ? game.turn : settings.aiColor);
         if (!fb) { settings.aiEnabled = false; return; }
         const before2 = game.at(fb.to.x, fb.to.y);
         const prev2 = game.turn;
@@ -1508,7 +1603,8 @@ export async function initUI() {
         clocks.switchedByMove(prev2);
         render(); saveGameState(game, clocks);
 
-        concludeIfOver(res2);
+        const over2 = concludeIfOver(res2);
+        continueAiVsAi(over2, myGen);
         return;
       }
 
@@ -1517,7 +1613,8 @@ export async function initUI() {
       clocks.switchedByMove(prevTurn);
       render(); saveGameState(game, clocks);
 
-      concludeIfOver(res);
+      const over = concludeIfOver(res);
+      continueAiVsAi(over, myGen);
 
     } catch (e) {
       console.error('[AI] thinkAndPlay failed', e);
@@ -1629,6 +1726,7 @@ export async function initUI() {
   }
 
   function onCellTap(e) {
+    if (aiVsAiMode) return; // pure spectator screen — no click/tap input of any kind
     if (animLock) return; // an animation is still visually settling
     if (game.winner) return; // game already over (checkmate/stalemate/Counting Draw) — input locked
     const x = +e.currentTarget.dataset.x;
@@ -1907,6 +2005,7 @@ export async function initUI() {
     resetResultPresentation(); // New Game always clears any pending/shown celebration first
     game.reset();
     gameStartedAt = Date.now();
+    aiVsAiPlies = 0;
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
@@ -1936,6 +2035,11 @@ export async function initUI() {
       s.setAttribute('data-i18n', key);
       s.textContent = t(key);
     }
+    // AI vs AI's move chain checks clocks.running before scheduling its
+    // next step (see thinkAndPlay()), so pausing already stops it cleanly
+    // — but nothing then restarts the chain on its own. Resuming (was
+    // paused, now running again) does, as long as the game hasn't ended.
+    if (aiVsAiMode && !wasRunning && !game.winner) thinkAndPlay();
   });
 
   window.addEventListener('beforeunload', () => saveGameState(game, clocks));

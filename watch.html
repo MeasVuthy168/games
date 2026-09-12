@@ -117,15 +117,6 @@
       width:100%; font:inherit; padding:.5rem .6rem; border-radius:.6rem;
       border:1px solid #d7dee8; background:var(--input-bg); color:var(--ink);
     }
-    .ai-controls-row{ display:flex; gap:.6rem; }
-    .ai-controls-row button{ flex:1; }
-    .ai-result-banner{
-      display:flex; flex-direction:column; align-items:center; gap:.2rem;
-      text-align:center; padding:.9rem 1rem; margin:0 1rem .8rem; border-radius:.9rem;
-      background:var(--panel); box-shadow:var(--shadow); border:1px solid rgba(13,45,92,.06);
-    }
-    .ai-result-title{ font-weight:800; font-size:1.05rem; }
-    .ai-result-sub{ font-size:.85rem; opacity:.7; }
   </style>
 </head>
 <body>
@@ -186,7 +177,10 @@
         </div>
       </section>
 
-      <!-- AI vs AI panel -->
+      <!-- AI vs AI panel — a setup screen only. Starting a match opens the
+           real play.html (mode=aivsai), so watching two AIs uses the exact
+           same board/clocks/checkmate-celebration screen a real game does,
+           instead of a second, separate board implementation here. -->
       <section id="panelAI" class="watch-panel" hidden>
         <div class="ai-setup">
           <div class="ai-level-row">
@@ -199,40 +193,7 @@
               <select id="aiLevelBlack"></select>
             </div>
           </div>
-          <div class="ai-controls-row">
-            <button class="primary" id="btnAIStart" type="button" data-i18n="watch.startBtn">▶ Start</button>
-            <button class="secondary" id="btnAIPause" type="button" data-i18n="watch.pauseBtn" disabled>⏸ Pause</button>
-            <button class="secondary" id="btnAIRestart" type="button" data-i18n="watch.restartBtn" disabled>🔄 Restart</button>
-          </div>
-        </div>
-
-        <div id="aiResultBanner" class="ai-result-banner" hidden>
-          <div class="ai-result-title" id="aiResultTitle"></div>
-          <div class="ai-result-sub" id="aiResultSub"></div>
-          <button class="pill" id="btnAIWatchAgain" type="button" data-i18n="watch.watchAgain">Watch Again</button>
-        </div>
-
-        <div class="spectate-board-wrap" style="padding:0 1rem;">
-          <div class="timers">
-            <div class="player-row top">
-              <div class="player-name" id="aiNameBlack">ខ្មៅ (Black)</div>
-            </div>
-            <div class="captured-row" id="aiCapturedByWhite"></div>
-          </div>
-
-          <div id="aiBoard" class="board board-wood no-coords" aria-label="AI vs AI board"></div>
-
-          <div class="captured-row" id="aiCapturedByBlack"></div>
-          <div class="timers">
-            <div class="player-row bottom">
-              <div class="player-name" id="aiNameWhite">ស (White)</div>
-            </div>
-          </div>
-
-          <div class="spectate-meta-row">
-            <span id="aiMoveLabel"></span>
-          </div>
-          <div class="move-history" id="aiHistory"></div>
+          <button class="primary" id="btnAIStart" type="button" data-i18n="watch.startBtn">▶ Start</button>
         </div>
       </section>
     </main>

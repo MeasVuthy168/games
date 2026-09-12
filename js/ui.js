@@ -1848,6 +1848,32 @@ export async function initUI() {
       catch (err) { showToast(err.message || 'Could not resign', 'error'); }
     });
 
+    // Watch page opt-in — private by default (see ouk-ai-backend's
+    // spectator_enabled), a participant flips it on/off here. Reflects
+    // `onlineState.spectatorEnabled` from the server rather than tracking
+    // its own local boolean, so it can never drift from the real value.
+    const btnAllowSpectators = document.getElementById('btnAllowSpectators');
+    const spectatorToggleState = document.getElementById('spectatorToggleState');
+    function renderSpectatorToggle() {
+      if (spectatorToggleState) {
+        spectatorToggleState.textContent = onlineState.spectatorEnabled ? 'On' : 'Off';
+      }
+    }
+    if (btnAllowSpectators) {
+      btnAllowSpectators.hidden = false;
+      renderSpectatorToggle();
+      btnAllowSpectators.addEventListener('click', async () => {
+        const next = !onlineState.spectatorEnabled;
+        try {
+          await Api.setSpectatorEnabled(onlineGameId, next);
+          onlineState.spectatorEnabled = next;
+          renderSpectatorToggle();
+        } catch (err) {
+          showToast(err.message || 'Could not update spectator visibility', 'error');
+        }
+      });
+    }
+
     window.addEventListener('beforeunload', stopOnlinePolling);
     return game;
   }

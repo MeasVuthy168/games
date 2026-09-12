@@ -34,6 +34,10 @@
        adds this class when it's NOT an online game (see
        applyPlayerLabels() area). */
     html.board-locked, body.board-locked{ height:100%; overflow:hidden; }
+
+    /* "Allow Spectators" row: the On/Off pill sits at the row's far end
+       like a typical toggle, not bunched against the label. */
+    #btnAllowSpectators #spectatorToggleState{ margin-left:auto; }
   </style>
 
   <link rel="stylesheet" href="styles.css" />
@@ -73,6 +77,14 @@
               <path d="M9 3v3a2 2 0 0 1-2 2H4M15 3v3a2 2 0 0 0 2 2h3M9 21v-3a2 2 0 0 0-2-2H4M15 21v-3a2 2 0 0 1 2-2h3"/>
             </svg>
             <span id="fsLabel" data-i18n="play.menu.fullscreenEnter">ពេញអេក្រង់</span>
+          </button>
+          <!-- Online-only: opt this game into (or out of) Watch page
+               visibility. Off by default (see ouk-ai-backend's
+               spectator_enabled) — never shown outside online mode. -->
+          <button id="btnAllowSpectators" type="button" hidden>
+            <span>👀</span>
+            <span data-i18n="watch.allowSpectators">Allow Spectators</span>
+            <span id="spectatorToggleState" class="pill"></span>
           </button>
         </div>
       </div>

@@ -294,6 +294,31 @@ export async function resignGame(id) {
   return request(`/api/games/${id}/resign`, { method: 'POST' });
 }
 
+/* ---------------- spectating (watch.html) ----------------
+ * Read-only for a non-participant — the backend enforces this itself
+ * (spectator_enabled gate on /live and /:id/spectate; every mutating route
+ * above still requires participant match), these are just thin wrappers. */
+
+// Games another participant has opted into spectator visibility, minus my
+// own (nothing to "watch" in a game I'm already playing).
+export async function getLiveGames() {
+  const data = await request('/api/games/live');
+  return data.games;
+}
+
+// Sanitized read-only view of one spectator-enabled game — no move/resign/
+// accept/decline equivalent exists for this path.
+export async function spectateGame(id) {
+  const data = await request(`/api/games/${id}/spectate`);
+  return data.game;
+}
+
+// Participant-only opt-in/out toggle for whether MY game can be listed/
+// watched by non-participants at all. Off by default.
+export async function setSpectatorEnabled(id, enabled) {
+  return request(`/api/games/${id}/spectator`, { method: 'PATCH', body: { enabled: !!enabled } });
+}
+
 /* ---------------- stats (coins + game history) ---------------- */
 
 export async function getStats() {

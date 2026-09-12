@@ -15,30 +15,34 @@ const PIECE_FILE_KEY = { K: 'king', M: 'queen', S: 'bishop', R: 'rook', N: 'knig
 // buttons when the UI language is Khmer, `labelEn` the same but for English
 // UI (matches the existing home.roleWhite/roleBlack English dictionary
 // strings), `hex` a representative swatch color for that same picker.
+//
+// `price` is the coin cost to unlock the theme (see js/theme-unlocks.js) —
+// 0 means free/available from the start. Classic and Wood stay the free
+// defaults so a brand-new player always has a complete, unlocked game.
 export const pieceThemes = [
   {
-    id: 'classic', name: 'Classic', dir: 'assets/pieces',
+    id: 'classic', name: 'Classic', dir: 'assets/pieces', price: 0,
     colors: {
       w: { short: 'ស', label: 'ស (White)', labelEn: 'White', hex: '#fdfdfd' },
       b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', labelEn: 'Black', hex: '#20242c' },
     },
   },
   {
-    id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain',
+    id: 'plain-wood', name: 'Plain Wood', dir: 'assets/pieces-plain', price: 150,
     colors: {
       w: { short: 'ស', label: 'ស (White)', labelEn: 'White', hex: '#fdfdfd' },
       b: { short: 'ខ្មៅ', label: 'ខ្មៅ (Black)', labelEn: 'Black', hex: '#20242c' },
     },
   },
   {
-    id: 'silver-gold', name: 'Silver & Gold', dir: 'assets/pieces-silver-gold',
+    id: 'silver-gold', name: 'Silver & Gold', dir: 'assets/pieces-silver-gold', price: 350,
     colors: {
       w: { short: 'ប្រាក់', label: 'ប្រាក់ (Silver)', labelEn: 'Silver', hex: '#c7cdd6' },
       b: { short: 'មាស', label: 'មាស (Gold)', labelEn: 'Gold', hex: '#c9971f' },
     },
   },
   {
-    id: 'red-blue', name: 'Red & Blue', dir: 'assets/pieces-red-blue',
+    id: 'red-blue', name: 'Red & Blue', dir: 'assets/pieces-red-blue', price: 350,
     colors: {
       w: { short: 'ខៀវ', label: 'ខៀវ (Blue)', labelEn: 'Blue', hex: '#2255aa' },
       b: { short: 'ក្រហម', label: 'ក្រហម (Red)', labelEn: 'Red', hex: '#a3231f' },
@@ -47,11 +51,11 @@ export const pieceThemes = [
 ];
 
 export const boardThemes = [
-  { id: 'wood', name: 'Wood', light: 'assets/board/wood_light.jpg', dark: 'assets/board/wood_dark.jpg' },
-  { id: 'green', name: 'Classic Green', light: 'assets/board/green_light.jpg', dark: 'assets/board/green_dark.jpg' },
-  { id: 'marble', name: 'Marble', light: 'assets/board/marble_light.jpg', dark: 'assets/board/marble_dark.jpg' },
-  { id: 'walnut', name: 'Walnut', light: 'assets/board/walnut_light.jpg', dark: 'assets/board/walnut_dark.jpg' },
-  { id: 'blue', name: 'Blue Tournament', light: 'assets/board/blue_light.jpg', dark: 'assets/board/blue_dark.jpg' },
+  { id: 'wood', name: 'Wood', light: 'assets/board/wood_light.jpg', dark: 'assets/board/wood_dark.jpg', price: 0 },
+  { id: 'green', name: 'Classic Green', light: 'assets/board/green_light.jpg', dark: 'assets/board/green_dark.jpg', price: 150 },
+  { id: 'marble', name: 'Marble', light: 'assets/board/marble_light.jpg', dark: 'assets/board/marble_dark.jpg', price: 250 },
+  { id: 'walnut', name: 'Walnut', light: 'assets/board/walnut_light.jpg', dark: 'assets/board/walnut_dark.jpg', price: 250 },
+  { id: 'blue', name: 'Blue Tournament', light: 'assets/board/blue_light.jpg', dark: 'assets/board/blue_dark.jpg', price: 350 },
 ];
 
 // Resolves a piece image path for a given theme entry. `colorLetter` is

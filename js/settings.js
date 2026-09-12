@@ -1,5 +1,7 @@
 // Settings controller
 import { pieceThemes, boardThemes, pieceImageUrl } from './themes.js';
+import { isThemeUnlocked, unlockTheme } from './theme-unlocks.js';
+import { getCoins, canAfford, spendCoins } from './coins.js';
 import { getProfile, applyAvatarToElement } from './profile-data.js';
 import { setLanguage, applyTranslations } from './i18n.js';
 import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL } from './ai-engine.js';
@@ -62,6 +64,15 @@ document.addEventListener('DOMContentLoaded', ()=>{
   let s = loadSettings();
   setLanguage(s.language);
 
+  // Grandfather in whatever theme was already active before this device
+  // had any purchase requirement — a theme that was free when picked must
+  // never turn itself unselectable/locked out from under an existing
+  // choice just because it now carries a price.
+  const activePiece = pieceThemes[s.pieceTheme];
+  if (activePiece && !isThemeUnlocked('piece', activePiece)) unlockTheme('piece', activePiece);
+  const activeBoard = boardThemes[s.boardTheme];
+  if (activeBoard && !isThemeUnlocked('board', activeBoard)) unlockTheme('board', activeBoard);
+
   // Profile bar preview — editing happens on profile.html. When signed in,
   // the real account's name/photo is the source of truth (kept in sync by
   // profile.js); signed out, this is the purely local guest profile.
@@ -101,6 +112,39 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const languageRadios = Array.from(document.querySelectorAll('input[name="language"]'));
   const pieceThemeGrid = document.getElementById('pieceThemeGrid');
   const boardThemeGrid = document.getElementById('boardThemeGrid');
+  const pieceThemeCoins = document.getElementById('pieceThemeCoins');
+  const boardThemeCoins = document.getElementById('boardThemeCoins');
+
+  // Shared coin-balance readout shown above both theme grids — kept in
+  // sync after every purchase so "how many coins do I have" is answered
+  // right where coins actually get spent.
+  function renderThemeCoinBalances() {
+    const text = `🪙 ${getCoins()}`;
+    if (pieceThemeCoins) pieceThemeCoins.textContent = text;
+    if (boardThemeCoins) boardThemeCoins.textContent = text;
+  }
+
+  // Shared unlock flow for both theme grids: locked + affordable asks for
+  // confirmation and spends coins on accept; locked + unaffordable just
+  // explains why. Returns true if the theme is unlocked and ready to select
+  // (either it already was, or the purchase just succeeded).
+  function tryUnlock(kind, theme) {
+    if (isThemeUnlocked(kind, theme)) return true;
+    const price = theme.price;
+    if (!canAfford(price)) {
+      showToast(`Not enough coins — ${theme.name} costs ${price}, you have ${getCoins()}.`, 'error');
+      return false;
+    }
+    if (!confirm(`Unlock ${theme.name} for ${price} coins?`)) return false;
+    if (!spendCoins(price)) {
+      showToast('Not enough coins.', 'error');
+      return false;
+    }
+    unlockTheme(kind, theme);
+    showToast(`${theme.name} unlocked!`, 'success');
+    renderThemeCoinBalances();
+    return true;
+  }
 
   // Init UI states
   soundToggle.checked = !!s.sound;
@@ -120,9 +164,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!pieceThemeGrid) return;
     pieceThemeGrid.innerHTML = '';
     pieceThemes.forEach((theme, idx) => {
+      const unlocked = isThemeUnlocked('piece', theme);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'piece-theme-choice' + (s.pieceTheme === idx ? ' selected' : '');
+      btn.className = 'piece-theme-choice'
+        + (s.pieceTheme === idx ? ' selected' : '')
+        + (unlocked ? '' : ' locked');
 
       const swatch = document.createElement('div');
       swatch.className = 'piece-theme-swatch';
@@ -138,7 +185,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       btn.appendChild(swatch);
       btn.appendChild(label);
+      if (!unlocked) {
+        const price = document.createElement('div');
+        price.className = 'theme-choice-price';
+        price.textContent = `🔒 ${theme.price}`;
+        btn.appendChild(price);
+      }
       btn.addEventListener('click', () => {
+        if (!tryUnlock('piece', theme)) return;
         if (s.pieceTheme === idx) return;
         s.pieceTheme = idx;
         saveSettings(s);
@@ -157,9 +211,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if (!boardThemeGrid) return;
     boardThemeGrid.innerHTML = '';
     boardThemes.forEach((theme, idx) => {
+      const unlocked = isThemeUnlocked('board', theme);
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'board-theme-choice' + (s.boardTheme === idx ? ' selected' : '');
+      btn.className = 'board-theme-choice'
+        + (s.boardTheme === idx ? ' selected' : '')
+        + (unlocked ? '' : ' locked');
 
       const swatch = document.createElement('div');
       swatch.className = 'board-theme-swatch';
@@ -176,7 +233,14 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
       btn.appendChild(swatch);
       btn.appendChild(label);
+      if (!unlocked) {
+        const price = document.createElement('div');
+        price.className = 'theme-choice-price';
+        price.textContent = `🔒 ${theme.price}`;
+        btn.appendChild(price);
+      }
       btn.addEventListener('click', () => {
+        if (!tryUnlock('board', theme)) return;
         if (s.boardTheme === idx) return;
         s.boardTheme = idx;
         saveSettings(s);
@@ -186,6 +250,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     });
   }
   renderBoardThemeGrid();
+  renderThemeCoinBalances();
 
   // Event bindings
   soundToggle.addEventListener('change', ()=>{ s.sound=!!soundToggle.checked; saveSettings(s); });

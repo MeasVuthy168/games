@@ -65,12 +65,16 @@ export function getHistory() {
 
 // Percentage of recorded games that are wins, rounded to the nearest
 // integer. Draws and losses both count against it. Returns null when there
-// are zero completed games so callers can show "Not Rated" instead of 0%.
-export function computeWinRate() {
-  const list = readAll();
-  if (list.length === 0) return null;
-  const wins = list.filter(g => g.result === 'win').length;
-  return Math.round((wins / list.length) * 100);
+// are zero completed games so callers can show "Not Rated"/0% instead of a
+// division-by-zero artifact. Accepts an already-fetched getHistory() list
+// (a caller that also needs the raw games, e.g. for a games-played count or
+// to render the list itself, should pass it here instead of triggering a
+// second localStorage read+parse of the same data).
+export function computeWinRate(list) {
+  const games = list || readAll();
+  if (games.length === 0) return null;
+  const wins = games.filter(g => g.result === 'win').length;
+  return Math.round((wins / games.length) * 100);
 }
 
 // Pulls the signed-in account's real game history from the backend and

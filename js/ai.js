@@ -206,6 +206,17 @@ function ensureWorker() {
       `depth=${stats.depth} nodes=${stats.nodes} time=${stats.timeMs}ms score=${stats.score}`,
       'move=', move ? `${JSON.stringify(move.from)}->${JSON.stringify(move.to)}` : '(none)'
     );
+    // AI-vs-AI only: findBestMove() adds these when its caller passes
+    // tieBreak/positionHistory (see js/ai-worker.js) — absent (undefined)
+    // for every other mode, so this line simply doesn't print there.
+    if (stats.rootMoveCount != null) {
+      logDbg(
+        `  candidates=${stats.rootMoveCount}`,
+        stats.tieBreak
+          ? `tie-break among ${stats.tieBreak.candidates} equal move(s), chosen position seen ${stats.tieBreak.chosenSeenCount}x before`
+          : '(no tie-break — single best move)'
+      );
+    }
     updateStatus(
       `Last move: depth ${stats.depth}, ${stats.nodes} nodes, ${stats.timeMs}ms, eval ${stats.score}`,
       '#175'
@@ -232,7 +243,7 @@ export async function chooseAIMove(game, opts = {}) {
   resetDbg();
 
   const level = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
-  logDbg(`Thinking… level=${level} turn=${game.turn}`);
+  logDbg(`Thinking… level=${level} turn=${game.turn}` + (opts.aiVsAi ? ' (AI vs AI)' : ''));
   updateStatus(`AI thinking… (level ${level})`, '#a60');
   setSpinner(true);
 
@@ -252,6 +263,13 @@ export async function chooseAIMove(game, opts = {}) {
         turn: game.turn,
         level,
         requestId,
+        // AI-vs-AI only (js/ui.js's thinkAndPlay() is the only caller that
+        // ever sets these) — every other mode's opts is just {level,
+        // aiColor, timeMs} as before, so the worker takes its old,
+        // unmodified path for them (see ai-worker.js's `aiVsAi ? … : {}`).
+        aiVsAi: !!opts.aiVsAi,
+        positionHistory: opts.aiVsAi ? opts.positionHistory : undefined,
+        seed: opts.aiVsAi ? opts.debugSeed : undefined,
       });
     });
     return move;

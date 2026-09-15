@@ -121,28 +121,22 @@ body{
    (flexbox has nothing to size main's flex:1 against), silently
    defeating the whole fix below. */
 .shell{ height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
-.shell > main{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-/* .topbar/#appTabbar are position:fixed/sticky, anchored to the
-   *layout* viewport — but a mobile browser's own chrome (address bar,
-   in-app browser bar) can make the *visual* viewport smaller than that,
-   and during scroll/momentum that gap changes live, so a bar anchored
-   purely by CSS can end up sitting partly behind that chrome or lagging
-   during the transition ("unfixing"). #appTabbar already corrects for
-   this with window.visualViewport in js/tabbar-fix.js; .topbar gets the
-   exact same treatment here — position:fixed (not sticky, which needs
-   a scrolling ancestor .shell no longer provides) plus that same JS
-   correction, rather than trusting flex layout + dvh sizing alone to
-   keep it visually anchored. main's padding-top reserves the space
-   .topbar no longer claims by being fixed instead of an in-flow child. */
+.shell > main{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-top:calc(3.6rem + env(safe-area-inset-top, 0px)); }
+/* .topbar becomes position:fixed here (not sticky, which needs a
+   scrolling ancestor .shell no longer provides) so it's anchored purely
+   to the viewport, matching #appTabbar. Both rely only on
+   env(safe-area-inset-*) padding now — a window.visualViewport-based JS
+   correction was tried and removed (see js/tabbar-fix.js's header
+   comment): this app is a manifest-declared standalone PWA with no
+   address-bar chrome to compensate for, and the correction was itself
+   the source of a real, reproduced bug (a bad viewport reading during
+   scroll sent the bottom nav flying to mid-screen for a moment). main's
+   padding-top reserves the space .topbar no longer claims as an in-flow
+   child. */
 .shell > .topbar{
   position:fixed; top:0; left:0; right:0; z-index:20;
   padding-top:calc(.75rem + env(safe-area-inset-top, 0px));
-  /* js/tabbar-fix.js nudges `top` to track the visible viewport edge —
-     easing that change keeps a real (small, clamped) shift smooth
-     instead of an instant jump. */
-  transition: top .2s ease, transform .25s ease, opacity .25s ease;
 }
-.shell > main{ padding-top:calc(3.6rem + env(safe-area-inset-top, 0px)); }
 
 /* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
    aria-hidden="true" already signals it's not meant to be visible.
@@ -635,13 +629,13 @@ body.ai-thinking #board{
 }
 
 /* ===== Bottom nav ===== */
-/* Fixed to the viewport bottom; js/tabbar-fix.js additionally keeps its
-   `bottom` offset matched to the browser's actual visible area (see that
-   file's header comment for why plain position:fixed alone isn't always
-   enough in a mobile browser/WebView). Nothing here ever hides this bar —
-   there used to be an unused #appTabbar.is-hidden rule with no code
-   anywhere that ever applied it; removed rather than left to imply an
-   auto-hide behavor that doesn't exist. */
+/* Fixed to the viewport bottom, relying on env(safe-area-inset-bottom)
+   padding alone (see js/tabbar-fix.js's header comment for why a
+   window.visualViewport-based JS correction was tried and removed).
+   Nothing here ever hides this bar — there used to be an unused
+   #appTabbar.is-hidden rule with no code anywhere that ever applied it;
+   removed rather than left to imply an auto-hide behavor that doesn't
+   exist. */
 /* Same background as .topbar (var(--blue)) so top and bottom chrome
    read as one matching color, in both themes. */
 #appTabbar{
@@ -649,10 +643,6 @@ body.ai-thinking #board{
   background:var(--blue); border-top:1px solid rgba(255,255,255,.12);
   display:grid; grid-template-columns:repeat(5,1fr);
   gap:.2rem;
-  /* js/tabbar-fix.js nudges `bottom` to track the visible viewport edge —
-     easing that change keeps a real (small, clamped) shift smooth
-     instead of an instant jump. */
-  transition: bottom .2s ease;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.16);
 }

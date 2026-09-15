@@ -134,7 +134,14 @@ body{
    correction, rather than trusting flex layout + dvh sizing alone to
    keep it visually anchored. main's padding-top reserves the space
    .topbar no longer claims by being fixed instead of an in-flow child. */
-.shell > .topbar{ position:fixed; top:0; left:0; right:0; z-index:20; padding-top:calc(.75rem + env(safe-area-inset-top, 0px)); }
+.shell > .topbar{
+  position:fixed; top:0; left:0; right:0; z-index:20;
+  padding-top:calc(.75rem + env(safe-area-inset-top, 0px));
+  /* js/tabbar-fix.js nudges `top` to track the visible viewport edge —
+     easing that change keeps a real (small, clamped) shift smooth
+     instead of an instant jump. */
+  transition: top .2s ease, transform .25s ease, opacity .25s ease;
+}
 .shell > main{ padding-top:calc(3.6rem + env(safe-area-inset-top, 0px)); }
 
 /* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
@@ -642,6 +649,10 @@ body.ai-thinking #board{
   background:var(--blue); border-top:1px solid rgba(255,255,255,.12);
   display:grid; grid-template-columns:repeat(5,1fr);
   gap:.2rem;
+  /* js/tabbar-fix.js nudges `bottom` to track the visible viewport edge —
+     easing that change keeps a real (small, clamped) shift smooth
+     instead of an instant jump. */
+  transition: bottom .2s ease;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.16);
 }

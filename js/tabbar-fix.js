@@ -15,19 +15,31 @@
 // window.visualViewport reports the *actual* visible area, so this nudges
 // each bar's offset to match it exactly instead of trusting plain
 // position:fixed alone. A no-op (and harmless) on browsers without the API.
+//
+// A real mobile browser toolbar never gets anywhere near half the screen,
+// so MAX_GAP clamps out the momentary garbage values visualViewport can
+// report mid-gesture (observed on iOS Safari: `vv.height` for a single
+// frame during active scroll, before settling back) — without the clamp,
+// that one bad frame sent the bar flying into the middle of the screen.
+// Listening to `scroll` (not just `resize`) is what actually caught those
+// transient frames in the first place, but dropping it also loses the
+// "start reacting the instant the toolbar begins animating" responsiveness
+// it was added for, so it stays — the clamp is what makes it safe.
 (function () {
   const vv = window.visualViewport;
   if (!vv) return;
+
+  const MAX_GAP = 150;
 
   function pin() {
     const bar = document.getElementById('appTabbar');
     if (bar) {
       const bottomGap = window.innerHeight - vv.height - vv.offsetTop;
-      bar.style.bottom = `${Math.max(0, bottomGap)}px`;
+      bar.style.bottom = `${Math.min(MAX_GAP, Math.max(0, bottomGap))}px`;
     }
     const topbar = document.querySelector('.shell > .topbar');
     if (topbar) {
-      topbar.style.top = `${Math.max(0, vv.offsetTop)}px`;
+      topbar.style.top = `${Math.min(MAX_GAP, Math.max(0, vv.offsetTop))}px`;
     }
   }
 

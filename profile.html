@@ -25,12 +25,11 @@
       /* Match the same 1rem side inset every card below it already has
          (via .card-list's own padding) — without this it sits flush
          against the screen edges instead of lining up with the rest.
-         Top margin matches the standard .75rem card-to-card gap used
-         everywhere else on the page, so this card isn't flush against
-         the topbar above; bottom margin matches the .5rem gap the
-         stat-grid below uses between its own tiles, so the stat row
-         isn't flush against this card either. */
-      margin:.75rem 1rem .5rem; width:auto;
+         Top/bottom margin matches the standard .75rem gap used between
+         every other card on the page, so the spacing above and below
+         this card is consistent with the rest instead of its own
+         one-off value. */
+      margin:.75rem 1rem; width:auto;
     }
     .avatar-wrap{ position:relative; display:inline-block; }
     .profile-hero .avatar{
@@ -126,7 +125,11 @@
        deliberately smaller/lighter so it reads as a caption, not a
        competing headline. Fixed min-height (not padding alone) keeps all
        three the same height even if a label wraps on a narrow phone. */
-    .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; padding:0 1rem 1.1rem; }
+    /* Bottom padding (the gap before the next card) matches the standard
+       .75rem card-to-card gap used everywhere else on the page — the
+       .5rem grid gap between the three tiles themselves is unrelated and
+       stays its own value. */
+    .stat-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:.5rem; padding:0 1rem .75rem; }
     .stat-tile{
       background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
       padding:.75rem .3rem; text-align:center; border:1px solid rgba(13,45,92,.06);
@@ -226,9 +229,7 @@
             <div class="history-list" id="historyList"></div>
           </div>
         </details>
-      </div>
 
-      <div class="card-list">
         <div class="card card-full" id="accountCard">
           <div class="card-left">
             <div class="card-title">Account</div>

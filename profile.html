@@ -25,10 +25,12 @@
       /* Match the same 1rem side inset every card below it already has
          (via .card-list's own padding) — without this it sits flush
          against the screen edges instead of lining up with the rest.
-         Bottom margin matches the .5rem gap the stat-grid below uses
-         between its own tiles — without it the stat row sits flush
-         against this card instead of spaced like everything else. */
-      margin:0 1rem .5rem; width:auto;
+         Top margin matches the standard .75rem card-to-card gap used
+         everywhere else on the page, so this card isn't flush against
+         the topbar above; bottom margin matches the .5rem gap the
+         stat-grid below uses between its own tiles, so the stat row
+         isn't flush against this card either. */
+      margin:.75rem 1rem .5rem; width:auto;
     }
     .avatar-wrap{ position:relative; display:inline-block; }
     .profile-hero .avatar{

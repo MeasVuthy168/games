@@ -1022,7 +1022,14 @@ details.card.card-full > .card-body{
   display:flex; align-items:center; justify-content:center;
   font-size:2.1rem; line-height:1; background:var(--chip-bg);
 }
-.avatar.avatar-image{ background-size:cover; background-position:center; }
+.avatar.avatar-image{
+  background-size:cover; background-position:center;
+  /* border-radius alone doesn't reliably clip a background-image in every
+     engine (seen on iOS Safari: an uploaded photo's square corners bleed
+     past the circular edge into whatever sits below it) — overflow:hidden
+     forces the clip regardless. */
+  overflow:hidden;
+}
 
 /* ===== Online play (play.html?mode=online) ===== */
 .online-status-banner{

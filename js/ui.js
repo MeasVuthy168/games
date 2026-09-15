@@ -2,7 +2,7 @@
 
 import { Game, SIZE, COLORS, PT, emptyCounting } from './game.js';
 import * as AI from './ai.js';
-import { DEFAULT_LEVEL } from './ai-engine.js';
+import { DEFAULT_LEVEL, positionHash } from './ai-engine.js';
 import * as History from './history.js';
 import * as Tournament from './tournament.js';
 import * as Rewards from './rewards.js';
@@ -563,6 +563,21 @@ export async function initUI() {
   // Reset on every fresh game.
   const AI_VS_AI_MAX_PLIES = 400;
   let aiVsAiPlies = 0;
+
+  // AI-vs-AI only: positions actually reached this game, keyed the same way
+  // the search's own transposition table keys them (see ai-engine.js's
+  // positionHash) — Map<hash, timesSeenSoFar>. Passed into each search so
+  // it can prefer the least-repeated move among any it judges equally
+  // good, which is what actually breaks an A/B shuffle (see
+  // findBestMove's own comment in ai-engine.js) rather than just re-rolling
+  // which of two equally-repeated moves gets picked. Reset alongside
+  // aiVsAiPlies on every fresh game.
+  const aiVsAiPositionHistory = new Map();
+  function recordAiVsAiPosition() {
+    if (!aiVsAiMode) return;
+    const h = positionHash(game);
+    aiVsAiPositionHistory.set(h, (aiVsAiPositionHistory.get(h) || 0) + 1);
+  }
 
   function applyBoardTheme() {
     const idx = clampThemeIndex(settings.boardTheme, boardThemes);
@@ -1568,7 +1583,14 @@ export async function initUI() {
       // one fixed AI side — it's whichever color is actually on move, at
       // that side's own configured level.
       const aiOpts = aiVsAiMode
-        ? { level: game.turn === COLORS.WHITE ? settings.aiLevelWhite : settings.aiLevelBlack, aiColor: game.turn, timeMs: 120 }
+        ? {
+            level: game.turn === COLORS.WHITE ? settings.aiLevelWhite : settings.aiLevelBlack,
+            aiColor: game.turn, timeMs: 120,
+            // Independent-tie-break + repetition-avoidance — see
+            // ai-engine.js's findBestMove doc comment. Human-vs-AI/Online
+            // below never set these, so they're unaffected.
+            aiVsAi: true, positionHistory: aiVsAiPositionHistory,
+          }
         : { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
       window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
@@ -1602,6 +1624,7 @@ export async function initUI() {
 
         clocks.switchedByMove(prev2);
         render(); saveGameState(game, clocks);
+        recordAiVsAiPosition();
 
         const over2 = concludeIfOver(res2);
         continueAiVsAi(over2, myGen);
@@ -1612,6 +1635,7 @@ export async function initUI() {
 
       clocks.switchedByMove(prevTurn);
       render(); saveGameState(game, clocks);
+      recordAiVsAiPosition();
 
       const over = concludeIfOver(res);
       continueAiVsAi(over, myGen);
@@ -1996,6 +2020,7 @@ export async function initUI() {
   }
 
   // AI first move (if ever AI=White later)
+  recordAiVsAiPosition();
   if (isAITurn()) thinkAndPlay();
 
   /* -------- controls -------- */
@@ -2006,9 +2031,11 @@ export async function initUI() {
     game.reset();
     gameStartedAt = Date.now();
     aiVsAiPlies = 0;
+    aiVsAiPositionHistory.clear();
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
     render(); clocks.start();
+    recordAiVsAiPosition();
     if (isAITurn()) thinkAndPlay();
   });
 

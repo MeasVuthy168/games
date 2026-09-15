@@ -140,6 +140,29 @@ function hashKey(game) {
   return s;
 }
 
+// Exported so callers outside this module (js/ui.js, for the AI-vs-AI
+// repetition history) can key positions exactly the way the search's own
+// transposition table already does — position + whose turn it is next —
+// rather than reimplementing the same hash a second time and risking it
+// drifting out of sync.
+export function positionHash(game, colorToMove) {
+  return hashKey(game) + '|' + (colorToMove != null ? colorToMove : game.turn);
+}
+
+// Small, fast, seedable PRNG (mulberry32) — used so AI-vs-AI tie-breaking
+// can give each side its own independent random stream (rather than both
+// sides drawing from the one shared global Math.random()) while still
+// being fully reproducible run-to-run when a debug seed is supplied.
+export function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // MVV-LVA captures first, then TT/killer hints, then everything else.
 function orderMoves(moves, ttMoveSig, killerPair, ctx) {
   const k0 = killerPair ? killerPair[0] : null;
@@ -377,7 +400,28 @@ function negamax(game, depth, alpha, beta, color, ply, ctx) {
 // Iterative-deepening root search. `game` must already be positioned with
 // `game.turn` set to the side to move — that side's best move is returned.
 // `level` is a number 1-10 (see LEVELS above).
-export function findBestMove(game, level, sharedTT) {
+//
+// `opts` (all optional, and only ever populated by the AI-vs-AI caller —
+// Human-vs-AI/Online/Watch never pass any of this, so their behavior is
+// byte-for-byte unchanged):
+//   tieBreak         — run the same near-best-move tie-break every level
+//                       normally reserves for the two weakest ("randomize")
+//                       levels, regardless of this level's own setting.
+//   rng              — () => [0,1) generator for that tie-break, so each AI
+//                       side can be given its own independent stream (see
+//                       mulberry32 above) instead of sharing Math.random().
+//   positionHistory  — Map<positionHash, timesSeenSoFar> of positions that
+//                       have actually occurred in THIS game (owned by the
+//                       caller, not this module — see js/ui.js). When a tie
+//                       exists among near-equally-good moves, this is used
+//                       to prefer whichever leads to the least-repeated
+//                       position, which is what actually breaks an A/B
+//                       shuffle instead of just reshuffling which of two
+//                       equally-repeated moves gets picked. Never expands
+//                       the candidate set beyond moves already judged
+//                       near-best on their own merit, and never used at all
+//                       when there's no tie to begin with.
+export function findBestMove(game, level, sharedTT, opts = {}) {
   const levelCfg = LEVELS[level] || LEVELS[DEFAULT_LEVEL];
   const color = game.turn;
   const start = Date.now();
@@ -437,18 +481,47 @@ export function findBestMove(game, level, sharedTT) {
     if (Date.now() > ctx.deadline) break;
   }
 
-  // Weakest levels: pick randomly among root moves close to the best score,
-  // so they aren't perfectly deterministic.
-  if (levelCfg.randomize && lastCompletedResults) {
+  // Weakest levels always tie-break (their own "randomize" setting); every
+  // other level only does so for AI-vs-AI (opts.tieBreak) — Human-vs-AI and
+  // Online keep picking the single deterministic best move exactly as
+  // before. Same EPS either way, so this doesn't make any level weaker: a
+  // move only ever gets swapped for another one the search judged equally
+  // good in the first place.
+  let tieBreakInfo = null;
+  if ((levelCfg.randomize || opts.tieBreak) && lastCompletedResults) {
     const EPS = 40;
-    const near = lastCompletedResults.filter(r => r.score >= bestScore - EPS);
+    const rng = opts.rng || Math.random;
+    let near = lastCompletedResults.filter(r => r.score >= bestScore - EPS);
+
+    if (near.length > 1 && opts.positionHistory) {
+      // Prefer whichever near-best move(s) lead to the position seen the
+      // fewest times so far — this is what actually breaks an A/B/A cycle
+      // (always picking "the" tied move at random still repeats it exactly
+      // as often as a deterministic pick would, on average) — without ever
+      // reaching outside the set of moves already judged near-best.
+      const withCounts = near.map(r => {
+        const snap = game._do(r.move.from, r.move.to);
+        const hash = positionHash(game, game.enemyColor(color));
+        game._undo(r.move.from, r.move.to, snap);
+        const seenCount = opts.positionHistory.get(hash) || 0;
+        return { ...r, hash, seenCount };
+      });
+      const minSeen = Math.min(...withCounts.map(w => w.seenCount));
+      near = withCounts.filter(w => w.seenCount === minSeen);
+    }
+
     if (near.length > 1) {
-      bestMove = near[(Math.random() * near.length) | 0].move;
+      const chosen = near[(rng() * near.length) | 0];
+      bestMove = chosen.move;
+      tieBreakInfo = { candidates: near.length, chosenHash: chosen.hash ?? null, chosenSeenCount: chosen.seenCount ?? null };
     }
   }
 
   return {
     move: bestMove ? { from: bestMove.from, to: bestMove.to } : null,
-    stats: { depth: depthReached, nodes: ctx.nodes, timeMs: Date.now() - start, score: bestScore },
+    stats: {
+      depth: depthReached, nodes: ctx.nodes, timeMs: Date.now() - start, score: bestScore,
+      rootMoveCount: rootMoves.length, tieBreak: tieBreakInfo,
+    },
   };
 }

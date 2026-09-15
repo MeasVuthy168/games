@@ -113,6 +113,20 @@ body{
    page further for scrolling without shrinking the board. */
 .app{ height:100dvh; display:flex; flex-direction:column }
 
+/* Every other page (.shell, not .app): the topbar/#appTabbar were
+   already position:sticky/fixed, which should stay put regardless of
+   scroll — but position:fixed/sticky is only as stable as the element
+   they're anchored against, and letting <body> itself be the thing that
+   scrolls means it's also the thing that rubber-bands (the elastic
+   overscroll bounce at the very top/bottom of the page on iOS Safari),
+   during which fixed/sticky elements are known to visibly detach/lag.
+   Locking .shell to exactly one viewport (same 100dvh flex-column
+   pattern .app already uses for Play) and moving the actual scrolling
+   to <main> means <body> never scrolls at all — nothing left to bounce,
+   so the topbar and bottom nav can never appear to "unfix". */
+.shell{ height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+.shell > main{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
 /* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
    aria-hidden="true" already signals it's not meant to be visible.
    Previously masked by #app's own overflow always being taller than the
@@ -611,30 +625,35 @@ body.ai-thinking #board{
    there used to be an unused #appTabbar.is-hidden rule with no code
    anywhere that ever applied it; removed rather than left to imply an
    auto-hide behavor that doesn't exist. */
+/* Same background as .topbar (var(--blue)) so top and bottom chrome
+   read as one matching color, in both themes. */
 #appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
-  background:#fff; border-top:1px solid #e6e6e6;
+  background:var(--blue); border-top:1px solid rgba(255,255,255,.12);
   display:grid; grid-template-columns:repeat(5,1fr);
   gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
-  box-shadow:0 -6px 20px rgba(0,0,0,.06);
+  box-shadow:0 -6px 20px rgba(0,0,0,.16);
 }
 .nav-item{
   position:relative;
   display:flex; flex-direction:column; align-items:center; gap:.15rem;
-  padding:.35rem 0; text-decoration:none; color:#0f172a; border-radius:.6rem;
+  padding:.35rem 0; text-decoration:none; color:rgba(255,255,255,.68); border-radius:.6rem;
   font-size:.8rem;
 }
-.ni-img{ width:24px; height:24px; display:block }
+/* Solid-black line-art PNGs, same as assets/ui/*.png elsewhere — inverted
+   to white since the bar is now always a dark/colored background in
+   both themes (unlike before, when it stayed light in light mode). */
+.ni-img{ width:24px; height:24px; display:block; filter:invert(1); }
 .nav-item.active{
-  background:#eef4ff; color:#0d2d5c; font-weight:800;
+  background:rgba(255,255,255,.16); color:#fff; font-weight:800;
 }
 .nav-badge{
   position:absolute; top:0; right:calc(50% - 20px);
   min-width:16px; height:16px; padding:0 3px; border-radius:999px;
   background:#e0393e; color:#fff; font-size:.62rem; font-weight:800;
   display:flex; align-items:center; justify-content:center; line-height:1;
-  box-shadow:0 0 0 2px var(--panel, #fff);
+  box-shadow:0 0 0 2px var(--blue);
 }
 #bottomSpacer{ height:calc(56px + env(safe-area-inset-bottom)) }
 /* Play page only (#app is exclusive to it): the shared 56px assumption

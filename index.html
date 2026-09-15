@@ -50,6 +50,7 @@
     }
     .menu-card:active{ transform:scale(.98) }
     .card-emoji{ font-size:2.2rem; margin-bottom:.4rem }
+    .card-icon-img{ width:3.2rem; height:3.2rem; object-fit:contain; margin-bottom:.4rem; }
     .avatar{ width:36px; height:36px; border-radius:50%; object-fit:cover }
     .pill{
       display:inline-block; padding:.12rem .5rem; border-radius:999px;
@@ -116,37 +117,37 @@
       <div class="menu-grid">
         <!-- Only one level: Master -->
         <button id="btnVsAI" class="menu-card" type="button">
-          <div class="card-emoji">🤖</div>
+          <img class="card-icon-img" src="assets/home/ai.png" alt="" />
           <span data-i18n="home.vsAI">លេងជាមួយ AI (Master)</span>
           <small id="aiLast" class="last-choice" style="display:none"></small>
         </button>
 
         <a id="btnFriend" class="menu-card" href="play.html?mode=friend">
-          <div class="card-emoji">👥</div>
+          <img class="card-icon-img" src="assets/home/friend.png" alt="" />
           <span data-i18n="home.vsFriend">លេងជាមួយមិត្ត</span>
           <small class="last-choice" style="display:block" data-i18n="home.vsFriendSub">លេងជំនួសគ្នាលើឧបករណ៍តែមួយ (Pass &amp; Play)</small>
         </a>
 
         <a id="btnFriendOnline" class="menu-card" href="friends.html">
-          <div class="card-emoji">🌐</div>
+          <img class="card-icon-img" src="assets/home/online.png" alt="" />
           <span data-i18n="home.online">លេងជាមួយមិត្តភក្តិ (Online)</span>
           <small class="last-choice" style="display:block" data-i18n="home.onlineSub">ប្រកួតជាមួយមិត្តតាមអនឡាញ គ្រប់ទីកន្លែង</small>
         </a>
 
         <a id="btnTournament" class="menu-card" href="tournament.html">
-          <div class="card-emoji">🏆</div>
+          <img class="card-icon-img" src="assets/home/tournament.png" alt="" />
           <span data-i18n="home.tournament">Tournament</span>
           <small class="last-choice" style="display:block" data-i18n="home.tournamentSub">4-round AI bracket · win coins</small>
         </a>
 
         <a id="btnRewards" class="menu-card" href="rewards.html">
-          <div class="card-emoji">🎁</div>
+          <img class="card-icon-img" src="assets/home/rewards.png" alt="" />
           <span data-i18n="home.rewards">Daily Rewards</span>
           <small class="last-choice" style="display:block" data-i18n="home.rewardsSub">Real objectives from your games</small>
         </a>
 
         <a id="btnWatch" class="menu-card" href="watch.html">
-          <div class="card-emoji">👀</div>
+          <img class="card-icon-img" src="assets/home/watch.png" alt="" />
           <span data-i18n="home.watch">មើលការប្រកួត (Watch)</span>
           <small class="last-choice" style="display:block" data-i18n="home.watchSub">មើលមិត្តភក្តិប្រកួត ឬ AI ប្រកួតជាមួយ AI</small>
         </a>

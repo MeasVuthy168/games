@@ -18,6 +18,8 @@ const CORE = [
   './assets/pieces/b-king.png','./assets/pieces/b-queen.png','./assets/pieces/b-bishop.png','./assets/pieces/b-knight.png','./assets/pieces/b-rook.png','./assets/pieces/b-pawn.png',
   './assets/ui/reset.png','./assets/ui/pause.png','./assets/ui/undo.png','./assets/ui/play.png',
   './assets/ui/nav-home.png','./assets/ui/nav-friends.png','./assets/ui/nav-play.png','./assets/ui/nav-settings.png','./assets/ui/nav-bell.png',
+  './assets/ui/notifications.png','./assets/ui/sound.png','./assets/ui/haptic.png','./assets/ui/timer.png','./assets/ui/theme.png',
+  './assets/ui/move-hints.png','./assets/ui/animation.png','./assets/ui/language.png','./assets/ui/piece-theme.png','./assets/ui/board-theme.png','./assets/ui/about.png',
   './assets/sfx/move.mp3','./assets/sfx/capture.mp3','./assets/sfx/select.mp3','./assets/sfx/error.mp3','./assets/sfx/check.mp3'
 ];
 

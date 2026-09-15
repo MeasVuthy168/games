@@ -29,11 +29,11 @@
       /* Match the same 1rem side inset every card below it already has
          (via .card-list's own padding) — without this it sits flush
          against the screen edges instead of lining up with the rest.
-         Bottom margin matches .card-list's own gap (.75rem) — this card
-         sits outside that list, so without it the Notifications card
-         right below sits flush against it instead of spaced like every
-         other card-to-card gap on the page. */
-      margin:0 1rem .75rem; width:auto;
+         Top/bottom margin matches .card-list's own gap (.75rem) — this
+         card sits outside that list, so without them it sits flush
+         against the topbar above and the Notifications card below
+         instead of spaced like every other card-to-card gap on the page. */
+      margin:.75rem 1rem; width:auto;
     }
     .profile-bar .profile-meta{ display:flex; flex-direction:column; gap:3px; min-width:0; }
     .profile-bar .profile-name{

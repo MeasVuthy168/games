@@ -59,10 +59,18 @@
     /* A small leading icon per settings row. Wraps the existing .card-left
        (title+sub column) rather than changing it, so the shared .card-left
        rule in styles.css — used by every other page too — stays untouched.
-       Emoji, not an image asset: no new files, and glyphs render in full
-       color regardless of app theme so they need no dark-mode handling. */
+       Solid-black line-art PNGs (assets/ui/*.png) — the same format the
+       bottom nav's own nav-*.png icons already use. The nav bar itself
+       never needs a dark-mode invert (its own bar background stays
+       light-colored in every theme), but these icons sit on .card, which
+       DOES go dark (var(--panel)) — so unlike the nav icons, these need
+       an explicit invert or they'd disappear against a dark card. */
     .card-left-row{ display:flex; align-items:center; gap:.7rem; min-width:0; flex:1; }
-    .card-icon{ font-size:1.3rem; line-height:1; flex:none; width:1.5rem; text-align:center; }
+    .card-icon{ width:1.35rem; height:1.35rem; flex:none; object-fit:contain; display:block; }
+    :root[data-theme="dark"] .card-icon{ filter:invert(1); }
+    @media (prefers-color-scheme: dark){
+      :root:not([data-theme="light"]) .card-icon{ filter:invert(1); }
+    }
 
     /* Board theme picker: a grid of tappable cards, each a small 2x2
        checkerboard swatch (built from the theme's own light/dark tile
@@ -160,7 +168,7 @@
       <div class="card-list">
         <div class="card card-full">
           <div class="card-left-row">
-            <span class="card-icon" aria-hidden="true">🔔</span>
+            <img class="card-icon" src="assets/ui/notifications.png" alt="" />
             <div class="card-left">
               <div class="card-title">Notifications</div>
               <div class="card-sub">Badge & alerts for friend requests, chat, and games</div>
@@ -173,7 +181,7 @@
 
         <div class="card card-full">
           <div class="card-left-row">
-            <span class="card-icon" aria-hidden="true">🔊</span>
+            <img class="card-icon" src="assets/ui/sound.png" alt="" />
             <div class="card-left">
               <div class="card-title" data-i18n="settings.sound.title">Sound</div>
               <div class="card-sub" data-i18n="settings.sound.sub">Turn game sounds on/off</div>
@@ -189,7 +197,7 @@
 
         <div class="card card-full">
           <div class="card-left-row">
-            <span class="card-icon" aria-hidden="true">📳</span>
+            <img class="card-icon" src="assets/ui/haptic.png" alt="" />
             <div class="card-left">
               <div class="card-title" data-i18n="settings.haptic.title">Haptic</div>
               <div class="card-sub" data-i18n="settings.haptic.sub">Turn vibration feedback on/off</div>
@@ -205,7 +213,7 @@
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left-row"><span class="card-icon" aria-hidden="true">⏱️</span><div class="card-left"><div class="card-title" data-i18n="settings.timer.title">Timer</div><div class="card-sub" data-i18n="settings.timer.sub">Default time control</div></div></div>
+            <div class="card-left-row"><img class="card-icon" src="assets/ui/timer.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.timer.title">Timer</div><div class="card-sub" data-i18n="settings.timer.sub">Default time control</div></div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
@@ -217,7 +225,7 @@
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left-row"><span class="card-icon" aria-hidden="true">🌓</span><div class="card-left"><div class="card-title" data-i18n="settings.theme.title">Theme</div><div class="card-sub" data-i18n="settings.theme.sub">Choose app appearance</div></div></div>
+            <div class="card-left-row"><img class="card-icon" src="assets/ui/theme.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.theme.title">Theme</div><div class="card-sub" data-i18n="settings.theme.sub">Choose app appearance</div></div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
@@ -228,14 +236,14 @@
         </details>
 
         <div class="card card-full">
-          <div class="card-left-row"><span class="card-icon" aria-hidden="true">💡</span><div class="card-left"><div class="card-title" data-i18n="settings.hints.title">Move Hints</div><div class="card-sub" data-i18n="settings.hints.sub">Show green dots for legal moves</div></div></div>
+          <div class="card-left-row"><img class="card-icon" src="assets/ui/move-hints.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.hints.title">Move Hints</div><div class="card-sub" data-i18n="settings.hints.sub">Show green dots for legal moves</div></div></div>
           <div class="card-right">
             <label class="switch"><input type="checkbox" id="hintsToggle" /><span class="slider"></span></label>
           </div>
         </div>
 
         <div class="card card-full">
-          <div class="card-left-row"><span class="card-icon" aria-hidden="true">✨</span><div class="card-left"><div class="card-title" data-i18n="settings.animation.title">Animation</div><div class="card-sub" data-i18n="settings.animation.sub">Turn off animations to reduce battery usage and improve performance.</div></div></div>
+          <div class="card-left-row"><img class="card-icon" src="assets/ui/animation.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.animation.title">Animation</div><div class="card-sub" data-i18n="settings.animation.sub">Turn off animations to reduce battery usage and improve performance.</div></div></div>
           <div class="card-right">
             <label class="switch"><input type="checkbox" id="animationToggle" /><span class="slider"></span></label>
           </div>
@@ -243,7 +251,7 @@
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left-row"><span class="card-icon" aria-hidden="true">🌐</span><div class="card-left"><div class="card-title" data-i18n="settings.language.title">Language</div><div class="card-sub" data-i18n="settings.language.sub">App display language</div></div></div>
+            <div class="card-left-row"><img class="card-icon" src="assets/ui/language.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.language.title">Language</div><div class="card-sub" data-i18n="settings.language.sub">App display language</div></div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
@@ -254,7 +262,7 @@
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left-row"><span class="card-icon" aria-hidden="true">♟️</span><div class="card-left"><div class="card-title" data-i18n="settings.pieceTheme.title">Piece Theme</div><div class="card-sub" data-i18n="settings.pieceTheme.sub">Choose piece art set</div></div></div>
+            <div class="card-left-row"><img class="card-icon" src="assets/ui/piece-theme.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.pieceTheme.title">Piece Theme</div><div class="card-sub" data-i18n="settings.pieceTheme.sub">Choose piece art set</div></div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
@@ -265,7 +273,7 @@
 
         <details class="card card-full exp">
           <summary>
-            <div class="card-left-row"><span class="card-icon" aria-hidden="true">🖼️</span><div class="card-left"><div class="card-title" data-i18n="settings.boardTheme.title">Board Theme</div><div class="card-sub" data-i18n="settings.boardTheme.sub">Choose board skin</div></div></div>
+            <div class="card-left-row"><img class="card-icon" src="assets/ui/board-theme.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.boardTheme.title">Board Theme</div><div class="card-sub" data-i18n="settings.boardTheme.sub">Choose board skin</div></div></div>
             <div class="card-right caret">›</div>
           </summary>
           <div class="card-body">
@@ -275,7 +283,7 @@
         </details>
 
         <button class="card card-full clickable" id="btnAbout">
-          <div class="card-left-row"><span class="card-icon" aria-hidden="true">ℹ️</span><div class="card-left"><div class="card-title" data-i18n="settings.about.title">About App</div><div class="card-sub" data-i18n="settings.about.sub">Version & credits</div></div></div>
+          <div class="card-left-row"><img class="card-icon" src="assets/ui/about.png" alt="" /><div class="card-left"><div class="card-title" data-i18n="settings.about.title">About App</div><div class="card-sub" data-i18n="settings.about.sub">Version & credits</div></div></div>
           <div class="card-right">›</div>
         </button>
       </div>

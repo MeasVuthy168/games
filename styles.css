@@ -113,19 +113,29 @@ body{
    page further for scrolling without shrinking the board. */
 .app{ height:100dvh; display:flex; flex-direction:column }
 
-/* Every other page (.shell, not .app): the topbar/#appTabbar were
-   already position:sticky/fixed, which should stay put regardless of
-   scroll — but position:fixed/sticky is only as stable as the element
-   they're anchored against, and letting <body> itself be the thing that
-   scrolls means it's also the thing that rubber-bands (the elastic
-   overscroll bounce at the very top/bottom of the page on iOS Safari),
-   during which fixed/sticky elements are known to visibly detach/lag.
-   Locking .shell to exactly one viewport (same 100dvh flex-column
-   pattern .app already uses for Play) and moving the actual scrolling
-   to <main> means <body> never scrolls at all — nothing left to bounce,
-   so the topbar and bottom nav can never appear to "unfix". */
-.shell{ height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
+/* Every other page (.shell, not .app): 100vh first as a fallback for a
+   browser that doesn't understand 100dvh (the second declaration wins
+   wherever it's supported, per normal CSS cascade — a browser that
+   rejects the value keeps the first). Without this fallback, an
+   unsupported dvh would leave .shell with no explicit height at all
+   (flexbox has nothing to size main's flex:1 against), silently
+   defeating the whole fix below. */
+.shell{ height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
 .shell > main{ flex:1 1 auto; min-height:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+/* .topbar/#appTabbar are position:fixed/sticky, anchored to the
+   *layout* viewport — but a mobile browser's own chrome (address bar,
+   in-app browser bar) can make the *visual* viewport smaller than that,
+   and during scroll/momentum that gap changes live, so a bar anchored
+   purely by CSS can end up sitting partly behind that chrome or lagging
+   during the transition ("unfixing"). #appTabbar already corrects for
+   this with window.visualViewport in js/tabbar-fix.js; .topbar gets the
+   exact same treatment here — position:fixed (not sticky, which needs
+   a scrolling ancestor .shell no longer provides) plus that same JS
+   correction, rather than trusting flex layout + dvh sizing alone to
+   keep it visually anchored. main's padding-top reserves the space
+   .topbar no longer claims by being fixed instead of an in-flow child. */
+.shell > .topbar{ position:fixed; top:0; left:0; right:0; z-index:20; padding-top:calc(.75rem + env(safe-area-inset-top, 0px)); }
+.shell > main{ padding-top:calc(3.6rem + env(safe-area-inset-top, 0px)); }
 
 /* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
    aria-hidden="true" already signals it's not meant to be visible.

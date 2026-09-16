@@ -144,15 +144,20 @@ window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
 // is the ONLY thing this block does. It never touches game.js, ai-engine.js,
 // ai-worker.js, or ui.js's move-execution/turn logic; it doesn't know a
 // legal move from an illegal one and never calls game.move() or anything
-// resembling it. The board's own pieces are never touched here — the badge
-// is a floating overlay on top of #board (position:relative already, see
-// styles.css), sized and positioned so it never intercepts touches
-// (pointer-events:none) and never grows to cover the board.
+// resembling it. The board's own pieces are never touched, and the badge
+// never even touches #board — it lives inline in the thinking side's own
+// existing name/clock row (#nameBlack/#clockB or #nameWhite/#clockW,
+// already built by play.html — see getPlayerRow()), so it can't cover any
+// board square at all, let alone intercept a touch on one.
 //
 // Three visual stages, all driven from the two existing call sites below
 // (chooseAIMove's start and its `finally`) — no parallel state machine:
-//   1. "Thinking" — shown the instant the search starts.
-//   2. An abstract pulsing ring around the badge while it searches. This is
+//   1. "Thinking" — shown the instant the search starts, in the row for
+//      whichever color game.turn says is actually moving (offline modes
+//      never flip the board — see ui.js's `flipped`, only online does —
+//      so Black is always the top row and White always the bottom one;
+//      exactly the same assumption applyPlayerLabels() already makes).
+//   2. A small abstract pulse behind the AI icon while it searches. This is
 //      NOT tied to any real candidate squares/moves — the worker's search
 //      is opaque until it resolves (no intermediate candidate-move channel
 //      exists, and this file deliberately doesn't add one to the engine
@@ -163,7 +168,13 @@ window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
 //      to ui.js immediately, on its original timing; this flash runs async
 //      alongside (never inside) that return, so it can't delay the real
 //      move for even one frame.
-const THINKING_HOLD_MS = 280; // Stage 3 "Best move found" hold before fade-out
+const THINKING_HOLD_MS = 280;   // Stage 3 "Best move found" hold before fade-out
+const THINKING_FADE_MS = 180;   // must match the CSS opacity transition below
+
+function getPlayerRow(color) {
+  const nameEl = document.getElementById(color === 'w' ? 'nameWhite' : 'nameBlack');
+  return nameEl ? nameEl.closest('.player-row') : null;
+}
 
 function ensureThinkingUI() {
   let el = document.getElementById('aiThinkingBadge');
@@ -173,76 +184,81 @@ function ensureThinkingUI() {
     const style = document.createElement('style');
     style.id = 'aiThinkingStyles';
     style.textContent = `
+/* An ordinary flex child of .player-row (styles.css) — not absolutely
+   positioned, so it never overlaps the board and the row's existing
+   layout (name flex:1, clock flex:none) naturally makes room for it. */
 #aiThinkingBadge{
-  /* Above .cell-sliding (z-index:8 in styles.css) so a move animation
-     starting during the brief Stage-3 fade-out can never render over it. */
-  position:absolute; top:10px; left:50%; z-index:9;
-  display:flex; align-items:center; gap:.4rem;
-  padding:.38rem .7rem; border-radius:999px;
-  background:var(--panel,#fff); color:var(--ink,#1b1f23);
-  box-shadow:var(--shadow,0 8px 24px rgba(0,0,0,.12)), 0 0 0 1px rgba(13,45,92,.08);
-  font-size:.78rem; font-weight:700; line-height:1.1;
-  white-space:nowrap; max-width:88%; overflow:hidden; text-overflow:ellipsis;
-  opacity:0; pointer-events:none;
-  transform:translate(-50%,-6px);
-  transition:opacity .2s ease, transform .2s ease;
+  display:inline-flex; align-items:center; gap:.32rem; flex:none;
+  padding:.22rem .55rem; border-radius:999px;
+  background:var(--chip-bg,#eef4ff); color:var(--blue,#0d2d5c);
+  font-size:.74rem; font-weight:800; line-height:1;
+  white-space:nowrap;
+  opacity:0; max-width:0; overflow:hidden; pointer-events:none;
+  transition:opacity ${THINKING_FADE_MS}ms ease, max-width ${THINKING_FADE_MS}ms ease;
 }
-#aiThinkingBadge.is-visible{ opacity:1; transform:translate(-50%,0); }
-#aiThinkingBadge::before{
-  content:''; position:absolute; inset:-5px; border-radius:999px;
-  box-shadow:0 0 0 0 rgba(13,45,92,.16);
-  animation:aiThinkRing 1.7s ease-out infinite;
+#aiThinkingBadge.is-visible{ opacity:1; max-width:160px; }
+.ai-thinking-icon-wrap{ position:relative; width:16px; height:16px; flex:none; display:flex; align-items:center; justify-content:center; }
+.ai-thinking-icon{ width:14px; height:14px; display:block; position:relative; z-index:1; }
+.ai-thinking-icon-wrap::before{
+  content:''; position:absolute; inset:0; border-radius:50%;
+  box-shadow:0 0 0 0 rgba(13,45,92,.35);
+  animation:aiThinkRing 1.6s ease-out infinite;
 }
-#aiThinkingBadge.is-done::before{ animation:none; box-shadow:none; }
-.ai-thinking-emoji{ font-size:.95rem; animation:aiThinkPulse 1.6s ease-in-out infinite; }
-#aiThinkingBadge.is-done .ai-thinking-emoji{ animation:none; }
-.ai-thinking-label{ color:var(--blue,#0d2d5c); font-weight:800; }
-.ai-thinking-dots{ display:inline-flex; gap:2px; margin-inline-start:2px; }
+#aiThinkingBadge.is-done .ai-thinking-icon-wrap::before{ animation:none; box-shadow:none; }
+.ai-thinking-dots{ display:inline-flex; gap:2px; margin-inline-start:1px; }
 .ai-thinking-dots i{
   width:3px; height:3px; border-radius:50%; background:currentColor;
-  opacity:.28; animation:aiThinkDot 1.2s ease-in-out infinite;
+  opacity:.3; animation:aiThinkDot 1.2s ease-in-out infinite;
 }
 .ai-thinking-dots i:nth-child(2){ animation-delay:.15s; }
 .ai-thinking-dots i:nth-child(3){ animation-delay:.3s; }
-@keyframes aiThinkPulse{ 0%,100%{ transform:scale(1); opacity:1; } 50%{ transform:scale(1.15); opacity:.7; } }
-@keyframes aiThinkDot{ 0%,80%,100%{ opacity:.28; transform:translateY(0); } 40%{ opacity:1; transform:translateY(-2px); } }
-@keyframes aiThinkRing{ 0%{ box-shadow:0 0 0 0 rgba(13,45,92,.16); opacity:1; } 100%{ box-shadow:0 0 0 9px rgba(13,45,92,0); opacity:0; } }
+@keyframes aiThinkDot{ 0%,80%,100%{ opacity:.3; transform:translateY(0); } 40%{ opacity:1; transform:translateY(-2px); } }
+@keyframes aiThinkRing{ 0%{ box-shadow:0 0 0 0 rgba(13,45,92,.35); opacity:1; } 100%{ box-shadow:0 0 0 6px rgba(13,45,92,0); opacity:0; } }
 @media (prefers-reduced-motion: reduce){
-  .ai-thinking-emoji, .ai-thinking-dots i, #aiThinkingBadge::before{ animation:none !important; }
-  .ai-thinking-dots i{ opacity:.6; }
+  .ai-thinking-dots i, .ai-thinking-icon-wrap::before{ animation:none !important; }
+  .ai-thinking-dots i{ opacity:.65; }
 }
 `;
     document.head.appendChild(style);
   }
 
-  el = document.createElement('div');
+  el = document.createElement('span');
   el.id = 'aiThinkingBadge';
+  el.hidden = true;
   el.setAttribute('role', 'status');
   el.setAttribute('aria-live', 'polite');
   el.innerHTML =
-    '<span class="ai-thinking-emoji" aria-hidden="true">🤖</span>' +
-    '<span class="ai-thinking-label">AI</span>' +
+    '<span class="ai-thinking-icon-wrap"><img class="ai-thinking-icon" src="assets/home/ai.png" alt="" /></span>' +
     '<span class="ai-thinking-status"></span>';
-
-  // Anchored to #board itself (already position:relative in styles.css),
-  // not its parent — so top/left below are always relative to the actual
-  // board box, regardless of surrounding page layout.
-  const board = document.getElementById('board') || document.body;
-  board.appendChild(el);
   return el;
+}
+
+// Moves the (single, reused) badge into the row for whichever color is
+// currently thinking — cheap DOM move, not a rebuild, and there's only
+// ever one row it can be in at a time since only one side thinks at once.
+function attachThinkingRow(el, color) {
+  const row = getPlayerRow(color);
+  if (!row) return;
+  const nameEl = row.querySelector('.player-name');
+  const before = nameEl ? nameEl.nextSibling : row.firstChild;
+  if (el.parentElement !== row || el.nextSibling !== before) {
+    row.insertBefore(el, before);
+  }
 }
 
 let thinkingToken = 0;
 let thinkingHideTimer = null;
 
-function startThinkingUI() {
+function startThinkingUI(color) {
   thinkingToken++;
   if (thinkingHideTimer) { clearTimeout(thinkingHideTimer); thinkingHideTimer = null; }
   const el = ensureThinkingUI();
+  attachThinkingRow(el, color);
+  el.hidden = false;
   el.classList.remove('is-done');
   el.querySelector('.ai-thinking-status').innerHTML =
     'Thinking<span class="ai-thinking-dots"><i></i><i></i><i></i></span>';
-  // Next frame, so the opacity/transform transition actually runs instead
+  // Next frame, so the opacity/max-width transition actually runs instead
   // of the element appearing already in its end state.
   requestAnimationFrame(() => el.classList.add('is-visible'));
 }
@@ -257,17 +273,22 @@ function stopThinkingUI(moveFound) {
 
   if (thinkingHideTimer) { clearTimeout(thinkingHideTimer); thinkingHideTimer = null; }
 
-  if (!moveFound) {
+  const fadeOutThenHide = () => {
     el.classList.remove('is-visible');
-    return;
-  }
+    thinkingHideTimer = setTimeout(() => {
+      thinkingHideTimer = null;
+      if (thinkingToken !== myToken) return; // a newer start/stop happened meanwhile
+      el.hidden = true; // fully out of the row's flex flow while idle
+    }, THINKING_FADE_MS);
+  };
+
+  if (!moveFound) { fadeOutThenHide(); return; }
 
   el.classList.add('is-done');
   el.querySelector('.ai-thinking-status').textContent = 'Best move found';
   thinkingHideTimer = setTimeout(() => {
-    thinkingHideTimer = null;
-    if (thinkingToken !== myToken) return; // a newer start/stop happened meanwhile
-    el.classList.remove('is-visible');
+    if (thinkingToken !== myToken) return;
+    fadeOutThenHide();
   }, THINKING_HOLD_MS);
 }
 
@@ -347,7 +368,7 @@ export async function chooseAIMove(game, opts = {}) {
   const level = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
   logDbg(`Thinking… level=${level} turn=${game.turn}` + (opts.aiVsAi ? ' (AI vs AI)' : ''));
   updateStatus(`AI thinking… (level ${level})`, '#a60');
-  startThinkingUI();
+  startThinkingUI(game.turn);
 
   // A previous search should already be resolved (ui.js serializes calls
   // via its AILock), but guard against overlap defensively.

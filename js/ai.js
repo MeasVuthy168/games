@@ -184,19 +184,27 @@ function ensureThinkingUI() {
     const style = document.createElement('style');
     style.id = 'aiThinkingStyles';
     style.textContent = `
-/* An ordinary flex child of .player-row (styles.css) — not absolutely
-   positioned, so it never overlaps the board and the row's existing
-   layout (name flex:1, clock flex:none) naturally makes room for it. */
+/* An ordinary flex child of .player-row (styles.css), not absolutely
+   positioned, so it never overlaps the board. #aiThinkingBadge itself is
+   the row's only flex:1 item while showing (.player-name is pinned to its
+   own natural width via .ai-thinking-active-row below, applied/removed in
+   lockstep by the JS that toggles the badge — never a permanent change to
+   the shared .player-name rule other rows/pages also use) — so it's the
+   one absorbing the leftover space between the name and the clock, and
+   centers its own content within that space rather than just trailing
+   after a flex:1 name. */
 #aiThinkingBadge{
-  display:inline-flex; align-items:center; gap:.32rem; flex:none;
+  display:flex; align-items:center; justify-content:center; gap:.32rem;
+  flex:1 1 auto; min-width:0;
   padding:.22rem .55rem; border-radius:999px;
   background:var(--chip-bg,#eef4ff); color:var(--blue,#0d2d5c);
   font-size:.74rem; font-weight:800; line-height:1;
-  white-space:nowrap;
-  opacity:0; max-width:0; overflow:hidden; pointer-events:none;
-  transition:opacity ${THINKING_FADE_MS}ms ease, max-width ${THINKING_FADE_MS}ms ease;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  opacity:0; transform:scale(.92); pointer-events:none;
+  transition:opacity ${THINKING_FADE_MS}ms ease, transform ${THINKING_FADE_MS}ms ease;
 }
-#aiThinkingBadge.is-visible{ opacity:1; max-width:160px; }
+#aiThinkingBadge.is-visible{ opacity:1; transform:scale(1); }
+.player-name.ai-thinking-active-row{ flex:0 1 auto; }
 .ai-thinking-icon-wrap{ position:relative; width:16px; height:16px; flex:none; display:flex; align-items:center; justify-content:center; }
 .ai-thinking-icon{ width:14px; height:14px; display:block; position:relative; z-index:1; }
 .ai-thinking-icon-wrap::before{
@@ -236,6 +244,17 @@ function ensureThinkingUI() {
 // Moves the (single, reused) badge into the row for whichever color is
 // currently thinking — cheap DOM move, not a rebuild, and there's only
 // ever one row it can be in at a time since only one side thinks at once.
+// Also pins that row's .player-name to its own natural width (see
+// .ai-thinking-active-row above) so the badge — not the name — is the one
+// that absorbs the leftover space and can center itself in it; restored by
+// clearThinkingRowExpanded() the moment nothing is showing.
+let thinkingActiveNameEl = null;
+
+function clearThinkingRowExpanded() {
+  if (thinkingActiveNameEl) thinkingActiveNameEl.classList.remove('ai-thinking-active-row');
+  thinkingActiveNameEl = null;
+}
+
 function attachThinkingRow(el, color) {
   const row = getPlayerRow(color);
   if (!row) return;
@@ -244,6 +263,9 @@ function attachThinkingRow(el, color) {
   if (el.parentElement !== row || el.nextSibling !== before) {
     row.insertBefore(el, before);
   }
+  if (thinkingActiveNameEl !== nameEl) clearThinkingRowExpanded();
+  thinkingActiveNameEl = nameEl;
+  if (nameEl) nameEl.classList.add('ai-thinking-active-row');
 }
 
 let thinkingToken = 0;
@@ -258,7 +280,7 @@ function startThinkingUI(color) {
   el.classList.remove('is-done');
   el.querySelector('.ai-thinking-status').innerHTML =
     'Thinking<span class="ai-thinking-dots"><i></i><i></i><i></i></span>';
-  // Next frame, so the opacity/max-width transition actually runs instead
+  // Next frame, so the opacity/transform transition actually runs instead
   // of the element appearing already in its end state.
   requestAnimationFrame(() => el.classList.add('is-visible'));
 }
@@ -279,6 +301,7 @@ function stopThinkingUI(moveFound) {
       thinkingHideTimer = null;
       if (thinkingToken !== myToken) return; // a newer start/stop happened meanwhile
       el.hidden = true; // fully out of the row's flex flow while idle
+      clearThinkingRowExpanded(); // .player-name back to its normal flex:1
     }, THINKING_FADE_MS);
   };
 

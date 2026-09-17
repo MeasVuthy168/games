@@ -239,17 +239,6 @@ export class Game {
     this.history  = [];
     this.winner   = null;
     this.counting = emptyCounting();
-    // Whether ANY capture has ever happened in this game — the King's and
-    // Neang's first-move special openings (below) are only available
-    // before the first capture. Kept as an explicit field (not derived
-    // from `this.history`) and threaded through _do/_undo exactly like
-    // `.moved` already is, so it stays correct through the AI search's
-    // internal _do/_undo hot path (which never touches `history`) as well
-    // as through real moves/undo. Callers that reconstruct a Game from
-    // externally-persisted state (online sync, the backend route) must
-    // set this explicitly after restoring board/turn/counting — see
-    // ui.js's applyOnlineGameState() and the backend's POST /:id/move.
-    this.captureOccurred = false;
   }
 
   // Expose FEN for the AI
@@ -307,10 +296,12 @@ export class Game {
         // square, so intervening pieces are never consulted here). This
         // implementation's ruleset (confirmed by tryAdd's mode:'both')
         // allows the leap to capture — see game.js's module comment.
-        // Gone forever once: this specific king has moved, ANY capture
-        // has happened anywhere in the game, or the king is currently in
-        // check (it must respond to check normally, not reposition).
-        if (!p.moved && !this.captureOccurred && !this.inCheck(p.c)) {
+        // Gone forever once: this specific king has moved (per-piece gate
+        // only — capturing this king removes it from the board entirely,
+        // which is the only other way its gate can go away), or the king
+        // is currently in check (it must respond to check normally, not
+        // reposition).
+        if (!p.moved && !this.inCheck(p.c)) {
           for (const [dx, dy] of KNIGHT_JUMPS) {
             tryAdd(x + dx, y + dy, 'both');
           }
@@ -324,13 +315,13 @@ export class Game {
         tryAdd(x + 1, y - 1, 'both');
         tryAdd(x - 1, y + 1, 'both');
         tryAdd(x + 1, y + 1, 'both');
-        // Ouk Chaktrang special: on its first move only, AND before any
-        // capture has happened anywhere in the game, the Neang may instead
-        // advance 2 squares straight forward as a quiet move — it does not
-        // jump like a pawn's double-step elsewhere would; both the
+        // Ouk Chaktrang special: on its first move only, the Neang may
+        // instead advance 2 squares straight forward as a quiet move — it
+        // does not jump like a pawn's double-step elsewhere would; both the
         // passed-over square and the landing square must be empty, and
-        // this move can never capture.
-        if (!p.moved && !this.captureOccurred) {
+        // this move can never capture. Per-piece gate only (see the King's
+        // leap above) — an unrelated capture elsewhere does not affect it.
+        if (!p.moved) {
           const d = this.pawnDir(p.c);
           const midY = y + d;
           const farY = y + d * 2;
@@ -415,15 +406,15 @@ export class Game {
             if (dx || dy) addStep(x + dx, y + dy);
           }
         }
-        // Mirrors the first-move leap in pseudoMoves(): while unmoved and
-        // before any capture, the King also threatens (and can capture on)
-        // its knight-jump squares. Deliberately NOT also gated on "is this
-        // king currently in check" the way pseudoMoves() is — attacksFrom()
-        // feeds squareAttacked()/inCheck() themselves, so referencing
-        // inCheck() here would be circular; a king's threat pattern is a
-        // structural fact about its position/history, independent of the
-        // separate question of whether it may currently use that move.
-        if (!p.moved && !this.captureOccurred) {
+        // Mirrors the first-move leap in pseudoMoves(): while unmoved, the
+        // King also threatens (and can capture on) its knight-jump squares.
+        // Deliberately NOT also gated on "is this king currently in check"
+        // the way pseudoMoves() is — attacksFrom() feeds
+        // squareAttacked()/inCheck() themselves, so referencing inCheck()
+        // here would be circular; a king's threat pattern is a structural
+        // fact about its position/history, independent of the separate
+        // question of whether it may currently use that move.
+        if (!p.moved) {
           for (const [dx, dy] of KNIGHT_JUMPS) addStep(x + dx, y + dy);
         }
         break;
@@ -505,12 +496,10 @@ export class Game {
     const prevMoved = p.moved;
     const prevType  = p.t;
     const captured  = this.at(to.x, to.y) || null;
-    const prevCaptureOccurred = this.captureOccurred;
 
     // move piece
     this.set(to.x, to.y, { ...p, moved: true });
     this.set(from.x, from.y, null);
-    if (captured) this.captureOccurred = true;
 
     // promotion to Met (M) in last 3 ranks
     let promo = false;
@@ -524,7 +513,7 @@ export class Game {
       }
     }
 
-    return { captured, promo, prevMoved, prevType, prevCaptureOccurred };
+    return { captured, promo, prevMoved, prevType };
   }
 
   _undo(from, to, snap) {
@@ -532,7 +521,6 @@ export class Game {
     if (snap.promo) p.t = snap.prevType;
     this.set(from.x, from.y, { ...p, moved: snap.prevMoved });
     this.set(to.x, to.y, snap.captured);
-    this.captureOccurred = snap.prevCaptureOccurred;
   }
 
   legalMoves(x, y) {
@@ -696,23 +684,22 @@ export class Game {
         result: null, justStarted: true, justIncremented: false,
       };
     } else {
-      // Same ongoing phase: the limit may still need recalculating (a
-      // capture can shrink the stronger side's force — e.g. 2 Rooks -> 1
-      // Rook moves 8 -> 16) but progress already made is NEVER reset for
-      // a mere capture. Only the stronger side's completed moves ever
-      // advance `current` (this.turn already flipped, so the mover is
-      // enemyColor(this.turn)).
-      const mover = this.enemyColor(this.turn);
-      const incremented = mover === prev.strongerSide;
-      const current = incremented ? prev.current + 1 : prev.current;
+      // Same ongoing phase: the limit was fixed the moment this phase
+      // started (`prev.limit`, captured below in the !samePhase branch)
+      // and never changes again for the rest of this phase, even if a
+      // later capture shrinks the stronger side's force (e.g. 2 Rooks -> 1
+      // Rook does NOT retarget the limit from 8 to 16) — progress already
+      // made is likewise never reset for a mere capture. Every completed
+      // ply advances `current` by exactly 1, regardless of which side
+      // moved.
+      const current = prev.current + 1;
       this.counting = {
         ...prev,
-        limit: evald.limit,
         current,
-        remaining: Math.max(0, evald.limit - current),
+        remaining: Math.max(0, prev.limit - current),
         result: null,
         justStarted: false,
-        justIncremented: incremented,
+        justIncremented: true,
       };
     }
 
@@ -779,7 +766,6 @@ export class Game {
       prevType:  snap.prevType,
       prevMoved: snap.prevMoved,
       prevCounting,
-      prevCaptureOccurred: snap.prevCaptureOccurred,
     });
 
     this.turn = this.enemyColor(this.turn);
@@ -813,12 +799,6 @@ export class Game {
       promo:     last.promo,
       prevType:  last.prevType,
       prevMoved: last.prevMoved,
-      // A history entry saved before captureOccurred tracking existed
-      // (an old in-progress localStorage save) won't have this field —
-      // fall back to re-deriving it from the moves that remain after
-      // popping this one, which is exactly "was there a capture before
-      // this undone move".
-      prevCaptureOccurred: last.prevCaptureOccurred ?? this.history.some(h => h.captured),
     });
 
     this.counting = last.prevCounting ? { ...last.prevCounting } : emptyCounting();

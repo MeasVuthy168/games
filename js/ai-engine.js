@@ -134,12 +134,11 @@ function sig(mv) {
 }
 
 // Board layout alone is not sufficient: King/Met "first move" leap
-// eligibility depends on per-piece `.moved` and on `game.captureOccurred`
-// (see game.js pseudoMoves/attacksFrom), so two positions with identical
-// piece placement can have different legal-move sets. Both must be folded
-// into the key or the transposition table (and positionHash() below) can
-// treat those positions as the same, returning a move that isn't actually
-// legal in one of them.
+// eligibility depends on per-piece `.moved` (see game.js pseudoMoves/
+// attacksFrom), so two positions with identical piece placement can have
+// different legal-move sets. That must be folded into the key or the
+// transposition table (and positionHash() below) can treat those positions
+// as the same, returning a move that isn't actually legal in one of them.
 function hashKey(game) {
   let s = '';
   for (let y = 0; y < 8; y++) {
@@ -150,7 +149,6 @@ function hashKey(game) {
       if (p.t === PT.KING || p.t === PT.MET) s += p.moved ? '1' : '0';
     }
   }
-  s += game.captureOccurred ? 'C' : 'c';
   return s;
 }
 

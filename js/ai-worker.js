@@ -32,15 +32,12 @@ self.onmessage = (e) => {
   const data = e.data || {};
   if (data.type !== 'search') return;
 
-  const { board, turn, level, requestId, aiVsAi, positionHistory, seed, captureOccurred } = data;
+  const { board, turn, level, requestId, aiVsAi, positionHistory, seed } = data;
   const game = new Game();
   game.board = board;
   game.turn = turn;
   game.history = [];
   game.winner = null;
-  // See ai.js's postMessage call: without this the King/Met first-move
-  // leap eligibility the search sees can disagree with the real game.
-  game.captureOccurred = !!captureOccurred;
 
   try {
     const opts = aiVsAi

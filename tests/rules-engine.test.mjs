@@ -6,11 +6,6 @@
 // of any rule). Run with:
 //   node --test tests/
 //
-// Every constructed position sets `captureOccurred` explicitly rather than
-// leaving it at the Game default, so tests that aren't specifically about
-// the King/Met first-move leap don't accidentally get extra leap-based
-// moves or attack squares from freshly-placed (`moved: false`) kings/mets.
-
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { Game, PT, COLORS, piece } from '../js/game.js';
@@ -20,7 +15,7 @@ function emptyBoard() {
   return Array.from({ length: 8 }, () => Array(8).fill(null));
 }
 
-function mkGame(setup, turn, { captureOccurred = true } = {}) {
+function mkGame(setup, turn) {
   const g = new Game();
   const b = emptyBoard();
   setup(b);
@@ -28,7 +23,6 @@ function mkGame(setup, turn, { captureOccurred = true } = {}) {
   g.turn = turn;
   g.history = [];
   g.winner = null;
-  g.captureOccurred = captureOccurred;
   return g;
 }
 
@@ -214,7 +208,9 @@ describe('checkmate and stalemate', () => {
   test('stalemate: no legal moves + NOT in check = stalemate', () => {
     const g = mkGame(b => {
       b[0][0] = piece(PT.KING, COLORS.BLACK);   // a8
-      b[2][1] = piece(PT.KING, COLORS.WHITE);   // b6 - covers a7,b7
+      const wk = piece(PT.KING, COLORS.WHITE);
+      wk.moved = true; // avoid an incidental leap-threat on a8 from b6 (unrelated to this test)
+      b[2][1] = wk;                              // b6 - covers a7,b7
       b[1][2] = piece(PT.MET, COLORS.WHITE);    // c7 - covers b8
     }, COLORS.BLACK);
     assert.equal(g.inCheck(COLORS.BLACK), false);
@@ -224,8 +220,12 @@ describe('checkmate and stalemate', () => {
 
   test('checkmate takes priority over a Counting Draw reaching its limit on the same move', () => {
     const g = mkGame(b => {
-      b[0][0] = piece(PT.KING, COLORS.BLACK);   // a8
-      b[2][1] = piece(PT.KING, COLORS.WHITE);   // b6 - covers a7,b7
+      const bk = piece(PT.KING, COLORS.BLACK);
+      bk.moved = true; // avoid an incidental leap-threat on b6 from a8 (unrelated to this test)
+      b[0][0] = bk;                              // a8
+      const wk = piece(PT.KING, COLORS.WHITE);
+      wk.moved = true; // avoid an incidental leap-threat on a8 from b6 (unrelated to this test)
+      b[2][1] = wk;                              // b6 - covers a7,b7
       b[0][7] = piece(PT.ROOK, COLORS.WHITE);   // h8 - about to mate via c8
     }, COLORS.WHITE);
     // Piece Count already active, one move away from the limit — if this
@@ -250,21 +250,13 @@ describe('checkmate and stalemate', () => {
 // 5. Ouk Chaktrang special rules: King leap, Met leap, promotion
 // ---------------------------------------------------------------------
 describe('Ouk Chaktrang special rules', () => {
-  test('King first-move leap is available when unmoved and no capture has occurred', () => {
+  test('King first-move leap is available when unmoved', () => {
     const g = mkGame(b => {
       b[7][4] = piece(PT.KING, COLORS.WHITE);  // e1
       b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     const moves = g.legalMoves(4, 7);
     assert.ok(has(moves, 5, 5), 'king should be able to leap to f3 (knight-jump)');
-  });
-
-  test('King leap is unavailable once captureOccurred is true', () => {
-    const g = mkGame(b => {
-      b[7][4] = piece(PT.KING, COLORS.WHITE);
-      b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: true });
-    assert.ok(!has(g.legalMoves(4, 7), 5, 5));
   });
 
   test('King leap is unavailable once this king has moved', () => {
@@ -273,26 +265,17 @@ describe('Ouk Chaktrang special rules', () => {
       k.moved = true;
       b[7][4] = k;
       b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     assert.ok(!has(g.legalMoves(4, 7), 5, 5));
   });
 
-  test('Met first-move 2-square advance is available when unmoved and no capture has occurred', () => {
+  test('Met first-move 2-square advance is available when unmoved', () => {
     const g = mkGame(b => {
       b[6][4] = piece(PT.MET, COLORS.WHITE);   // e2
       b[7][0] = piece(PT.KING, COLORS.WHITE);
       b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     assert.ok(has(g.legalMoves(4, 6), 4, 4), 'met should reach e4 via the 2-square advance');
-  });
-
-  test('Met 2-square advance is unavailable once captureOccurred is true', () => {
-    const g = mkGame(b => {
-      b[6][4] = piece(PT.MET, COLORS.WHITE);
-      b[7][0] = piece(PT.KING, COLORS.WHITE);
-      b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: true });
-    assert.ok(!has(g.legalMoves(4, 6), 4, 4));
   });
 
   test('pawn promotes to Met upon entering the last 3 ranks', () => {
@@ -313,12 +296,100 @@ describe('Ouk Chaktrang special rules', () => {
       b[3][4] = piece(PT.PAWN, COLORS.WHITE);
       b[7][0] = piece(PT.KING, COLORS.WHITE);
       b[0][0] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     const r = g.move({ x: 4, y: 3 }, { x: 4, y: 2 });
     assert.equal(r.ok, true);
     const now = g.at(4, 2);
     assert.equal(now.moved, true, 'a piece is always flagged moved by _do on arrival');
     assert.ok(!has(g.legalMoves(4, 2), 4, 0), 'promoted met must not have the 2-square advance available');
+  });
+});
+
+// ---------------------------------------------------------------------
+// 5b. R5 (canonical decision B): per-piece/per-square special-move
+// gating — an unrelated capture elsewhere on the board must NOT cancel
+// another still-unmoved King's/Met's special first move. Only that
+// piece's own move (including using the special move itself), or that
+// piece being captured, ends its own eligibility. No rank/file/crossing
+// mechanism exists or is introduced.
+// ---------------------------------------------------------------------
+describe('R5 — per-piece/per-square capture gating', () => {
+  test('R5-1/R5-2: an unrelated White capture does not cancel White King leap or Met advance', () => {
+    const g = mkGame(b => {
+      b[7][4] = piece(PT.KING, COLORS.WHITE);   // e1, unmoved
+      b[7][3] = piece(PT.MET, COLORS.WHITE);    // d1, unmoved
+      b[7][7] = piece(PT.ROOK, COLORS.WHITE);   // h1
+      b[0][4] = piece(PT.KING, COLORS.BLACK);   // e8
+      b[0][7] = piece(PT.KNIGHT, COLORS.BLACK); // h8, undefended
+    }, COLORS.WHITE);
+    const r = g.move({ x: 7, y: 7 }, { x: 7, y: 0 }); // Rh1xh8 — unrelated capture
+    assert.equal(r.ok, true);
+    assert.equal(r.captured?.t, PT.KNIGHT);
+    assert.ok(has(g.legalMoves(4, 7), 5, 5), 'King leap must remain legal after an unrelated capture');
+    assert.ok(has(g.legalMoves(3, 7), 3, 5), 'Met 2-square advance (d1-d3) must remain legal after an unrelated capture');
+  });
+
+  test('R5-3/R5-4: an unrelated Black capture does not cancel Black King leap or Met advance', () => {
+    const g = mkGame(b => {
+      b[0][4] = piece(PT.KING, COLORS.BLACK);   // e8, unmoved
+      b[0][3] = piece(PT.MET, COLORS.BLACK);    // d8, unmoved
+      b[0][7] = piece(PT.ROOK, COLORS.BLACK);   // h8
+      b[7][4] = piece(PT.KING, COLORS.WHITE);   // e1
+      b[7][7] = piece(PT.KNIGHT, COLORS.WHITE); // h1, undefended
+    }, COLORS.BLACK);
+    const r = g.move({ x: 7, y: 0 }, { x: 7, y: 7 }); // Rh8xh1 — unrelated capture
+    assert.equal(r.ok, true);
+    assert.equal(r.captured?.t, PT.KNIGHT);
+    assert.ok(has(g.legalMoves(4, 0), 5, 2), 'Black King leap must remain legal after an unrelated capture');
+    assert.ok(has(g.legalMoves(3, 0), 3, 2), 'Black Met 2-square advance (d8-d6) must remain legal after an unrelated capture');
+  });
+
+  test('R5-5: a King\'s own normal (non-leap) move removes its own leap privilege', () => {
+    const g = mkGame(b => {
+      b[7][4] = piece(PT.KING, COLORS.WHITE);  // e1
+      b[0][0] = piece(PT.KING, COLORS.BLACK);
+    }, COLORS.WHITE);
+    const r = g.move({ x: 4, y: 7 }, { x: 4, y: 6 }); // Ke1-e2, an ordinary 1-step move
+    assert.equal(r.ok, true);
+    assert.ok(!has(g.legalMoves(4, 6), 3, 4) && !has(g.legalMoves(4, 6), 5, 4),
+      'king must not have any leap-shaped move available after an ordinary move');
+  });
+
+  test('R5-6: a King\'s own leap move (using the privilege) removes it for any further use', () => {
+    const g = mkGame(b => {
+      b[7][4] = piece(PT.KING, COLORS.WHITE);  // e1
+      b[0][0] = piece(PT.KING, COLORS.BLACK);
+    }, COLORS.WHITE);
+    const r = g.move({ x: 4, y: 7 }, { x: 5, y: 5 }); // Ke1-f3, the leap itself
+    assert.equal(r.ok, true);
+    const now = g.at(5, 5);
+    assert.equal(now.moved, true);
+    assert.ok(!has(g.legalMoves(5, 5), 6, 3) && !has(g.legalMoves(5, 5), 4, 3),
+      'king must not be able to leap again after already using its one-time leap');
+  });
+
+  test('R5-7: King leap remains illegal while that King is in check', () => {
+    const g = mkGame(b => {
+      b[7][4] = piece(PT.KING, COLORS.WHITE);  // e1, unmoved
+      b[0][4] = piece(PT.ROOK, COLORS.BLACK);  // e8, checks along the open e-file
+      b[0][0] = piece(PT.KING, COLORS.BLACK);
+    }, COLORS.WHITE);
+    assert.equal(g.inCheck(COLORS.WHITE), true);
+    const moves = g.legalMoves(4, 7).map(m => sq(m.x, m.y));
+    assert.ok(!moves.includes('f3') && !moves.includes('d3'), 'no leap-shaped destination while in check');
+  });
+
+  test('R5-8: an unrelated piece merely sharing the King\'s file (not landing on its square) does not cancel the leap — no rank/file rule exists', () => {
+    const g = mkGame(b => {
+      b[7][4] = piece(PT.KING, COLORS.WHITE);   // e1, unmoved
+      b[4][4] = piece(PT.KHON, COLORS.WHITE);   // e4, blocks the e-file so no check results
+      b[0][4] = piece(PT.ROOK, COLORS.BLACK);   // e8
+      b[0][0] = piece(PT.KING, COLORS.BLACK);
+    }, COLORS.BLACK);
+    const r = g.move({ x: 4, y: 0 }, { x: 4, y: 3 }); // Re8-e5: same file as the White king, blocked, no check
+    assert.equal(r.ok, true);
+    assert.equal(g.inCheck(COLORS.WHITE), false, 'the blocker must prevent check for this test to be meaningful');
+    assert.ok(has(g.legalMoves(4, 7), 5, 5), 'King leap must remain legal — sharing a file without landing on e1 has no effect');
   });
 });
 
@@ -330,7 +401,7 @@ describe('Counting Draw', () => {
     const g = mkGame(b => {
       b[7][4] = piece(PT.KING, COLORS.WHITE);
       b[0][4] = piece(PT.KING, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: true });
+    }, COLORS.WHITE);
     const r = g.move({ x: 4, y: 7 }, { x: 4, y: 6 });
     assert.equal(r.ok, true);
     assert.equal(g.counting.type, 'BARE_KINGS');
@@ -343,7 +414,7 @@ describe('Counting Draw', () => {
       b[7][3] = piece(PT.ROOK, COLORS.WHITE);  // d1, will capture the lone black pawn
       b[0][4] = piece(PT.KING, COLORS.BLACK);
       b[3][3] = piece(PT.PAWN, COLORS.BLACK);  // d5 - black's only non-king piece
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     // Before the capture: an unpromoted pawn is still on the board.
     assert.deepEqual(g.evaluateCountingState(), { eligible: false });
     const r = g.move({ x: 3, y: 7 }, { x: 3, y: 3 }); // Rd1xd5
@@ -357,28 +428,28 @@ describe('Counting Draw', () => {
     assert.equal(g.counting.justStarted, true);
   });
 
-  test('Piece Count only advances on the stronger side\'s own completed moves', () => {
+  test('R9: once active, every completed ply increments progress by exactly 1, regardless of side', () => {
     const g = mkGame(b => {
       b[7][4] = piece(PT.KING, COLORS.WHITE);
       b[7][3] = piece(PT.ROOK, COLORS.WHITE);
       b[0][4] = piece(PT.KING, COLORS.BLACK);
       b[3][3] = piece(PT.PAWN, COLORS.BLACK);
-    }, COLORS.WHITE, { captureOccurred: false });
+    }, COLORS.WHITE);
     g.move({ x: 3, y: 7 }, { x: 3, y: 3 }); // White captures -> phase starts, current = total pieces
-    const afterStart = g.counting.current;
+    const start = g.counting.current;
 
-    // Black moves its king one step -> must NOT increment (black is the counting side, not stronger).
+    // Black moves its king one step -> now increments too (every ply counts).
     const bMoves = g.legalMoves(4, 0);
     assert.ok(bMoves.length > 0);
     g.move({ x: 4, y: 0 }, bMoves[0]);
-    assert.equal(g.counting.current, afterStart);
-    assert.equal(g.counting.justIncremented, false);
+    assert.equal(g.counting.current, start + 1);
+    assert.equal(g.counting.justIncremented, true);
 
-    // White moves its king one step -> must increment (white is the stronger side).
+    // White moves its king one step -> increments again.
     const wMoves = g.legalMoves(4, 7);
     assert.ok(wMoves.length > 0);
     g.move({ x: 4, y: 7 }, wMoves[0]);
-    assert.equal(g.counting.current, afterStart + 1);
+    assert.equal(g.counting.current, start + 2);
     assert.equal(g.counting.justIncremented, true);
   });
 
@@ -396,27 +467,106 @@ describe('Counting Draw', () => {
 });
 
 // ---------------------------------------------------------------------
+// 6b. R8 (canonical decision B): the counting limit is fixed the moment
+// a phase starts and never changes again for that phase, even when a
+// later capture shrinks the stronger side's material category.
+// ---------------------------------------------------------------------
+describe('R8 — counting limit fixed at phase start', () => {
+  test('R8-1: 2 Rooks -> initial limit is 8', () => {
+    const g = mkGame(b => {
+      b[7][7] = piece(PT.KING, COLORS.WHITE);   // h1
+      b[7][0] = piece(PT.ROOK, COLORS.WHITE);   // a1
+      b[1][7] = piece(PT.ROOK, COLORS.WHITE);   // h7, will capture the pawn
+      b[0][0] = piece(PT.KING, COLORS.BLACK);   // a8
+      b[0][7] = piece(PT.PAWN, COLORS.BLACK);   // h8, the board's only pawn
+    }, COLORS.WHITE);
+    const r = g.move({ x: 7, y: 1 }, { x: 7, y: 0 }); // Rh7xh8
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.type, 'PIECE');
+    assert.equal(g.counting.limit, 8);
+  });
+
+  test('R8-2 + R9 combined: 2R -> capture reduces to 1R, limit stays 8, progress keeps advancing every ply', () => {
+    const g = mkGame(b => {
+      b[7][7] = piece(PT.KING, COLORS.WHITE);   // h1
+      b[7][0] = piece(PT.ROOK, COLORS.WHITE);   // a1, undefended — Black king can take it next
+      b[1][7] = piece(PT.ROOK, COLORS.WHITE);   // h7, will capture the pawn
+      b[6][0] = piece(PT.KING, COLORS.BLACK);   // a2, adjacent to White's a1 rook
+      b[0][7] = piece(PT.PAWN, COLORS.BLACK);   // h8, the board's only pawn
+    }, COLORS.WHITE);
+
+    // Ply 1 (White): Rh7xh8 removes the last pawn -> Piece Count starts, 2R -> limit 8.
+    let r = g.move({ x: 7, y: 1 }, { x: 7, y: 0 });
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.limit, 8);
+    const afterStart = g.counting.current;
+
+    // Ply 2 (Black): Ka2xa1 captures a White rook -> material is now 1 Rook,
+    // but the limit must stay frozen at 8 (NOT jump to 16), and this ply
+    // still advances progress (R9: every ply counts, including this capture).
+    r = g.move({ x: 0, y: 6 }, { x: 0, y: 7 });
+    assert.equal(r.ok, true);
+    assert.equal(r.captured?.t, PT.ROOK);
+    assert.equal(g.counting.limit, 8, 'limit must remain frozen at the original 2-Rook value');
+    assert.equal(g.counting.current, afterStart + 1);
+    assert.equal(g.counting.justIncremented, true);
+
+    // Ply 3 (White): shuffle the remaining rook -> limit still frozen, progress advances again.
+    const wMoves = g.legalMoves(7, 0);
+    assert.ok(wMoves.length > 0);
+    r = g.move({ x: 7, y: 0 }, wMoves[0]);
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.limit, 8, 'limit must still be frozen after a further ply');
+    assert.equal(g.counting.current, afterStart + 2);
+  });
+
+  test('R8-3: 2 Khons -> capture one Khon, limit remains 22', () => {
+    const g = mkGame(b => {
+      b[7][7] = piece(PT.KING, COLORS.WHITE);   // h1
+      b[7][0] = piece(PT.KHON, COLORS.WHITE);   // a1
+      b[7][1] = piece(PT.KHON, COLORS.WHITE);   // b1, undefended — Black king can take it
+      b[6][1] = piece(PT.KING, COLORS.BLACK);   // b2, adjacent to White's b1 khon
+    }, COLORS.WHITE);
+    // No pawns anywhere and Black is already a lone king, so Piece Count
+    // becomes active on White's very first move (2 Khons -> limit 22).
+    let r = g.move({ x: 7, y: 7 }, { x: 6, y: 7 }); // Kh1-g1, plain shuffle
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.type, 'PIECE');
+    assert.equal(g.counting.limit, 22);
+    const afterStart = g.counting.current;
+
+    r = g.move({ x: 1, y: 6 }, { x: 1, y: 7 }); // Kb2xb1 — reduces White to 1 Khon
+    assert.equal(r.ok, true);
+    assert.equal(r.captured?.t, PT.KHON);
+    assert.equal(g.counting.limit, 22, 'limit must remain frozen at the original 2-Khon value');
+    assert.equal(g.counting.current, afterStart + 1);
+  });
+
+  test('R8-4: 2 Knights -> capture one Knight, limit remains 32', () => {
+    const g = mkGame(b => {
+      b[7][7] = piece(PT.KING, COLORS.WHITE);     // h1
+      b[7][0] = piece(PT.KNIGHT, COLORS.WHITE);   // a1
+      b[7][1] = piece(PT.KNIGHT, COLORS.WHITE);   // b1, undefended — Black king can take it
+      b[6][1] = piece(PT.KING, COLORS.BLACK);     // b2, adjacent to White's b1 knight
+    }, COLORS.WHITE);
+    let r = g.move({ x: 7, y: 7 }, { x: 6, y: 7 }); // Kh1-g1, plain shuffle
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.type, 'PIECE');
+    assert.equal(g.counting.limit, 32);
+    const afterStart = g.counting.current;
+
+    r = g.move({ x: 1, y: 6 }, { x: 1, y: 7 }); // Kb2xb1 — reduces White to 1 Knight
+    assert.equal(r.ok, true);
+    assert.equal(r.captured?.t, PT.KNIGHT);
+    assert.equal(g.counting.limit, 32, 'limit must remain frozen at the original 2-Knight value');
+    assert.equal(g.counting.current, afterStart + 1);
+  });
+});
+
+// ---------------------------------------------------------------------
 // 7. Transposition-table position hash correctness
 // ---------------------------------------------------------------------
 describe('positionHash correctness (Fix 2 regression)', () => {
-  test('identical board layouts with different captureOccurred must not collide', () => {
-    const setup = b => {
-      b[7][4] = piece(PT.KING, COLORS.WHITE);  // e1, unmoved
-      b[0][4] = piece(PT.KING, COLORS.BLACK);  // e8
-      b[0][0] = piece(PT.ROOK, COLORS.BLACK);
-    };
-    const gA = mkGame(setup, COLORS.WHITE, { captureOccurred: false });
-    const gB = mkGame(setup, COLORS.WHITE, { captureOccurred: true });
-
-    const movesA = gA.legalMoves(4, 7).length;
-    const movesB = gB.legalMoves(4, 7).length;
-    assert.notEqual(movesA, movesB, 'these two positions must actually have different legal move counts');
-
-    const hashA = positionHash(gA, COLORS.WHITE);
-    const hashB = positionHash(gB, COLORS.WHITE);
-    assert.notEqual(hashA, hashB, 'positionHash must distinguish differing captureOccurred state');
-  });
-
   test('identical board layouts with different King.moved must not collide', () => {
     const setup = (moved) => (b) => {
       const k = piece(PT.KING, COLORS.WHITE);
@@ -425,8 +575,8 @@ describe('positionHash correctness (Fix 2 regression)', () => {
       b[0][4] = piece(PT.KING, COLORS.BLACK);
       b[0][0] = piece(PT.ROOK, COLORS.BLACK);
     };
-    const gA = mkGame(setup(false), COLORS.WHITE, { captureOccurred: false });
-    const gC = mkGame(setup(true), COLORS.WHITE, { captureOccurred: false });
+    const gA = mkGame(setup(false), COLORS.WHITE);
+    const gC = mkGame(setup(true), COLORS.WHITE);
 
     const movesA = gA.legalMoves(4, 7).length;
     const movesC = gC.legalMoves(4, 7).length;
@@ -444,8 +594,8 @@ describe('positionHash correctness (Fix 2 regression)', () => {
       b[0][4] = piece(PT.KING, COLORS.BLACK);
       return b;
     };
-    const gA = mkGame(baseBoard, COLORS.WHITE, { captureOccurred: true });
-    const gB = mkGame(baseBoard, COLORS.WHITE, { captureOccurred: true });
+    const gA = mkGame(baseBoard, COLORS.WHITE);
+    const gB = mkGame(baseBoard, COLORS.WHITE);
     assert.equal(positionHash(gA, COLORS.WHITE), positionHash(gB, COLORS.WHITE));
   });
 });
@@ -475,7 +625,7 @@ describe('AI move legality', () => {
     for (let lvl = 1; lvl <= 10; lvl++) {
       const g2 = new Game();
       g2.board = g.board.map(row => row.map(p => (p ? { ...p } : null)));
-      g2.turn = g.turn; g2.history = []; g2.winner = null; g2.captureOccurred = g.captureOccurred;
+      g2.turn = g.turn; g2.history = []; g2.winner = null;
       const { move } = findBestMove(g2, lvl, new Map());
       assert.ok(move, `level ${lvl} must find a legal response while in check`);
       assert.ok(

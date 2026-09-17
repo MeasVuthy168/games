@@ -10,7 +10,10 @@
 // beyond the small getLastStats() accessor added to ai.js).
 
 import { Game, SIZE, COLORS, PT } from './game.js';
-import { chooseAIMove, getLastStats, resetAI } from './ai.js';
+// Phase 8C: same provider abstraction js/ui.js uses (Fairy-Stockfish
+// primary, local JS AI fallback) — see js/ai-provider.js. Same
+// {chooseAIMove, getLastStats, resetAI} contract js/ai.js already had.
+import { chooseAIMove, getLastStats, resetAI } from './ai-provider.js';
 import { MIN_LEVEL, MAX_LEVEL, DEFAULT_LEVEL, levelBand } from './ai-engine.js';
 import { pieceThemes, pieceImageUrl, clampThemeIndex } from './themes.js';
 

@@ -55,7 +55,7 @@ class ApiError extends Error {
   }
 }
 
-async function request(path, { method = 'GET', body, auth = true } = {}) {
+async function request(path, { method = 'GET', body, auth = true, signal } = {}) {
   const headers = { 'Content-Type': 'application/json' };
   if (auth) {
     const token = getToken();
@@ -68,8 +68,13 @@ async function request(path, { method = 'GET', body, auth = true } = {}) {
       method,
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      signal,
     });
-  } catch {
+  } catch (err) {
+    // A deliberate abort (js/ai-provider.js cancelling a stale AI request)
+    // is not a network failure — let callers tell the two apart instead of
+    // flattening both into the same generic ApiError.
+    if (err?.name === 'AbortError') throw err;
     throw new ApiError('Could not reach the server. Check your connection.', 0);
   }
 
@@ -331,6 +336,16 @@ export async function addCoinsRemote(delta) {
 
 export async function recordGameRemote(entry) {
   return request('/api/stats/history', { method: 'POST', body: entry });
+}
+
+/* ---------------- AI (Fairy-Stockfish, Phase 8C) ----------------
+ * Stateless move-search only — see js/ai-provider.js, the sole caller.
+ * No auth token is needed or sent (the endpoint doesn't require one; see
+ * ouk-ai-backend/src/routes/ai.js). `signal` lets the caller cancel a
+ * request that's no longer wanted (Restart/Undo/New Game) without waiting
+ * for the network round-trip to finish. */
+export async function requestAIMove(payload, { signal } = {}) {
+  return request('/api/ai/move', { method: 'POST', body: payload, auth: false, signal });
 }
 
 export { ApiError };

@@ -1,7 +1,11 @@
 // ui.js — Khmer Chess (Play page) — Makruk AI with remote engine + fallback + end flashes + DnD + premove
 
 import { Game, SIZE, COLORS, PT, emptyCounting } from './game.js';
-import * as AI from './ai.js';
+// Phase 8C: Fairy-Stockfish (primary) + the local JS AI (fallback) behind
+// one abstraction — see js/ai-provider.js. Exposes the exact same
+// {chooseAIMove, pickAIMove, resetAI, getLastStats} contract js/ai.js
+// already had, so nothing below this import needed to change.
+import * as AI from './ai-provider.js';
 import { DEFAULT_LEVEL, positionHash } from './ai-engine.js';
 import * as History from './history.js';
 import * as Tournament from './tournament.js';
@@ -1547,7 +1551,18 @@ export async function initUI() {
   // after the in-flight move finishes, rather than trying to interrupt a
   // search already underway. The ply cap adjudicates a draw rather than
   // ever scheduling a 401st step.
-  function continueAiVsAi(alreadyOver, myGen) {
+  //
+  // `aiCallElapsedMs` (Phase 8C): AI_VS_AI_MOVE_DELAY_MS was sized around
+  // the local JS AI's own near-instant resolution, as a visible pacing
+  // pause between plies. A Fairy-Stockfish call already carries real
+  // network/queue/engine latency of its own (see Phase 8C.1's Performance
+  // section) — piling the full fixed delay on top of that would make
+  // every ply visibly slower than necessary. Subtracting what the AI call
+  // itself already took keeps the same *total* pacing target for a fast
+  // (local) move while adding little to nothing after an already-slow
+  // (network) one — provider-agnostic, since it only looks at how long
+  // the call actually took, not which provider handled it.
+  function continueAiVsAi(alreadyOver, myGen, aiCallElapsedMs = 0) {
     if (!aiVsAiMode || alreadyOver) return;
     aiVsAiPlies++;
     if (aiVsAiPlies >= AI_VS_AI_MAX_PLIES) {
@@ -1558,7 +1573,8 @@ export async function initUI() {
       });
       return;
     }
-    setTimeout(() => { if (aiGen === myGen && clocks.running) thinkAndPlay(); }, AI_VS_AI_MOVE_DELAY_MS);
+    const delay = Math.max(0, AI_VS_AI_MOVE_DELAY_MS - aiCallElapsedMs);
+    setTimeout(() => { if (aiGen === myGen && clocks.running) thinkAndPlay(); }, delay);
   }
 
   async function thinkAndPlay() {
@@ -1580,7 +1596,9 @@ export async function initUI() {
             aiVsAi: true, positionHistory: aiVsAiPositionHistory,
           }
         : { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
+      const aiCallStart = Date.now();
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
+      const aiCallElapsedMs = Date.now() - aiCallStart;
       window.AIDebug?.log('[UI] thinkAndPlay: AI move (raw) =', JSON.stringify(aiMove));
 
       // Board was reset/undone while this search was in flight — the move
@@ -1615,7 +1633,7 @@ export async function initUI() {
         recordAiVsAiPosition();
 
         const over2 = concludeIfOver(res2);
-        continueAiVsAi(over2, myGen);
+        continueAiVsAi(over2, myGen, aiCallElapsedMs);
         return;
       }
 
@@ -1626,16 +1644,27 @@ export async function initUI() {
       recordAiVsAiPosition();
 
       const over = concludeIfOver(res);
-      continueAiVsAi(over, myGen);
+      continueAiVsAi(over, myGen, aiCallElapsedMs);
 
     } catch (e) {
+      // A stale (pre-Restart/Undo) search that rejects must not disable AI
+      // or show an error for a newer game already in progress — mirrors
+      // the myGen check above, which this catch block bypasses if AIPICK()
+      // itself throws rather than resolving.
+      if (myGen !== aiGen) return;
       console.error('[AI] thinkAndPlay failed', e);
       window.AIDebug?.log('[UI] thinkAndPlay ERROR:', e?.message || String(e));
       showToast('AI error. AI play has been stopped.', 'error');
       settings.aiEnabled = false;
     } finally {
-      setBoardBusy(false);
-      window.AIDebug?.log('[UI] thinkAndPlay END turn=', game.turn);
+      // A stale call's finally must never clear the busy/AI-lock state
+      // belonging to a newer, already-in-flight generation (see aiGen's
+      // own comment above) — only the call that is still the CURRENT
+      // generation is allowed to unlock the board.
+      if (myGen === aiGen) {
+        setBoardBusy(false);
+        window.AIDebug?.log('[UI] thinkAndPlay END turn=', game.turn);
+      }
     }
   }
 

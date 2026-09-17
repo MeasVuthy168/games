@@ -408,6 +408,13 @@ export async function chooseAIMove(game, opts = {}) {
         type: 'search',
         board: game.board,
         turn: game.turn,
+        // The King's/Met's first-move leap is only available before any
+        // capture has happened anywhere in the game (see game.js). Without
+        // this, the worker's reconstructed Game always defaults to false,
+        // so its search could consider/return a leap move that the real
+        // game (correctly holding captureOccurred=true) then rejects as
+        // illegal — an avoidable source of AI illegal-move fallbacks.
+        captureOccurred: game.captureOccurred,
         level,
         requestId,
         // AI-vs-AI only (js/ui.js's thinkAndPlay() is the only caller that

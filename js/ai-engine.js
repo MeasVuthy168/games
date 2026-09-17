@@ -17,9 +17,10 @@ import { PT } from './game.js';
 // Difficulty levels — numeric 1 (weakest/fastest) .. 10 (strongest).
 // ---------------------------------------------------------------------
 // maxDepth   — ceiling on iterative-deepening depth (plies)
-// timeMs     — hard wall-clock budget per move (level 10 == old Expert's
-//              budget exactly, so the UI never freezes any longer than it
-//              already did)
+// timeMs     — hard wall-clock budget per move. Search runs inside a Web
+//              Worker (ai-worker.js), so a larger budget costs the AI's own
+//              response latency, not main-thread/UI freezing — the "AI is
+//              thinking" indicator covers this wait.
 // useTT      — enable the transposition table
 // useKillers — enable killer-move ordering
 // quiescence — extend leaf search across captures (and check evasions)
@@ -27,20 +28,23 @@ import { PT } from './game.js';
 //              kept for the two weakest levels so they aren't perfectly
 //              deterministic
 //
-// This is an interpolation of the previous 4 named tiers (Easy/Medium/
-// Hard/Expert ≈ levels 2/4/6/10 below) into 10 steps — same shape, finer
-// grain.
+// timeMs is tuned (not a blind linear ramp) so each level's node count and,
+// where the position is complex enough, its reached depth strictly exceed
+// the level below it — verified across opening/middlegame/sparse-endgame
+// benchmarks. In particular L8 gets a larger jump than a linear progression
+// would give it, because enabling quiescence there adds per-leaf cost that
+// would otherwise leave it no deeper than L6/L7 despite doing more work.
 export const LEVELS = {
   1:  { maxDepth: 1,  timeMs: 150,  useTT: false, useKillers: false, quiescence: false, randomize: true },
   2:  { maxDepth: 2,  timeMs: 300,  useTT: false, useKillers: false, quiescence: false, randomize: true },
   3:  { maxDepth: 3,  timeMs: 500,  useTT: false, useKillers: false, quiescence: false },
-  4:  { maxDepth: 4,  timeMs: 800,  useTT: false, useKillers: false, quiescence: false },
-  5:  { maxDepth: 5,  timeMs: 1100, useTT: true,  useKillers: true,  quiescence: false },
-  6:  { maxDepth: 6,  timeMs: 1500, useTT: true,  useKillers: true,  quiescence: false },
-  7:  { maxDepth: 7,  timeMs: 1900, useTT: true,  useKillers: true,  quiescence: false },
-  8:  { maxDepth: 8,  timeMs: 2300, useTT: true,  useKillers: true,  quiescence: true  },
-  9:  { maxDepth: 9,  timeMs: 2700, useTT: true,  useKillers: true,  quiescence: true  },
-  10: { maxDepth: 10, timeMs: 3000, useTT: true,  useKillers: true,  quiescence: true  },
+  4:  { maxDepth: 4,  timeMs: 900,  useTT: false, useKillers: false, quiescence: false },
+  5:  { maxDepth: 5,  timeMs: 1400, useTT: true,  useKillers: true,  quiescence: false },
+  6:  { maxDepth: 6,  timeMs: 2100, useTT: true,  useKillers: true,  quiescence: false },
+  7:  { maxDepth: 7,  timeMs: 3000, useTT: true,  useKillers: true,  quiescence: false },
+  8:  { maxDepth: 8,  timeMs: 4700, useTT: true,  useKillers: true,  quiescence: true  },
+  9:  { maxDepth: 9,  timeMs: 5600, useTT: true,  useKillers: true,  quiescence: true  },
+  10: { maxDepth: 10, timeMs: 6800, useTT: true,  useKillers: true,  quiescence: true  },
 };
 export const MIN_LEVEL = 1;
 export const MAX_LEVEL = 10;
@@ -129,14 +133,24 @@ function sig(mv) {
   return mv ? `${mv.from.x},${mv.from.y}-${mv.to.x},${mv.to.y}` : null;
 }
 
+// Board layout alone is not sufficient: King/Met "first move" leap
+// eligibility depends on per-piece `.moved` and on `game.captureOccurred`
+// (see game.js pseudoMoves/attacksFrom), so two positions with identical
+// piece placement can have different legal-move sets. Both must be folded
+// into the key or the transposition table (and positionHash() below) can
+// treat those positions as the same, returning a move that isn't actually
+// legal in one of them.
 function hashKey(game) {
   let s = '';
   for (let y = 0; y < 8; y++) {
     for (let x = 0; x < 8; x++) {
       const p = game.at(x, y);
-      s += p ? p.c + p.t : '.';
+      if (!p) { s += '.'; continue; }
+      s += p.c + p.t;
+      if (p.t === PT.KING || p.t === PT.MET) s += p.moved ? '1' : '0';
     }
   }
+  s += game.captureOccurred ? 'C' : 'c';
   return s;
 }
 

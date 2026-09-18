@@ -137,184 +137,6 @@ function resetDbg() {
 
 window.AIDebug = { log: logDbg, reset: resetDbg, status: updateStatus };
 
-// ===== Thinking indicator (always shown while the worker is searching,
-// independent of the debug flag) =====
-//
-// Pure presentation layer over chooseAIMove()'s own start/resolve — this
-// is the ONLY thing this block does. It never touches game.js, ai-engine.js,
-// ai-worker.js, or ui.js's move-execution/turn logic; it doesn't know a
-// legal move from an illegal one and never calls game.move() or anything
-// resembling it. The board's own pieces are never touched, and the badge
-// never even touches #board — it lives inline in the thinking side's own
-// existing name/clock row (#nameBlack/#clockB or #nameWhite/#clockW,
-// already built by play.html — see getPlayerRow()), so it can't cover any
-// board square at all, let alone intercept a touch on one.
-//
-// Three visual stages, all driven from the two existing call sites below
-// (chooseAIMove's start and its `finally`) — no parallel state machine:
-//   1. "Thinking" — shown the instant the search starts, in the row for
-//      whichever color game.turn says is actually moving (offline modes
-//      never flip the board — see ui.js's `flipped`, only online does —
-//      so Black is always the top row and White always the bottom one;
-//      exactly the same assumption applyPlayerLabels() already makes).
-//   2. A small abstract pulse behind the AI icon while it searches. This is
-//      NOT tied to any real candidate squares/moves — the worker's search
-//      is opaque until it resolves (no intermediate candidate-move channel
-//      exists, and this file deliberately doesn't add one to the engine
-//      just for this), so per the brief this stays a purely decorative,
-//      non-informational animation, never a fake analysis of the position.
-//   3. "Best move found" — a brief label swap once the search has actually
-//      resolved. Fully non-blocking: chooseAIMove() below returns the move
-//      to ui.js immediately, on its original timing; this flash runs async
-//      alongside (never inside) that return, so it can't delay the real
-//      move for even one frame.
-const THINKING_HOLD_MS = 280;   // Stage 3 "Best move found" hold before fade-out
-const THINKING_FADE_MS = 180;   // must match the CSS opacity transition below
-
-function getPlayerRow(color) {
-  const nameEl = document.getElementById(color === 'w' ? 'nameWhite' : 'nameBlack');
-  return nameEl ? nameEl.closest('.player-row') : null;
-}
-
-function ensureThinkingUI() {
-  let el = document.getElementById('aiThinkingBadge');
-  if (el) return el;
-
-  if (!document.getElementById('aiThinkingStyles')) {
-    const style = document.createElement('style');
-    style.id = 'aiThinkingStyles';
-    style.textContent = `
-/* An ordinary flex child of .player-row (styles.css), not absolutely
-   positioned, so it never overlaps the board. #aiThinkingBadge itself is
-   the row's only flex:1 item while showing (.player-name is pinned to its
-   own natural width via .ai-thinking-active-row below, applied/removed in
-   lockstep by the JS that toggles the badge — never a permanent change to
-   the shared .player-name rule other rows/pages also use) — so it's the
-   one absorbing the leftover space between the name and the clock, and
-   centers its own content within that space rather than just trailing
-   after a flex:1 name. */
-#aiThinkingBadge{
-  display:flex; align-items:center; justify-content:center; gap:.32rem;
-  flex:1 1 auto; min-width:0;
-  padding:.22rem .55rem; border-radius:999px;
-  background:var(--chip-bg,#eef4ff); color:var(--blue,#0d2d5c);
-  font-size:.74rem; font-weight:800; line-height:1;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-  opacity:0; transform:scale(.92); pointer-events:none;
-  transition:opacity ${THINKING_FADE_MS}ms ease, transform ${THINKING_FADE_MS}ms ease;
-}
-#aiThinkingBadge.is-visible{ opacity:1; transform:scale(1); }
-.player-name.ai-thinking-active-row{ flex:0 1 auto; }
-.ai-thinking-icon-wrap{ position:relative; width:16px; height:16px; flex:none; display:flex; align-items:center; justify-content:center; }
-.ai-thinking-icon{ width:14px; height:14px; display:block; position:relative; z-index:1; }
-.ai-thinking-icon-wrap::before{
-  content:''; position:absolute; inset:0; border-radius:50%;
-  box-shadow:0 0 0 0 rgba(13,45,92,.35);
-  animation:aiThinkRing 1.6s ease-out infinite;
-}
-#aiThinkingBadge.is-done .ai-thinking-icon-wrap::before{ animation:none; box-shadow:none; }
-.ai-thinking-dots{ display:inline-flex; gap:2px; margin-inline-start:1px; }
-.ai-thinking-dots i{
-  width:3px; height:3px; border-radius:50%; background:currentColor;
-  opacity:.3; animation:aiThinkDot 1.2s ease-in-out infinite;
-}
-.ai-thinking-dots i:nth-child(2){ animation-delay:.15s; }
-.ai-thinking-dots i:nth-child(3){ animation-delay:.3s; }
-@keyframes aiThinkDot{ 0%,80%,100%{ opacity:.3; transform:translateY(0); } 40%{ opacity:1; transform:translateY(-2px); } }
-@keyframes aiThinkRing{ 0%{ box-shadow:0 0 0 0 rgba(13,45,92,.35); opacity:1; } 100%{ box-shadow:0 0 0 6px rgba(13,45,92,0); opacity:0; } }
-@media (prefers-reduced-motion: reduce){
-  .ai-thinking-dots i, .ai-thinking-icon-wrap::before{ animation:none !important; }
-  .ai-thinking-dots i{ opacity:.65; }
-}
-`;
-    document.head.appendChild(style);
-  }
-
-  el = document.createElement('span');
-  el.id = 'aiThinkingBadge';
-  el.hidden = true;
-  el.setAttribute('role', 'status');
-  el.setAttribute('aria-live', 'polite');
-  el.innerHTML =
-    '<span class="ai-thinking-icon-wrap"><img class="ai-thinking-icon" src="assets/home/ai.png" alt="" /></span>' +
-    '<span class="ai-thinking-status"></span>';
-  return el;
-}
-
-// Moves the (single, reused) badge into the row for whichever color is
-// currently thinking — cheap DOM move, not a rebuild, and there's only
-// ever one row it can be in at a time since only one side thinks at once.
-// Also pins that row's .player-name to its own natural width (see
-// .ai-thinking-active-row above) so the badge — not the name — is the one
-// that absorbs the leftover space and can center itself in it; restored by
-// clearThinkingRowExpanded() the moment nothing is showing.
-let thinkingActiveNameEl = null;
-
-function clearThinkingRowExpanded() {
-  if (thinkingActiveNameEl) thinkingActiveNameEl.classList.remove('ai-thinking-active-row');
-  thinkingActiveNameEl = null;
-}
-
-function attachThinkingRow(el, color) {
-  const row = getPlayerRow(color);
-  if (!row) return;
-  const nameEl = row.querySelector('.player-name');
-  const before = nameEl ? nameEl.nextSibling : row.firstChild;
-  if (el.parentElement !== row || el.nextSibling !== before) {
-    row.insertBefore(el, before);
-  }
-  if (thinkingActiveNameEl !== nameEl) clearThinkingRowExpanded();
-  thinkingActiveNameEl = nameEl;
-  if (nameEl) nameEl.classList.add('ai-thinking-active-row');
-}
-
-let thinkingToken = 0;
-let thinkingHideTimer = null;
-
-function startThinkingUI(color) {
-  thinkingToken++;
-  if (thinkingHideTimer) { clearTimeout(thinkingHideTimer); thinkingHideTimer = null; }
-  const el = ensureThinkingUI();
-  attachThinkingRow(el, color);
-  el.hidden = false;
-  el.classList.remove('is-done');
-  el.querySelector('.ai-thinking-status').innerHTML =
-    'Thinking<span class="ai-thinking-dots"><i></i><i></i><i></i></span>';
-  // Next frame, so the opacity/transform transition actually runs instead
-  // of the element appearing already in its end state.
-  requestAnimationFrame(() => el.classList.add('is-visible'));
-}
-
-// Never awaited by its caller (see chooseAIMove below) — this only ever
-// runs after the real move has already been handed back for execution, and
-// never delays that hand-off.
-function stopThinkingUI(moveFound) {
-  const myToken = ++thinkingToken;
-  const el = document.getElementById('aiThinkingBadge');
-  if (!el) return;
-
-  if (thinkingHideTimer) { clearTimeout(thinkingHideTimer); thinkingHideTimer = null; }
-
-  const fadeOutThenHide = () => {
-    el.classList.remove('is-visible');
-    thinkingHideTimer = setTimeout(() => {
-      thinkingHideTimer = null;
-      if (thinkingToken !== myToken) return; // a newer start/stop happened meanwhile
-      el.hidden = true; // fully out of the row's flex flow while idle
-      clearThinkingRowExpanded(); // .player-name back to its normal flex:1
-    }, THINKING_FADE_MS);
-  };
-
-  if (!moveFound) { fadeOutThenHide(); return; }
-
-  el.classList.add('is-done');
-  el.querySelector('.ai-thinking-status').textContent = 'Best move found';
-  thinkingHideTimer = setTimeout(() => {
-    if (thinkingToken !== myToken) return;
-    fadeOutThenHide();
-  }, THINKING_HOLD_MS);
-}
-
 // ===== Worker lifecycle =====
 //
 // A single persistent worker is reused for the whole game (so its
@@ -391,7 +213,6 @@ export async function chooseAIMove(game, opts = {}) {
   const level = LEVELS[opts.level] ? opts.level : DEFAULT_LEVEL;
   logDbg(`Thinking… level=${level} turn=${game.turn}` + (opts.aiVsAi ? ' (AI vs AI)' : ''));
   updateStatus(`AI thinking… (level ${level})`, '#a60');
-  startThinkingUI(game.turn);
 
   // A previous search should already be resolved (ui.js serializes calls
   // via its AILock), but guard against overlap defensively.
@@ -399,33 +220,24 @@ export async function chooseAIMove(game, opts = {}) {
 
   ensureWorker();
 
-  let resolvedMove = null;
-  try {
-    resolvedMove = await new Promise((resolve) => {
-      const requestId = nextRequestId++;
-      pending = { requestId, resolve };
-      worker.postMessage({
-        type: 'search',
-        board: game.board,
-        turn: game.turn,
-        level,
-        requestId,
-        // AI-vs-AI only (js/ui.js's thinkAndPlay() is the only caller that
-        // ever sets these) — every other mode's opts is just {level,
-        // aiColor, timeMs} as before, so the worker takes its old,
-        // unmodified path for them (see ai-worker.js's `aiVsAi ? … : {}`).
-        aiVsAi: !!opts.aiVsAi,
-        positionHistory: opts.aiVsAi ? opts.positionHistory : undefined,
-        seed: opts.aiVsAi ? opts.debugSeed : undefined,
-      });
+  return new Promise((resolve) => {
+    const requestId = nextRequestId++;
+    pending = { requestId, resolve };
+    worker.postMessage({
+      type: 'search',
+      board: game.board,
+      turn: game.turn,
+      level,
+      requestId,
+      // AI-vs-AI only (js/ui.js's thinkAndPlay() is the only caller that
+      // ever sets these) — every other mode's opts is just {level,
+      // aiColor, timeMs} as before, so the worker takes its old,
+      // unmodified path for them (see ai-worker.js's `aiVsAi ? … : {}`).
+      aiVsAi: !!opts.aiVsAi,
+      positionHistory: opts.aiVsAi ? opts.positionHistory : undefined,
+      seed: opts.aiVsAi ? opts.debugSeed : undefined,
     });
-    return resolvedMove;
-  } finally {
-    // Not awaited — the move above is already on its way back to ui.js on
-    // its original timing; this only starts the (async, non-blocking)
-    // Stage 3 flash-and-fade.
-    stopThinkingUI(!!resolvedMove);
-  }
+  });
 }
 
 export function setAIDifficulty(level) {

@@ -97,6 +97,22 @@
         <div class="turn-wrap">
           <div id="turnLabel" class="turn-banner">វេនខាង (ស)</div>
 
+          <!-- Phase 8C.4: which AI is currently searching (Fairy-Stockfish
+               primary vs. the local js/ai.js fallback) — populated by
+               js/ui.js's setProviderStatus(), hidden whenever no AI search
+               is in flight. Never rendered for a human move or an online
+               game (thinkAndPlay() is simply never called in either). -->
+          <div id="aiProviderStatus" class="ai-provider-status" hidden aria-live="polite">
+            <span class="ai-provider-icon" aria-hidden="true"></span>
+            <span class="ai-provider-name"></span>
+            <span class="ai-provider-action"></span>
+            <span class="ai-thinking-dots" aria-hidden="true">
+              <span class="ai-thinking-dot"></span>
+              <span class="ai-thinking-dot"></span>
+              <span class="ai-thinking-dot"></span>
+            </span>
+          </div>
+
           <span id="count-label" class="count-label" style="display:none;">
             ⏳ <b><span id="count-label-prefix" data-i18n="counting.piece">Piece Count</span>: <span id="count-number">–</span></b>
           </span>

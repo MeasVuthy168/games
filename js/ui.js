@@ -432,6 +432,7 @@ export async function initUI() {
   initTranslations();
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
+  const elAiStatus = document.getElementById('aiProviderStatus');
   const btnReset = document.getElementById('btnReset');
   const btnUndo  = document.getElementById('btnUndo');
   const btnPause = document.getElementById('btnPause');
@@ -597,6 +598,41 @@ export async function initUI() {
     AILock = !!on;
     if (elBoard) elBoard.style.pointerEvents = on ? 'none' : 'auto';
     document.body.classList.toggle('ai-thinking', !!on);
+  }
+
+  // Phase 8C.4: UI-only indicator of which AI is currently searching.
+  // js/ai-provider.js reports 'fairy' | 'fallback' | 'stale' via the
+  // onStatusChange callback below — this module owns turning that into
+  // the on-screen pill, including the "now idle" transition once a call
+  // actually finishes (ai-provider.js has no opinion on that; see its own
+  // module comment). Never changes move-selection, fallback, or timer
+  // behavior — purely cosmetic, same as setBoardBusy()'s CSS class.
+  const PROVIDER_STATUS_INFO = {
+    fairy:    { icon: '🤖', name: 'Fairy-Stockfish', actionKey: 'ai.provider.thinking' },
+    fallback: { icon: '🧠', name: 'Game.js AI',       actionKey: 'ai.provider.calculating' },
+  };
+  let lastProviderStatus = 'idle';
+
+  function renderProviderStatus(status) {
+    if (!elAiStatus) return;
+    const info = PROVIDER_STATUS_INFO[status];
+    if (!info) { elAiStatus.hidden = true; return; } // idle / stale — nothing to show
+    elAiStatus.querySelector('.ai-provider-icon').textContent = info.icon;
+    elAiStatus.querySelector('.ai-provider-name').textContent = info.name;
+    elAiStatus.querySelector('.ai-provider-action').textContent = t(info.actionKey);
+    elAiStatus.classList.toggle('ai-provider-fallback', status === 'fallback');
+    elAiStatus.hidden = false;
+  }
+
+  // Same stale-generation guard as setBoardBusy()'s own callers (see
+  // aiGen's comment above): a status update belonging to an older,
+  // already-discarded search must never resurrect the indicator — or
+  // clear a newer one — after Restart/Undo/New Game moved on.
+  function setProviderStatus(status, myGen) {
+    if (myGen !== aiGen) return;
+    if (status === lastProviderStatus) return; // no-op repeats never touch the DOM
+    lastProviderStatus = status;
+    renderProviderStatus(status);
   }
 
   function isAITurn() {
@@ -1586,6 +1622,11 @@ export async function initUI() {
       // Single-AI modes always think as settings.aiColor; AI vs AI has no
       // one fixed AI side — it's whichever color is actually on move, at
       // that side's own configured level.
+      // Phase 8C.4: reports which AI is currently searching, for the
+      // on-screen indicator only — see setProviderStatus()'s own comment.
+      // Bound to this call's own myGen so a status update can never be
+      // misattributed to a later generation after Restart/Undo.
+      const onStatusChange = (status) => setProviderStatus(status, myGen);
       const aiOpts = aiVsAiMode
         ? {
             level: game.turn === COLORS.WHITE ? settings.aiLevelWhite : settings.aiLevelBlack,
@@ -1594,8 +1635,9 @@ export async function initUI() {
             // ai-engine.js's findBestMove doc comment. Human-vs-AI/Online
             // below never set these, so they're unaffected.
             aiVsAi: true, positionHistory: aiVsAiPositionHistory,
+            onStatusChange,
           }
-        : { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120 };
+        : { level: settings.aiLevel, aiColor: settings.aiColor, timeMs: 120, onStatusChange };
       const aiCallStart = Date.now();
       const aiMove = await Promise.resolve(AIPICK(game, aiOpts));
       const aiCallElapsedMs = Date.now() - aiCallStart;
@@ -1663,6 +1705,7 @@ export async function initUI() {
       // generation is allowed to unlock the board.
       if (myGen === aiGen) {
         setBoardBusy(false);
+        setProviderStatus('idle', myGen);
         window.AIDebug?.log('[UI] thinkAndPlay END turn=', game.turn);
       }
     }
@@ -2038,7 +2081,7 @@ export async function initUI() {
   /* -------- controls -------- */
 
   btnReset?.addEventListener('click', () => {
-    aiGen++; AI.resetAI?.(); setBoardBusy(false);
+    aiGen++; AI.resetAI?.(); setBoardBusy(false); setProviderStatus('idle', aiGen);
     resetResultPresentation(); // New Game always clears any pending/shown celebration first
     game.reset();
     gameStartedAt = Date.now();
@@ -2052,7 +2095,7 @@ export async function initUI() {
   });
 
   btnUndo?.addEventListener('click', () => {
-    aiGen++; AI.resetAI?.(); setBoardBusy(false);
+    aiGen++; AI.resetAI?.(); setBoardBusy(false); setProviderStatus('idle', aiGen);
     resetResultPresentation(); // Undoing out of a just-finished game clears its celebration too
     if (!game.undo()) return;
     // Playing vs AI: also undo the AI's reply so control returns to the human.

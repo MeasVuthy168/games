@@ -37,7 +37,7 @@ if (typeof globalThis.localStorage === 'undefined') {
 
 import { Game, PT, COLORS, piece } from '../js/game.js';
 import { setApiBase } from '../js/api.js';
-import { tryFairyStockfish, pickMoveCore, LEVEL_MOVETIME_MS } from '../js/ai-provider.js';
+import { tryFairyStockfish, pickMoveCore, chooseAIMove, resetAI, LEVEL_MOVETIME_MS } from '../js/ai-provider.js';
 
 function freshGame() {
   return new Game(); // real reset() -> real initialPosition()
@@ -450,5 +450,153 @@ describe('Step 1: stale-generation AILock fix (model of thinkAndPlay()\'s patter
   test('reproduces the pre-fix bug: an UNGUARDED finally incorrectly unlocks mid-new-search', async () => {
     const { lockedWhileNewSearchInFlight } = await runPattern({ guarded: false });
     assert.equal(lockedWhileNewSearchInFlight, false, 'demonstrates the bug this phase fixed: the stale call\'s finally clears the lock while the new search is still running');
+  });
+});
+
+// ===========================================================================
+// Phase 8C.4 — AI provider status (onStatusChange), UI metadata only.
+//
+// pickMoveCore()/chooseAIMove() themselves are exercised the same
+// fake-fn-driven way as the fallback-decision suite above — the only new
+// thing under test is the SEQUENCE of opts.onStatusChange('fairy' |
+// 'fallback' | 'stale') calls. Two invariants matter most: (1) these
+// calls never change move-selection, the fallback decision, or the
+// aborted/no-fallback contract (already proven above; re-confirmed here
+// with a spy attached), and (2) pickMoveCore/chooseAIMove never report
+// 'idle' themselves — that transition is caller-owned (js/ui.js), exactly
+// as this module's own comment states.
+// ===========================================================================
+describe('Phase 8C.4: onStatusChange reports which attempt is running, never gates behavior', () => {
+  // pickMoveCore() itself only ever reports 'stale' or 'fallback' (or
+  // nothing at all, on success) — 'fairy' is chooseAIMove()'s own,
+  // separate responsibility (see the dedicated chooseAIMove() test below),
+  // fired before pickMoveCore is even called. Testing pickMoveCore
+  // directly (as the rest of this file already does) isolates that.
+  test('Test 1/2: success — reports nothing at all; move/result unaffected', async () => {
+    const g = mkKingsAndRook();
+    const statuses = [];
+    const fairyFn = async () => ({ aborted: false, move: { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } }, error: null });
+    const fallbackFn = async () => { throw new Error('must not be called on a legal Fairy-Stockfish move'); };
+    const result = await pickMoveCore(g, { level: 5, onStatusChange: (s) => statuses.push(s) }, fairyFn, fallbackFn);
+    assert.deepEqual(statuses, [], 'a clean success needs no status update from pickMoveCore — chooseAIMove already reported "fairy", and the caller owns "idle" once the call resolves');
+    assert.deepEqual(result, { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } });
+  });
+
+  test('Test 3: Fairy returns an illegal move — reports "fallback"', async () => {
+    const g = mkKingsAndRook();
+    const statuses = [];
+    const fairyFn = async () => ({ aborted: false, move: { from: { x: 3, y: 7 }, to: { x: 3, y: 0 } }, error: null }); // illegal King move
+    const fallbackFn = async () => ({ from: { x: 0, y: 7 }, to: { x: 0, y: 6 } });
+    const result = await pickMoveCore(g, { level: 5, onStatusChange: (s) => statuses.push(s) }, fairyFn, fallbackFn);
+    assert.deepEqual(statuses, ['fallback']);
+    assert.deepEqual(result, { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } }, 'fallback decision itself is unaffected by the status spy');
+  });
+
+  test('Test 4: Fairy HTTP/network failure — reports "fallback"', async () => {
+    const g = mkKingsAndRook();
+    const statuses = [];
+    const fairyFn = async () => ({ aborted: false, move: null, error: new Error('engine timeout') });
+    const fallbackFn = async () => ({ from: { x: 0, y: 7 }, to: { x: 0, y: 6 } });
+    await pickMoveCore(g, { level: 5, onStatusChange: (s) => statuses.push(s) }, fairyFn, fallbackFn);
+    assert.deepEqual(statuses, ['fallback']);
+  });
+
+  test('Test 5: Fairy request becomes stale — reports "stale" only, fallback is NOT called, no fallback status fires', async () => {
+    const g = mkKingsAndRook();
+    const statuses = [];
+    let fallbackCalled = false;
+    const fairyFn = async () => ({ aborted: true, move: null, error: null });
+    const fallbackFn = async () => { fallbackCalled = true; return { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } }; };
+    const result = await pickMoveCore(g, { level: 5, onStatusChange: (s) => statuses.push(s) }, fairyFn, fallbackFn);
+    assert.deepEqual(statuses, ['stale']);
+    assert.equal(fallbackCalled, false);
+    assert.equal(result, null);
+  });
+
+  test('pickMoveCore never reports "idle" itself — that transition belongs to the caller (js/ui.js)', async () => {
+    const g = mkKingsAndRook();
+    const statuses = [];
+    const scenarios = [
+      { aborted: false, move: { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } }, error: null }, // success
+      { aborted: false, move: null, error: new Error('boom') },                            // error -> fallback
+      { aborted: true, move: null, error: null },                                          // stale
+    ];
+    for (const r of scenarios) {
+      await pickMoveCore(g, { level: 5, onStatusChange: (s) => statuses.push(s) }, async () => r, async () => ({ from: { x: 0, y: 7 }, to: { x: 0, y: 6 } }));
+    }
+    assert.ok(!statuses.includes('idle'), `idle must never appear in ${JSON.stringify(statuses)} — it is UI-metadata owned entirely by js/ui.js`);
+  });
+
+  test('opts.onStatusChange is optional — omitting it changes nothing about the move-selection result', async () => {
+    const g = mkKingsAndRook();
+    const fairyFn = async () => ({ aborted: false, move: { from: { x: 3, y: 7 }, to: { x: 3, y: 0 } }, error: null }); // illegal
+    const fallbackFn = async () => ({ from: { x: 0, y: 7 }, to: { x: 0, y: 6 } });
+    const result = await pickMoveCore(g, { level: 5 }, fairyFn, fallbackFn); // no onStatusChange at all
+    assert.deepEqual(result, { from: { x: 0, y: 7 }, to: { x: 0, y: 6 } });
+  });
+
+  test('chooseAIMove() (real AbortController wiring) reports "fairy" before the request even resolves, and "stale" — never "fallback" — once resetAI() aborts it', async () => {
+    mockResponder = () => ({ status: 200, body: { from: { x: 4, y: 6 }, to: { x: 4, y: 5 } }, delayMs: 150 });
+    const g = freshGame();
+    const statuses = [];
+    const p = chooseAIMove(g, { level: 5, onStatusChange: (s) => statuses.push(s) });
+    // 'fairy' must already have fired synchronously-ish (before the HTTP
+    // response, which is delayed 150ms) — not only after the call settles.
+    await new Promise((r) => setTimeout(r, 10));
+    assert.deepEqual(statuses, ['fairy'], 'thinking status must show immediately, not wait for a response');
+    resetAI(); // Restart/Undo's own call — aborts the in-flight request
+    const result = await p;
+    assert.equal(result, null);
+    assert.deepEqual(statuses, ['fairy', 'stale'], 'aborted must never be reported as a fallback');
+  });
+});
+
+// ===========================================================================
+// Phase 8C.4 — model of js/ui.js's setProviderStatus(): the same
+// stale-generation guard AND the "don't touch the DOM for a repeated
+// identical status" dedupe, in isolation (setProviderStatus itself lives
+// inside initUI()'s closure, same reasoning as the Step 1 model above —
+// real DOM behavior is confirmed by the Phase 8C.4 browser smoke test).
+// ===========================================================================
+describe('Phase 8C.4: model of setProviderStatus() — generation guard + dedupe', () => {
+  function makeStatusModel() {
+    let aiGen = 0;
+    let lastProviderStatus = 'idle';
+    const rendered = []; // every status that actually reached "the DOM"
+    function setProviderStatus(status, myGen) {
+      if (myGen !== aiGen) return;
+      if (status === lastProviderStatus) return;
+      lastProviderStatus = status;
+      rendered.push(status);
+    }
+    return {
+      rendered,
+      setProviderStatus,
+      restart() { aiGen++; setProviderStatus('idle', aiGen); },
+      get aiGen() { return aiGen; },
+    };
+  }
+
+  test('Test 6: Restart during Fairy request — an old call\'s later status update cannot resurrect itself after a newer generation started', () => {
+    const m = makeStatusModel();
+    const myGen = m.aiGen; // the OLD generation, captured before Restart
+    m.setProviderStatus('fairy', myGen);          // old call starts thinking
+    m.restart();                                  // Restart: aiGen++, forces idle
+    m.setProviderStatus('stale', myGen);          // the old call's own late callback finally arrives
+    assert.deepEqual(m.rendered, ['fairy', 'idle'], 'the late "stale" update from the OLD generation must never reach the DOM once a newer one has started');
+  });
+
+  test('Test 7: fallback status must not clear prematurely — only the call that owns the CURRENT generation can move it back to idle', () => {
+    const m = makeStatusModel();
+    const myGen = m.aiGen;
+    m.setProviderStatus('fairy', myGen);
+    m.setProviderStatus('fallback', myGen);
+    // A stray call tagged with a generation that never actually changed
+    // must still apply (it's not stale) — only a genuinely OLD generation
+    // is dropped, per Test 6.
+    m.setProviderStatus('fallback', myGen); // duplicate — must not re-render
+    assert.deepEqual(m.rendered, ['fairy', 'fallback'], 'a repeated identical status is a no-op, never a second DOM write');
+    m.setProviderStatus('idle', myGen); // the owning call's own finally
+    assert.deepEqual(m.rendered, ['fairy', 'fallback', 'idle']);
   });
 });

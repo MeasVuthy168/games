@@ -146,10 +146,12 @@
       box-shadow:var(--shadow); max-height:70vh; overflow-y:auto;
     }
     .msg-menu-item{
-      display:block; width:100%; text-align:left; border:none; background:none; color:var(--ink);
+      display:flex; align-items:center; gap:.75rem; width:100%; text-align:left; border:none; background:none; color:var(--ink);
       font:inherit; font-size:.95rem; padding:.85rem 1.2rem; cursor:pointer;
     }
     .msg-menu-item:active{ background:var(--bubble-bg); }
+    .msg-menu-item svg{ flex:none; }
+    .msg-menu-item.danger{ color:#a3312f; }
 
     /* Message info modal */
     .info-modal-overlay{

@@ -312,11 +312,40 @@ async function renderThread(friendId) {
     menuEl.innerHTML = '';
   }
 
-  function menuItem(label, onClick) {
+  // Feather/Lucide-style 24x24 stroke icons, matching the outline icons
+  // already used elsewhere in the app (see play.html's fullscreen icons).
+  const MENU_ICONS = {
+    copy: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/>',
+    reply: '<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+    pin: '<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>',
+    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+    trashUsers: '<path d="M3 6h11"/><path d="M12 6l-.4 5.5"/><path d="M5 6l.7 11.2A2 2 0 0 0 7.7 19H10"/><path d="M8 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><circle cx="17" cy="14" r="1.8"/><path d="M13.8 21c0-1.7 1.4-3 3.2-3s3.2 1.3 3.2 3"/>',
+  };
+
+  function menuIcon(name) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', '18');
+    svg.setAttribute('height', '18');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = MENU_ICONS[name] || '';
+    return svg;
+  }
+
+  function menuItem(label, onClick, iconName) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'msg-menu-item';
-    btn.textContent = label;
+    if (iconName) btn.appendChild(menuIcon(iconName));
+    const span = document.createElement('span');
+    span.textContent = label;
+    btn.appendChild(span);
     btn.addEventListener('click', () => { closeMenu(); onClick(); });
     return btn;
   }
@@ -326,14 +355,20 @@ async function renderThread(friendId) {
     if (!m || m.id.startsWith('local-')) return; // no menu on a still-pending optimistic bubble
     menuEl.innerHTML = '';
     if (!m.deleted) {
-      menuEl.appendChild(menuItem(t('chat.menuCopy'), () => copyMessage(m)));
-      menuEl.appendChild(menuItem(t('chat.menuReply'), () => startReply(m)));
-      menuEl.appendChild(menuItem(m.pinned ? t('chat.menuUnpin') : t('chat.menuPin'), () => togglePin(m)));
+      menuEl.appendChild(menuItem(t('chat.menuCopy'), () => copyMessage(m), 'copy'));
+      menuEl.appendChild(menuItem(t('chat.menuReply'), () => startReply(m), 'reply'));
+      menuEl.appendChild(menuItem(m.pinned ? t('chat.menuUnpin') : t('chat.menuPin'), () => togglePin(m), 'pin'));
     }
-    if (m.fromMe) menuEl.appendChild(menuItem(t('chat.menuInfo'), () => showInfo(id)));
+    if (m.fromMe) menuEl.appendChild(menuItem(t('chat.menuInfo'), () => showInfo(id), 'info'));
     if (!m.deleted) {
-      menuEl.appendChild(menuItem(t('chat.menuDeleteMe'), () => confirmDelete(m, 'me')));
-      if (m.fromMe) menuEl.appendChild(menuItem(t('chat.menuDeleteEveryone'), () => confirmDelete(m, 'everyone')));
+      const delMe = menuItem(t('chat.menuDeleteMe'), () => confirmDelete(m, 'me'), 'trash');
+      delMe.classList.add('danger');
+      menuEl.appendChild(delMe);
+      if (m.fromMe) {
+        const delAll = menuItem(t('chat.menuDeleteEveryone'), () => confirmDelete(m, 'everyone'), 'trashUsers');
+        delAll.classList.add('danger');
+        menuEl.appendChild(delAll);
+      }
     }
     menuEl.appendChild(menuItem(t('chat.menuCancel'), () => {}));
     menuOverlay.hidden = false;

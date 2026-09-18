@@ -239,6 +239,32 @@ export class Game {
     this.history  = [];
     this.winner   = null;
     this.counting = emptyCounting();
+    this._positionCounts = new Map();
+    this._recordPosition(this._positionKey()); // the starting position itself is occurrence #1
+  }
+
+  // Canonical string for "is this the same position" (3-fold repetition):
+  // board configuration + side to move. Includes each piece's own
+  // `.moved` flag (not just its type/color) because that flag is what
+  // King/Met first-move leap eligibility (R5) hinges on — two boards that
+  // look identical but differ in leap eligibility are NOT the same legal
+  // position, so they must not be counted as a repeat of each other.
+  _positionKey() {
+    let key = this.turn;
+    for (let y = 0; y < SIZE; y++) {
+      for (let x = 0; x < SIZE; x++) {
+        const p = this.board[y][x];
+        key += p ? p.t + p.c + (p.moved ? '1' : '0') : '.';
+      }
+    }
+    return key;
+  }
+
+  // Returns the occurrence count for `key` AFTER recording this one.
+  _recordPosition(key) {
+    const n = (this._positionCounts.get(key) || 0) + 1;
+    this._positionCounts.set(key, n);
+    return n;
   }
 
   // Expose FEN for the AI
@@ -758,6 +784,17 @@ export class Game {
     const snap = this._do(from, to);
     const { captured, promo } = snap;
 
+    this.turn = this.enemyColor(this.turn);
+
+    // Recorded unconditionally (even into a checkmate/stalemate position)
+    // so undo() below always has an exact, matching entry to reverse. The
+    // key is captured AFTER the turn flip above, so it means "this board,
+    // with this side to move next" — the same convention reset() uses to
+    // seed the starting position (White to move) as occurrence #1. See
+    // positionKey's own comment on why turn/moved-flags are included.
+    const positionKey = this._positionKey();
+    const repeatCount = this._recordPosition(positionKey);
+
     this.history.push({
       from,
       to,
@@ -766,16 +803,19 @@ export class Game {
       prevType:  snap.prevType,
       prevMoved: snap.prevMoved,
       prevCounting,
+      positionKey,
     });
-
-    this.turn = this.enemyColor(this.turn);
 
     // Priority order matters (Ouk Chaktrang counting must never override
     // an actual mate): checkmate/stalemate are existing, higher-priority
     // terminal states, decided first and left completely alone — counting
-    // is only ever evaluated when the game is NOT already over some other
-    // way, and a checkmate on the very last allowed counted move is still
-    // simply a win, never a draw, because this branch never runs for it.
+    // and repetition are only ever evaluated when the game is NOT already
+    // over some other way, and a checkmate on the very last allowed
+    // counted/repeated move is still simply a win, never a draw, because
+    // this branch never runs for it. Between counting and repetition
+    // (rare case: a move triggers both at once), counting wins the
+    // presentation priority — it is this project's own canonical rule,
+    // repetition is the more generic backstop.
     const st = this.status();
     if (st.state === 'checkmate') {
       this.winner = this.enemyColor(st.toMove);
@@ -783,15 +823,24 @@ export class Game {
       this.winner = 'draw';
     } else {
       this._updateCounting();
-      this.winner = this.counting.result === 'draw' ? 'draw' : null;
+      this.winner = (this.counting.result === 'draw' || repeatCount >= 3) ? 'draw' : null;
     }
 
-    return { ok: true, promo, captured, status: st, counting: this.counting };
+    return {
+      ok: true, promo, captured, status: st, counting: this.counting,
+      repetition: this.winner === 'draw' && this.counting.result !== 'draw' && repeatCount >= 3,
+    };
   }
 
   undo() {
     const last = this.history.pop();
     if (!last) return false;
+
+    if (last.positionKey) {
+      const n = (this._positionCounts.get(last.positionKey) || 1) - 1;
+      if (n <= 0) this._positionCounts.delete(last.positionKey);
+      else this._positionCounts.set(last.positionKey, n);
+    }
 
     this.turn = this.enemyColor(this.turn);
     this._undo(last.from, last.to, {

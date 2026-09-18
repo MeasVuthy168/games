@@ -23,6 +23,13 @@ function mkGame(setup, turn) {
   g.turn = turn;
   g.history = [];
   g.winner = null;
+  // reset() (called by the constructor above) seeded position tracking
+  // for the DEFAULT starting position, which this custom setup just threw
+  // away along with the board — reseed for the position actually in play,
+  // exactly as reset() itself does, so 3-fold repetition counting starts
+  // fresh and correct for every test built through this helper.
+  g._positionCounts = new Map();
+  g._recordPosition(g._positionKey());
   return g;
 }
 
@@ -560,6 +567,129 @@ describe('R8 — counting limit fixed at phase start', () => {
     assert.equal(r.captured?.t, PT.KNIGHT);
     assert.equal(g.counting.limit, 32, 'limit must remain frozen at the original 2-Knight value');
     assert.equal(g.counting.current, afterStart + 1);
+  });
+});
+
+// ---------------------------------------------------------------------
+// 6c. 3-fold repetition
+// ---------------------------------------------------------------------
+describe('3-fold repetition', () => {
+  function repetitionSetup(b) {
+    const wk = piece(PT.KING, COLORS.WHITE); wk.moved = true;
+    const bk = piece(PT.KING, COLORS.BLACK); bk.moved = true;
+    b[7][4] = wk;                             // e1
+    b[0][4] = bk;                             // e8
+    // Unpromoted pawns that never move, purely to keep Counting Draw
+    // ineligible throughout (evaluateCountingState requires zero unpromoted
+    // pawns on the board) so this suite exercises repetition in isolation.
+    b[6][0] = piece(PT.PAWN, COLORS.WHITE);   // a2
+    b[1][0] = piece(PT.PAWN, COLORS.BLACK);   // a7
+  }
+
+  // One full cycle shuffles both kings out and back, reproducing the exact
+  // starting position (moved is already true on both kings from setup, so
+  // occupancy + turn alone determine the key — no piece "unmoves").
+  function shuffleCycle(g) {
+    g.move({ x: 4, y: 7 }, { x: 3, y: 7 }); // Ke1-d1
+    g.move({ x: 4, y: 0 }, { x: 3, y: 0 }); // Ke8-d8
+    g.move({ x: 3, y: 7 }, { x: 4, y: 7 }); // Kd1-e1
+    return g.move({ x: 3, y: 0 }, { x: 4, y: 0 }); // Kd8-e8 -> back to the start position
+  }
+
+  test('a position occurring a 3rd time sets winner to draw with repetition:true', () => {
+    const g = mkGame(repetitionSetup, COLORS.WHITE);
+    let r = shuffleCycle(g); // 2nd occurrence of the start position
+    assert.equal(r.repetition, false);
+    assert.equal(g.winner, null);
+
+    g.move({ x: 4, y: 7 }, { x: 3, y: 7 }); // Ke1-d1
+    g.move({ x: 4, y: 0 }, { x: 3, y: 0 }); // Ke8-d8
+    g.move({ x: 3, y: 7 }, { x: 4, y: 7 }); // Kd1-e1
+    r = g.move({ x: 3, y: 0 }, { x: 4, y: 0 }); // Kd8-e8 -> 3rd occurrence
+    assert.equal(r.ok, true);
+    assert.equal(r.repetition, true);
+    assert.equal(g.winner, 'draw');
+  });
+
+  test('fewer than 3 repeats does not trigger a draw', () => {
+    const g = mkGame(repetitionSetup, COLORS.WHITE);
+    const r = shuffleCycle(g); // only the 2nd occurrence
+    assert.equal(r.ok, true);
+    assert.equal(r.repetition, false);
+    assert.equal(g.winner, null);
+  });
+
+  test('undo() decrements the position count so a later genuine 3rd repeat is still correctly detected', () => {
+    const g = mkGame(repetitionSetup, COLORS.WHITE);
+    shuffleCycle(g); // start position now at count 2
+
+    g.move({ x: 4, y: 7 }, { x: 3, y: 7 }); // Ke1-d1
+    g.move({ x: 4, y: 0 }, { x: 3, y: 0 }); // Ke8-d8
+    g.move({ x: 3, y: 7 }, { x: 4, y: 7 }); // Kd1-e1
+    let r = g.move({ x: 3, y: 0 }, { x: 4, y: 0 }); // Kd8-e8 -> 3rd occurrence
+    assert.equal(r.repetition, true);
+    assert.equal(g.winner, 'draw');
+
+    // Undo that exact move: the count must drop back to 2, not stay stale
+    // at 3, so the position doesn't look like a repeat that never really
+    // happened.
+    assert.equal(g.undo(), true);
+    assert.equal(g.winner, null);
+
+    // Redo the same move: this is the real 3rd occurrence and must still
+    // be detected correctly (not skipped because of the earlier undo).
+    r = g.move({ x: 3, y: 0 }, { x: 4, y: 0 }); // Kd8-e8 again
+    assert.equal(r.ok, true);
+    assert.equal(r.repetition, true);
+    assert.equal(g.winner, 'draw');
+  });
+
+  test('checkmate takes priority over repetition reaching 3 on the same move', () => {
+    const g = mkGame(b => {
+      const bk = piece(PT.KING, COLORS.BLACK);
+      bk.moved = true; // avoid an incidental leap-threat on b6 (unrelated to this test)
+      b[0][0] = bk;                              // a8
+      const wk = piece(PT.KING, COLORS.WHITE);
+      wk.moved = true; // avoid an incidental leap-threat on a8 (unrelated to this test)
+      b[2][1] = wk;                              // b6 - covers a7,b7
+      b[0][7] = piece(PT.ROOK, COLORS.WHITE);   // h8 - about to mate via c8
+    }, COLORS.WHITE);
+    // Force this move's resulting position to also read as a 3rd repeat,
+    // as if this exact mate had been reached twice before by transposition
+    // — checkmate must still win outright per the priority order in move().
+    const origRecordPosition = g._recordPosition.bind(g);
+    let stubbed = false;
+    g._recordPosition = (key) => {
+      if (!stubbed) { stubbed = true; origRecordPosition(key); return 3; }
+      return origRecordPosition(key);
+    };
+    const r = g.move({ x: 7, y: 0 }, { x: 2, y: 0 }); // Rh8-c8#
+    assert.equal(r.ok, true);
+    assert.equal(r.status.state, 'checkmate');
+    assert.equal(g.winner, COLORS.WHITE);
+    assert.equal(r.repetition, false);
+  });
+
+  test('Counting Draw takes presentation priority over repetition when both trigger on the same move', () => {
+    const g = mkGame(b => {
+      const wk = piece(PT.KING, COLORS.WHITE); wk.moved = true;
+      const bk = piece(PT.KING, COLORS.BLACK); bk.moved = true;
+      b[7][4] = wk; // e1
+      b[0][4] = bk; // e8
+    }, COLORS.WHITE); // bare kings -> Counting Draw fires the moment this move completes
+    // Force this move's resulting position to also read as a 3rd repeat,
+    // landing both draw conditions on the exact same move.
+    const origRecordPosition = g._recordPosition.bind(g);
+    let stubbed = false;
+    g._recordPosition = (key) => {
+      if (!stubbed) { stubbed = true; origRecordPosition(key); return 3; }
+      return origRecordPosition(key);
+    };
+    const r = g.move({ x: 4, y: 7 }, { x: 3, y: 7 }); // Ke1-d1
+    assert.equal(r.ok, true);
+    assert.equal(g.counting.result, 'draw');
+    assert.equal(g.winner, 'draw');
+    assert.equal(r.repetition, false, 'Counting Draw must claim the presentation, not repetition');
   });
 });
 

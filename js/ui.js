@@ -962,6 +962,9 @@ export async function initUI() {
       if (c && c.type !== 'BARE_KINGS' && c.limit > 0) {
         reasonText = t('result.countFinal', { current: c.current, limit: c.limit });
       }
+    } else if (result === 'DRAW_REPETITION') {
+      title = title || t('result.drawRepetition');
+      sub = sub || t('result.drawRepetitionDesc');
     } else if (result === 'DRAW') {
       title = title || t('result.draw');
       sub = sub || t('result.drawDesc');
@@ -1035,7 +1038,7 @@ export async function initUI() {
     if (aiVsAiMode) return null;
     const mode = settings.aiEnabled ? 'ai' : 'friend';
     let result;
-    if (kind === 'stalemate' || kind === 'counting') {
+    if (kind === 'stalemate' || kind === 'counting' || kind === 'repetition') {
       result = 'draw';
     } else {
       const winnerColor = matedColor === COLORS.WHITE ? COLORS.BLACK : COLORS.WHITE;
@@ -1137,6 +1140,18 @@ export async function initUI() {
         reason: 'COUNTING',
         extra: { counting: { ...res.counting }, summary: buildSummary() },
       });
+      handleTournamentEnd(result);
+      return true;
+    }
+    // 3-fold repetition — the one draw condition game.js can reach on a
+    // position that still has plenty of legal moves AND an inactive
+    // counting phase (e.g. two AIs, or an AI provider with no memory of
+    // prior positions such as Fairy-Stockfish, shuffling into the same
+    // position three times). Checked last: counting above already claims
+    // the presentation whenever both conditions land on the same move.
+    if (res?.repetition) {
+      const result = recordGameEnd('repetition', null);
+      presentGameResult({ result: 'DRAW_REPETITION', reason: 'REPETITION', extra: { summary: buildSummary() } });
       handleTournamentEnd(result);
       return true;
     }

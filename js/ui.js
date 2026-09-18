@@ -432,7 +432,11 @@ export async function initUI() {
   initTranslations();
   const elBoard  = document.getElementById('board');
   const elTurn   = document.getElementById('turnLabel');
-  const elAiStatus = document.getElementById('aiProviderStatus');
+  // Phase 8C.5: lazily created (see ensureProviderBadge()) — this used to
+  // be a static play.html placeholder, but the badge now lives inline in
+  // whichever player-row is currently thinking, exactly like js/ai.js's
+  // own (now-removed) badge did, so there's no fixed DOM slot for it.
+  let elAiStatus = null;
   const btnReset = document.getElementById('btnReset');
   const btnUndo  = document.getElementById('btnUndo');
   const btnPause = document.getElementById('btnPause');
@@ -600,23 +604,79 @@ export async function initUI() {
     document.body.classList.toggle('ai-thinking', !!on);
   }
 
-  // Phase 8C.4: UI-only indicator of which AI is currently searching.
+  // Phase 8C.4/8C.5: UI-only indicator of which AI is currently searching.
   // js/ai-provider.js reports 'fairy' | 'fallback' | 'stale' via the
   // onStatusChange callback below — this module owns turning that into
-  // the on-screen pill, including the "now idle" transition once a call
+  // the on-screen badge, including the "now idle" transition once a call
   // actually finishes (ai-provider.js has no opinion on that; see its own
   // module comment). Never changes move-selection, fallback, or timer
   // behavior — purely cosmetic, same as setBoardBusy()'s CSS class.
+  //
+  // Lives inline in the thinking side's own name/clock row (#nameBlack/
+  // #clockB or #nameWhite/#clockW), the same slot js/ai.js's own badge
+  // used to own before Phase 8C.5 consolidated the two into this one,
+  // provider-aware indicator — see getPlayerRow() below.
   const PROVIDER_STATUS_INFO = {
     fairy:    { icon: '🤖', name: 'Fairy-Stockfish', actionKey: 'ai.provider.thinking' },
     fallback: { icon: '🧠', name: 'Game.js AI',       actionKey: 'ai.provider.calculating' },
   };
+
+  function getPlayerRow(color) {
+    const nameEl = document.getElementById(color === 'w' ? 'nameWhite' : 'nameBlack');
+    return nameEl ? nameEl.closest('.player-row') : null;
+  }
+
+  function ensureProviderBadge() {
+    if (elAiStatus) return elAiStatus;
+    const el = document.createElement('span');
+    el.id = 'aiProviderStatus';
+    el.className = 'ai-provider-status';
+    el.hidden = true;
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+    el.innerHTML =
+      '<span class="ai-provider-icon-wrap" aria-hidden="true"><span class="ai-provider-icon"></span></span>' +
+      '<span class="ai-provider-text"><span class="ai-provider-name"></span> <span class="ai-provider-action"></span></span>' +
+      '<span class="ai-thinking-dots" aria-hidden="true">' +
+        '<span class="ai-thinking-dot"></span><span class="ai-thinking-dot"></span><span class="ai-thinking-dot"></span>' +
+      '</span>';
+    return el;
+  }
+
+  // Moves the (single, reused) badge into the row for whichever color is
+  // currently thinking — cheap DOM move, not a rebuild; only one side ever
+  // thinks at a time so there's only ever one row it can be in.
+  let providerActiveNameEl = null;
+
+  function clearProviderRowExpanded() {
+    if (providerActiveNameEl) providerActiveNameEl.classList.remove('ai-provider-active-row');
+    providerActiveNameEl = null;
+  }
+
+  function attachProviderRow(el, color) {
+    const row = getPlayerRow(color);
+    if (!row) return;
+    const nameEl = row.querySelector('.player-name');
+    const before = nameEl ? nameEl.nextSibling : row.firstChild;
+    if (el.parentElement !== row || el.nextSibling !== before) row.insertBefore(el, before);
+    if (providerActiveNameEl !== nameEl) clearProviderRowExpanded();
+    providerActiveNameEl = nameEl;
+    if (nameEl) nameEl.classList.add('ai-provider-active-row');
+  }
+
   let lastProviderStatus = 'idle';
 
-  function renderProviderStatus(status) {
-    if (!elAiStatus) return;
+  function renderProviderStatus(status, color) {
     const info = PROVIDER_STATUS_INFO[status];
-    if (!info) { elAiStatus.hidden = true; return; } // idle / stale — nothing to show
+    if (!info) {
+      // idle / stale — nothing to show. Guard: never create the badge
+      // (and its DOM-injecting side effects) just to hide it.
+      if (elAiStatus) elAiStatus.hidden = true;
+      clearProviderRowExpanded();
+      return;
+    }
+    elAiStatus = ensureProviderBadge();
+    attachProviderRow(elAiStatus, color);
     elAiStatus.querySelector('.ai-provider-icon').textContent = info.icon;
     elAiStatus.querySelector('.ai-provider-name').textContent = info.name;
     elAiStatus.querySelector('.ai-provider-action').textContent = t(info.actionKey);
@@ -628,11 +688,11 @@ export async function initUI() {
   // aiGen's comment above): a status update belonging to an older,
   // already-discarded search must never resurrect the indicator — or
   // clear a newer one — after Restart/Undo/New Game moved on.
-  function setProviderStatus(status, myGen) {
+  function setProviderStatus(status, myGen, color) {
     if (myGen !== aiGen) return;
     if (status === lastProviderStatus) return; // no-op repeats never touch the DOM
     lastProviderStatus = status;
-    renderProviderStatus(status);
+    renderProviderStatus(status, color);
   }
 
   function isAITurn() {
@@ -1622,11 +1682,14 @@ export async function initUI() {
       // Single-AI modes always think as settings.aiColor; AI vs AI has no
       // one fixed AI side — it's whichever color is actually on move, at
       // that side's own configured level.
-      // Phase 8C.4: reports which AI is currently searching, for the
+      // Phase 8C.4/8C.5: reports which AI is currently searching, for the
       // on-screen indicator only — see setProviderStatus()'s own comment.
-      // Bound to this call's own myGen so a status update can never be
-      // misattributed to a later generation after Restart/Undo.
-      const onStatusChange = (status) => setProviderStatus(status, myGen);
+      // Bound to this call's own myGen (so a status update can never be
+      // misattributed to a later generation after Restart/Undo) and to the
+      // color that's actually thinking right now, so the badge lands in
+      // the correct player-row even in AI-vs-AI.
+      const actingColor = aiVsAiMode ? game.turn : settings.aiColor;
+      const onStatusChange = (status) => setProviderStatus(status, myGen, actingColor);
       const aiOpts = aiVsAiMode
         ? {
             level: game.turn === COLORS.WHITE ? settings.aiLevelWhite : settings.aiLevelBlack,

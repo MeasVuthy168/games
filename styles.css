@@ -297,28 +297,31 @@ body{
   background:rgba(10,15,30,.9); color:#e6f0ff;
 }
 
-/* === AI provider status (Phase 8C.4) =================================
-   Same pill language as .count-label right above it — reuses that
-   convention rather than inventing a new one. Fairy-Stockfish and the
-   local fallback are always told apart by icon+name+text, never by
-   background color alone (see the accessibility note below). */
+/* === AI provider status (Phase 8C.4/8C.5) =============================
+   An ordinary flex child of .player-row, not absolutely positioned, so it
+   never overlaps the board — same technique js/ai.js's own (now-removed)
+   thinking badge used, just provider-aware now. #aiProviderStatus is the
+   row's only flex:1 item while showing (.player-name is pinned to its own
+   natural width via .ai-provider-active-row, toggled in lockstep by
+   js/ui.js — never a permanent change to the shared .player-name rule
+   other rows/pages also use), so it's the one absorbing the leftover
+   space between the name and the clock. Fairy-Stockfish and the local
+   fallback are always told apart by icon+name+text, never by background
+   color alone (see the reduced-motion block below for the non-visual
+   fallback). */
 .ai-provider-status{
-  display:flex; align-items:center; gap:.35rem;
-  padding:2px 10px;
-  border-radius:8px;
-  background:rgba(13,45,92,.10);
-  font-weight:700;
-  font-size:.85rem;
-  white-space:nowrap;
-  user-select:none;
-  color:inherit;
-  min-width:0;
-  max-width:100%;
+  display:flex; align-items:center; justify-content:center; gap:.32rem;
+  flex:1 1 auto; min-width:0;
+  padding:.22rem .55rem; border-radius:999px;
+  background:var(--chip-bg,#eef4ff); color:var(--blue,#0d2d5c);
+  font-size:.74rem; font-weight:800; line-height:1;
+  white-space:nowrap; user-select:none;
   transition:background-color .2s ease;
 }
 :root[data-theme="dark"] .ai-provider-status{
   background:rgba(255,255,255,.12); color:#e6f0ff;
 }
+.player-name.ai-provider-active-row{ flex:0 1 auto; }
 /* The fallback (local js/ai.js) state gets a distinct tint on top of the
    icon/name/text difference — never the only way the two are told apart. */
 .ai-provider-status.ai-provider-fallback{
@@ -327,9 +330,16 @@ body{
 :root[data-theme="dark"] .ai-provider-status.ai-provider-fallback{
   background:rgba(255,190,120,.16);
 }
-.ai-provider-icon{ flex:none; line-height:1; animation:pulse 1.4s ease-in-out infinite; }
-.ai-provider-name{ flex:none; overflow:hidden; text-overflow:ellipsis; }
-.ai-provider-action{ flex:none; opacity:.85; font-weight:600; }
+.ai-provider-icon-wrap{ position:relative; width:16px; height:16px; flex:none; display:flex; align-items:center; justify-content:center; }
+.ai-provider-icon{ display:block; position:relative; z-index:1; line-height:1; animation:pulse 1.4s ease-in-out infinite; }
+.ai-provider-icon-wrap::before{
+  content:''; position:absolute; inset:0; border-radius:50%;
+  box-shadow:0 0 0 0 rgba(13,45,92,.35);
+  animation:aiProviderRing 1.6s ease-out infinite;
+}
+.ai-provider-status.ai-provider-fallback .ai-provider-icon-wrap::before{ box-shadow:0 0 0 0 rgba(120,72,20,.35); }
+.ai-provider-text{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.ai-provider-action{ opacity:.85; font-weight:600; }
 
 .ai-thinking-dots{ display:inline-flex; gap:2px; flex:none; align-items:center; }
 .ai-thinking-dot{
@@ -343,8 +353,10 @@ body{
   0%,80%,100%{ opacity:.3; transform:scale(.85); }
   40%{ opacity:1; transform:scale(1.15); }
 }
+@keyframes aiProviderRing{ 0%{ box-shadow:0 0 0 0 rgba(13,45,92,.35); opacity:1; } 100%{ box-shadow:0 0 0 6px rgba(13,45,92,0); opacity:0; } }
 @media (prefers-reduced-motion: reduce){
   .ai-provider-icon{ animation:none; }
+  .ai-provider-icon-wrap::before{ animation:none; box-shadow:none; }
   .ai-thinking-dot{ animation:none; opacity:.8; }
   .ai-provider-status{ transition:none; }
 }

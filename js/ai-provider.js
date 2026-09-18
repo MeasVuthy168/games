@@ -25,6 +25,14 @@
 // consume network/engine resources, and — critically — stops resetAI()
 // from triggering a wasted local-AI fallback search for a position that
 // is about to be discarded anyway (see resetAI() below).
+//
+// Phase 8C.4: an optional `opts.onStatusChange` callback reports which
+// attempt is currently running ('fairy' | 'fallback' | 'stale') purely as
+// UI metadata — it never affects move selection, the fallback decision,
+// or the Promise<{from,to}|null> contract above. The caller (js/ui.js)
+// owns turning that into an on-screen indicator, including its own
+// stale-generation guard and the "now idle" transition once a call
+// completes; this module only ever reports what IT is doing right now.
 
 import { requestAIMove } from './api.js';
 
@@ -142,7 +150,14 @@ export async function pickMoveCore(game, opts, fairyFn, fallbackFn) {
   // Restart/Undo never triggers a wasted local-AI search for a position
   // that's already being discarded (js/ui.js's aiGen check would just
   // discard that result anyway).
-  if (aborted) return null;
+  if (aborted) {
+    // Phase 8C.4: UI-facing status only — never gates move-selection
+    // behavior. The caller (js/ui.js) is what actually decides whether
+    // this fires anywhere near the DOM, via its own aiGen-guarded
+    // setProviderStatus(); this module has no opinion on that.
+    opts.onStatusChange?.('stale');
+    return null;
+  }
 
   if (move) {
     // Never trust Fairy-Stockfish as a rules authority (see module
@@ -158,6 +173,7 @@ export async function pickMoveCore(game, opts, fairyFn, fallbackFn) {
 
   // Fallback: existing local JS AI, entirely unmodified, exactly one call
   // — never a retry loop against Fairy-Stockfish first.
+  opts.onStatusChange?.('fallback');
   return fallbackFn(game, opts);
 }
 
@@ -166,6 +182,10 @@ let currentAbort = null;
 export async function chooseAIMove(game, opts = {}) {
   currentAbort = new AbortController();
   const signal = currentAbort.signal;
+  // Fires before the request is even sent, so a UI listener can show a
+  // "thinking" state immediately rather than waiting for a response —
+  // see Phase 8C.4. Purely informational: nothing below reads this back.
+  opts.onStatusChange?.('fairy');
   return pickMoveCore(
     game,
     opts,

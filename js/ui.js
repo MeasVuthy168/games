@@ -811,6 +811,46 @@ export async function initUI() {
     else { el.style.backgroundImage = ''; el.textContent = emoji || '🐯'; }
   }
 
+  // An AI side's own avatar: a solid circle in that side's actual piece
+  // color (hex, from the active theme — Classic White/Black, Silver/Gold,
+  // Blue/Red, ...) holding a simple bot glyph, so it reads at a glance as
+  // "an AI, playing this color" the same way an online opponent's row
+  // reads as "a person, with this photo" — matching that same
+  // avatar+name layout (see applyPlayerLabels below) rather than the bare
+  // text-only label AI sides used to get.
+  //
+  // The glyph itself is drawn in whichever of black/white has more
+  // contrast against that exact background (plain W3C relative-luminance
+  // threshold) so it stays legible across every theme, including
+  // near-white "Classic White" and mid-tone "Gold" backgrounds where a
+  // single fixed glyph color would wash out.
+  function relativeLuma(hex) {
+    const n = parseInt(hex.slice(1), 16);
+    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return 0.299 * r + 0.587 * g + 0.114 * b;
+  }
+
+  function aiAvatarIconSVG(bgHex) {
+    const glyph = relativeLuma(bgHex) > 150 ? '#1a1a1a' : '#fff';
+    return `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <rect x="5.5" y="8" width="13" height="12" rx="3.5" fill="${glyph}"/>
+      <rect x="3" y="12" width="2" height="4" rx="1" fill="${glyph}"/>
+      <rect x="19" y="12" width="2" height="4" rx="1" fill="${glyph}"/>
+      <rect x="11.3" y="5.2" width="1.4" height="2.6" fill="${glyph}"/>
+      <circle cx="12" cy="4" r="1.4" fill="${glyph}"/>
+      <circle cx="9.3" cy="14" r="1.5" fill="${bgHex}"/>
+      <circle cx="14.7" cy="14" r="1.5" fill="${bgHex}"/>
+      <rect x="9" y="17.6" width="6" height="1.3" rx="0.65" fill="${bgHex}"/>
+    </svg>`;
+  }
+
+  function setAiAvatar(el, bgHex) {
+    if (!el) return;
+    el.style.backgroundImage = '';
+    el.style.backgroundColor = bgHex;
+    el.innerHTML = aiAvatarIconSVG(bgHex);
+  }
+
   // Player-name rows are fixed to board geometry (top = Black rank, bottom =
   // White rank) — only the *labels* change with the chosen role/mode.
   function applyPlayerLabels() {
@@ -842,17 +882,29 @@ export async function initUI() {
       if (elAvatarBottom) elAvatarBottom.hidden = false;
       if (elResign) elResign.hidden = false;
     } else if (aiVsAiMode) {
+      // Both sides are AI here, so both get the same avatar+name treatment
+      // Friends Online spectating already uses for two humans (see
+      // watch.js's specAvatarWhite/specAvatarBlack) — a colored bot icon
+      // standing in for a photo, level folded into the name exactly as
+      // before.
       elNameTop.textContent    = `AI Level ${settings.aiLevelBlack} · ${pieceColors.b.short}`;
       elNameBottom.textContent = `AI Level ${settings.aiLevelWhite} · ${pieceColors.w.short}`;
-      if (elAvatarTop) elAvatarTop.hidden = true;
-      if (elAvatarBottom) elAvatarBottom.hidden = true;
+      setAiAvatar(elAvatarTop, pieceColors.b.hex);
+      setAiAvatar(elAvatarBottom, pieceColors.w.hex);
+      if (elAvatarTop) elAvatarTop.hidden = false;
+      if (elAvatarBottom) elAvatarBottom.hidden = false;
       if (elResign) elResign.hidden = true;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
       elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ` · ${pieceColors.b.short}`;
       elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ` · ${pieceColors.w.short}`;
-      if (elAvatarTop) elAvatarTop.hidden = true;
-      if (elAvatarBottom) elAvatarBottom.hidden = true;
+      // Only the AI's own row gets the colored bot avatar — the human row
+      // stays as it was (no photo to show in a local, possibly-signed-out
+      // game).
+      if (elAvatarTop) elAvatarTop.hidden = aiIsWhite;
+      if (elAvatarBottom) elAvatarBottom.hidden = !aiIsWhite;
+      if (!aiIsWhite) setAiAvatar(elAvatarTop, pieceColors.b.hex);
+      if (aiIsWhite) setAiAvatar(elAvatarBottom, pieceColors.w.hex);
       if (elResign) elResign.hidden = true;
     } else {
       elNameTop.textContent    = `អ្នកទី១ · ${pieceColors.b.label}`;

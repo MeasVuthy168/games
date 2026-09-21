@@ -21,9 +21,10 @@ const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 // more than one step ever scheduled per completed move (see thinkAndPlay()).
 const AI_VS_AI_MOVE_DELAY_MS = 400;
 
-const LS_KEY    = 'kc_settings_v1';
-const SAVE_KEY  = 'kc_game_state_makruk_v1';
-const WATCH_KEY = 'kc_aivsai_watch_v1';
+const LS_KEY     = 'kc_settings_v1';
+const SAVE_KEY   = 'kc_game_state_makruk_v1';
+const WATCH_KEY  = 'kc_aivsai_watch_v1';
+const ONLINE_KEY = 'kc_online_active_v1';
 
 const DEFAULTS = {
   minutes: 10,
@@ -89,6 +90,24 @@ function loadAiVsAiWatch() {
 
 function clearAiVsAiWatch() {
   try { localStorage.removeItem(WATCH_KEY); } catch {}
+}
+
+// Which online game (if any) is the one currently open — never the board
+// itself, since an online game is server-authoritative and always
+// re-fetched fresh (see Api.getGame below). This is exactly enough for a
+// bare play.html (no ?mode=online&gameId=..., e.g. any bottom-nav "Play"
+// link) to reconnect to the same game the viewer navigated away from,
+// instead of falling back to a default human-vs-AI screen.
+function saveOnlineActive(gameId) {
+  try { localStorage.setItem(ONLINE_KEY, gameId); } catch {}
+}
+
+function loadOnlineActive() {
+  try { return localStorage.getItem(ONLINE_KEY); } catch { return null; }
+}
+
+function clearOnlineActive() {
+  try { localStorage.removeItem(ONLINE_KEY); } catch {}
 }
 
 function loadSettings() {
@@ -483,6 +502,16 @@ export async function initUI() {
   // implementation — see handleTournamentEnd() below for how the result is
   // reported back to js/tournament.js.
   const urlParams = new URLSearchParams(location.search);
+
+  // A bare play.html (no ?mode= at all — every bottom-nav "Play" link,
+  // including the one on this very page, points here) is the one case
+  // that can mean "the viewer just navigated away from something they
+  // had open and came back", rather than any other mode being requested.
+  // Any explicit ?mode= is a different, fresh intent (a real game, a
+  // friend game, a tournament round, an online game, or a brand-new
+  // watch) and always wins outright over whatever was open before.
+  const hasExplicitMode = urlParams.has('mode');
+
   const tRoundParam = parseInt(urlParams.get('tournamentRound'), 10);
   const tLevelParam = parseInt(urlParams.get('aiLevel'), 10);
   const tournamentMode = Number.isInteger(tRoundParam) && tRoundParam >= 1 &&
@@ -494,8 +523,21 @@ export async function initUI() {
   // ouk-ai-backend's /api/games/* routes (server-authoritative moves — see
   // applyOnlineGameState/attemptOnlineMove below). Reuses this same
   // single-game screen rather than a second board implementation.
-  const onlineGameId = urlParams.get('gameId');
-  const onlineMode = urlParams.get('mode') === 'online' && !!onlineGameId;
+  //
+  // The board itself is never persisted locally (the server is the sole
+  // source of truth — see applyOnlineGameState below), only which gameId
+  // is currently open (ONLINE_KEY) — so a bare navigation away and back
+  // (no ?mode=online&gameId=..., e.g. any bottom-nav "Play" link)
+  // reconnects to the same game instead of falling back to a default
+  // human-vs-AI screen. Any other explicit ?mode= drops it outright, same
+  // reasoning as aiVsAiMode's resumedWatch below.
+  const urlOnlineGameId = urlParams.get('gameId');
+  const urlOnlineMode = urlParams.get('mode') === 'online' && !!urlOnlineGameId;
+  const resumedOnlineGameId = hasExplicitMode ? null : loadOnlineActive();
+  if (hasExplicitMode) clearOnlineActive();
+
+  const onlineMode = urlOnlineMode || !!resumedOnlineGameId;
+  const onlineGameId = urlOnlineMode ? urlOnlineGameId : resumedOnlineGameId;
   window.__kcOnlineActive = onlineMode;
   let onlineState = null; // latest {status,myColor,turn,myTurn,board,history,result,opponentId,opponentName,...}
 
@@ -513,15 +555,8 @@ export async function initUI() {
     Number.isInteger(levelWhiteParam) && levelWhiteParam >= 1 && levelWhiteParam <= 10 &&
     Number.isInteger(levelBlackParam) && levelBlackParam >= 1 && levelBlackParam <= 10;
 
-  // A bare play.html (no ?mode= at all — every bottom-nav "Play" link,
-  // including the one on this very page, points here) is the one case
-  // that can mean "the viewer just navigated away from a match they were
-  // watching and came back", rather than any other mode being requested.
-  // Any explicit ?mode= is a different, fresh intent (a real game, a
-  // friend game, a tournament round, or even a brand-new watch) and
-  // always wins outright — and drops a stale watch behind it, so it can
-  // never resurface later on some unrelated bare navigation.
-  const hasExplicitMode = urlParams.has('mode');
+  // Same resumedWatch/hasExplicitMode reasoning as onlineMode above — a
+  // stale watch never resurfaces on some later, unrelated bare navigation.
   const resumedWatch = hasExplicitMode ? null : loadAiVsAiWatch();
   if (hasExplicitMode) clearAiVsAiWatch();
 
@@ -541,7 +576,15 @@ export async function initUI() {
     try {
       const resp = await Api.getGame(onlineGameId);
       onlineState = resp.game;
+      // A bare navigation back to Play should only reconnect to a game
+      // that's actually still going — an already-finished one (e.g. the
+      // viewer reloaded well after it ended) has nothing left to resume.
+      if (onlineState.status === 'finished') clearOnlineActive();
+      else saveOnlineActive(onlineGameId);
     } catch (err) {
+      // Stale/deleted/inaccessible gameId — never let it resurface on a
+      // later bare navigation.
+      clearOnlineActive();
       alert(err.message || 'Could not load this game.');
       location.href = 'friends.html';
       return;
@@ -1454,6 +1497,7 @@ export async function initUI() {
         declineBtn.style.margin = '.5rem .3rem 0';
         declineBtn.addEventListener('click', async () => {
           try { await Api.declineGame(onlineGameId); } catch {}
+          clearOnlineActive();
           location.href = 'friends.html';
         });
         banner.appendChild(acceptBtn);
@@ -1501,6 +1545,9 @@ export async function initUI() {
 
     if (g.status === 'finished' && !onlineFinished) {
       onlineFinished = true;
+      // The game this bare-navigation resume was tracking is now over —
+      // nothing left to reconnect to on a later visit.
+      clearOnlineActive();
       stopOnlinePolling();
       setBoardBusy(false);
       if (!skipVisualReplay) render();

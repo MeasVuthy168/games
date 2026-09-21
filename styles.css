@@ -403,6 +403,23 @@ body{
   font-size:1rem; line-height:1; background:var(--chip-bg);
   background-size:cover; background-position:center;
 }
+/* A small chess-piece glyph in that side's actual piece color (from the
+   active theme), sitting between the AI avatar and the level badge — see
+   js/ui.js's setChessColorBadge()/applyPlayerLabels(). A fixed neutral
+   backdrop circle (independent of theme/fill color) keeps a near-white
+   fill (Classic White, Silver) from washing out against the row's own
+   light background, the same way a coin gives a light engraving contrast. */
+.chess-color-badge{
+  flex:none; display:flex; align-items:center; justify-content:center;
+  width:20px; height:20px; border-radius:50%; background:#dfe3e8;
+}
+/* AI Level 1-10, drawn as a phone-battery-style gauge (outline + a nub,
+   filled green proportional to level/10) — sits right next to the AI's
+   own avatar, toggled by js/ui.js's setLevelBadge()/applyPlayerLabels(),
+   hidden entirely outside AI-vs-AI and single-AI mode. */
+.ai-level-badge{
+  flex:none; display:flex; align-items:center; justify-content:center;
+}
 .clock{
   font-variant-numeric:tabular-nums;
   font-weight:800; letter-spacing:.5px;

@@ -21,8 +21,9 @@ const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 // more than one step ever scheduled per completed move (see thinkAndPlay()).
 const AI_VS_AI_MOVE_DELAY_MS = 400;
 
-const LS_KEY   = 'kc_settings_v1';
-const SAVE_KEY = 'kc_game_state_makruk_v1';
+const LS_KEY    = 'kc_settings_v1';
+const SAVE_KEY  = 'kc_game_state_makruk_v1';
+const WATCH_KEY = 'kc_aivsai_watch_v1';
 
 const DEFAULTS = {
   minutes: 10,
@@ -63,6 +64,31 @@ function loadGameState() {
 
 function clearGameState() {
   try { localStorage.removeItem(SAVE_KEY); } catch {}
+}
+
+// A separate slot from SAVE_KEY, exclusively for an AI-vs-AI match the
+// viewer is spectating — so navigating to another page and back to a bare
+// play.html (no ?mode=aivsai, e.g. any bottom-nav "Play" link) can
+// transparently pick the same match back up, without ever being mistaken
+// for — or overwriting — a real, resumable human-vs-AI game.
+function saveAiVsAiWatch(game, clocks, levelWhite, levelBlack) {
+  const s = {
+    levelWhite, levelBlack,
+    board: game.board,
+    turn: game.turn,
+    history: game.history,
+    counting: game.counting,
+  };
+  try { localStorage.setItem(WATCH_KEY, JSON.stringify(s)); } catch {}
+}
+
+function loadAiVsAiWatch() {
+  try { return JSON.parse(localStorage.getItem(WATCH_KEY)); }
+  catch { return null; }
+}
+
+function clearAiVsAiWatch() {
+  try { localStorage.removeItem(WATCH_KEY); } catch {}
 }
 
 function loadSettings() {
@@ -483,9 +509,23 @@ export async function initUI() {
   // early return for this mode.
   const levelWhiteParam = parseInt(urlParams.get('levelWhite'), 10);
   const levelBlackParam = parseInt(urlParams.get('levelBlack'), 10);
-  const aiVsAiMode = urlParams.get('mode') === 'aivsai' &&
+  const urlAiVsAiMode = urlParams.get('mode') === 'aivsai' &&
     Number.isInteger(levelWhiteParam) && levelWhiteParam >= 1 && levelWhiteParam <= 10 &&
     Number.isInteger(levelBlackParam) && levelBlackParam >= 1 && levelBlackParam <= 10;
+
+  // A bare play.html (no ?mode= at all — every bottom-nav "Play" link,
+  // including the one on this very page, points here) is the one case
+  // that can mean "the viewer just navigated away from a match they were
+  // watching and came back", rather than any other mode being requested.
+  // Any explicit ?mode= is a different, fresh intent (a real game, a
+  // friend game, a tournament round, or even a brand-new watch) and
+  // always wins outright — and drops a stale watch behind it, so it can
+  // never resurface later on some unrelated bare navigation.
+  const hasExplicitMode = urlParams.has('mode');
+  const resumedWatch = hasExplicitMode ? null : loadAiVsAiWatch();
+  if (hasExplicitMode) clearAiVsAiWatch();
+
+  const aiVsAiMode = urlAiVsAiMode || !!resumedWatch;
   window.__kcAiVsAiActive = aiVsAiMode;
 
   // Only AI/local-friend games get the page locked (see play.html's
@@ -531,12 +571,21 @@ export async function initUI() {
     }
   }
   if (aiVsAiMode) {
-    // Always a clean board for a watched match, never a resumed one —
-    // same reasoning as tournamentMode's own clearGameState() above.
     settings.aiEnabled = true;
-    settings.aiLevelWhite = levelWhiteParam;
-    settings.aiLevelBlack = levelBlackParam;
-    clearGameState();
+    if (urlAiVsAiMode) {
+      // A genuinely new match requested via watch.html's "Start" — always
+      // a clean board, never a resumed one, same reasoning as
+      // tournamentMode's own clearGameState() above.
+      settings.aiLevelWhite = levelWhiteParam;
+      settings.aiLevelBlack = levelBlackParam;
+      clearGameState();
+    } else {
+      // Continuing a match the viewer was already watching before
+      // navigating away — restore its levels here; the board itself is
+      // restored below, in the shared resume-or-fresh-start block.
+      settings.aiLevelWhite = resumedWatch.levelWhite;
+      settings.aiLevelBlack = resumedWatch.levelBlack;
+    }
   }
   beeper.enabled = !!settings.sound;
   currentSettings = settings; // see isAnimationEnabled()/isHapticEnabled() above
@@ -795,18 +844,22 @@ export async function initUI() {
   });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
-  // A watched AI-vs-AI match or a tournament round must never leak into the
-  // one resumable-game slot (SAVE_KEY) — both are already documented as
-  // "always a clean board, never a resumed one" above, but that promise
-  // only held at load time; every in-game saveGameState() call below was
-  // still unconditional, so a mid-match save (including the beforeunload
-  // one when the viewer navigates to another tab) would silently overwrite
-  // the real saved game with the spectated/tournament board. Navigating
-  // back to a bare play.html (no ?mode= params) would then resume THAT
-  // board as an ordinary human-vs-AI game — the exact "AI vs AI turned
-  // into AI vs me" bug this guards against.
+  // A watched AI-vs-AI match and a tournament round each get their own
+  // persistence, never the one resumable-game slot (SAVE_KEY) a real
+  // human-vs-AI game uses — mixing them was the exact "AI vs AI turned
+  // into AI vs me" bug: a mid-match save (including the beforeunload one
+  // when the viewer navigates to another page) would silently overwrite
+  // the real saved game with the spectated board, then a bare play.html
+  // (no ?mode= params — every bottom-nav "Play" link) would resume THAT
+  // board as an ordinary human-vs-AI game. AI vs AI gets its own slot
+  // instead (WATCH_KEY, see saveAiVsAiWatch above) so the exact same bare
+  // navigation instead picks the match back up as what it actually is.
+  // Tournament rounds get neither — a round's outcome is reported to
+  // js/tournament.js directly (see handleTournamentEnd), so there is
+  // nothing useful to resume mid-round; navigating away just abandons it.
   function persistGameState() {
-    if (aiVsAiMode || tournamentMode) return;
+    if (tournamentMode) return;
+    if (aiVsAiMode) { saveAiVsAiWatch(game, clocks, settings.aiLevelWhite, settings.aiLevelBlack); return; }
     saveGameState(game, clocks);
   }
 
@@ -1050,7 +1103,13 @@ export async function initUI() {
   function recordGameEnd(kind, matedColor) {
     // Watching two AIs play is not "playing" — this must never create a
     // Games/Win-Rate/Coins entry for whoever happens to be watching.
-    if (aiVsAiMode) return null;
+    if (aiVsAiMode) {
+      // The match this watch session was resuming is now finished — drop
+      // it so a later bare navigation back to Play starts a fresh screen
+      // instead of trying to "resume" a game that already ended.
+      clearAiVsAiWatch();
+      return null;
+    }
     const mode = settings.aiEnabled ? 'ai' : 'friend';
     let result;
     if (kind === 'stalemate' || kind === 'counting' || kind === 'repetition') {
@@ -1692,6 +1751,10 @@ export async function initUI() {
     if (!aiVsAiMode || alreadyOver) return;
     aiVsAiPlies++;
     if (aiVsAiPlies >= AI_VS_AI_MAX_PLIES) {
+      // Bypasses recordGameEnd() (this draw is synthetic, never reaches
+      // game.move()'s own result) — clear the watch slot here too, same
+      // reasoning as recordGameEnd's own early return above.
+      clearAiVsAiWatch();
       presentGameResult({
         result: 'DRAW',
         reason: 'STALEMATE',
@@ -2154,7 +2217,11 @@ export async function initUI() {
   }
 
   // resume or fresh start
-  const saved = loadGameState();
+  // AI vs AI never touches SAVE_KEY at all (see persistGameState above) —
+  // a fresh explicit start (urlAiVsAiMode) has no resumedWatch and always
+  // gets a clean board; continuing one (resumedWatch, no explicit ?mode=)
+  // restores exactly where the viewer left off.
+  const saved = aiVsAiMode ? resumedWatch : loadGameState();
   if (saved) {
     game.board    = saved.board;
     game.turn     = saved.turn;
@@ -2182,7 +2249,7 @@ export async function initUI() {
     aiVsAiPositionHistory.clear();
     selected = null; legal = []; premove = null; clearHints(); clearGameState();
     clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
-    render(); clocks.start();
+    render(); clocks.start(); persistGameState();
     recordAiVsAiPosition();
     if (isAITurn()) thinkAndPlay();
   });

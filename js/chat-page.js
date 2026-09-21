@@ -182,6 +182,40 @@ function attachConvSwipe(row, { bgRead, bgMenu, onSwipeLeft, onSwipeRight, onTap
   row.addEventListener('pointercancel', finish);
 }
 
+// Keeps .thread-wrap's own top/height locked to whatever part of the
+// screen is actually visible right now (below the app's fixed top bar,
+// above any on-screen keyboard). CSS alone (100dvh, position:fixed +
+// bottom:0) isn't reliable enough for this: iOS Safari in particular
+// doesn't resize the layout viewport when the keyboard opens, it just
+// scrolls the page to keep the focused input on screen — which used to
+// carry the friend-name header and composer along with it, since they
+// were positioned relative to that same scrollable layout viewport.
+// window.visualViewport reports the actually-visible region directly, so
+// this keeps them pinned regardless of that scroll. Returns a cleanup
+// function; a no-op fallback on a browser without visualViewport just
+// leaves the CSS fallback (top/bottom anchored, no keyboard awareness) in
+// place rather than breaking anything.
+function initThreadLayout(threadWrap) {
+  const vv = window.visualViewport;
+  if (!vv) return () => {};
+  const topbar = document.querySelector('.shell > .topbar');
+  function update() {
+    const topbarH = topbar ? topbar.offsetHeight : 0;
+    threadWrap.style.top = (vv.offsetTop + topbarH) + 'px';
+    threadWrap.style.height = (vv.height - topbarH) + 'px';
+    threadWrap.style.bottom = 'auto';
+  }
+  update();
+  vv.addEventListener('resize', update);
+  vv.addEventListener('scroll', update);
+  window.addEventListener('orientationchange', update);
+  return () => {
+    vv.removeEventListener('resize', update);
+    vv.removeEventListener('scroll', update);
+    window.removeEventListener('orientationchange', update);
+  };
+}
+
 function convMenuItem(label, onClick, iconName, { danger } = {}) {
   const btn = document.createElement('button');
   btn.type = 'button';
@@ -204,6 +238,13 @@ async function renderList() {
   const listView = $('#listView');
   listView.hidden = false;
   $('#threadView').hidden = true;
+  // Undo renderThread()'s hide — restores the bottom nav when back on the
+  // conversation list (a defensive no-op on a fresh page load, where it's
+  // already visible by default).
+  const appTabbar = document.getElementById('appTabbar');
+  const bottomSpacer = document.getElementById('bottomSpacer');
+  if (appTabbar) appTabbar.hidden = false;
+  if (bottomSpacer) bottomSpacer.hidden = false;
 
   listView.innerHTML = `
     <div class="chat-list" id="chatList"></div>
@@ -328,6 +369,13 @@ async function renderThread(friendId) {
   const threadView = $('#threadView');
   $('#listView').hidden = true;
   threadView.hidden = false;
+  // The bottom nav is app-wide chrome that only wastes vertical space in a
+  // one-on-one thread — hide it while a thread is open, restored by
+  // renderList() when back on the conversation list.
+  const appTabbar = document.getElementById('appTabbar');
+  const bottomSpacer = document.getElementById('bottomSpacer');
+  if (appTabbar) appTabbar.hidden = true;
+  if (bottomSpacer) bottomSpacer.hidden = true;
 
   const myId = Api.getCurrentUser()?.id;
   let friendName = 'Friend', friendEmoji = '🐯', friendAvatarUrl = null;
@@ -364,9 +412,11 @@ async function renderThread(friendId) {
         <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" aria-label="Cancel">✕</button>
       </div>
       <div class="emoji-panel" id="emojiPanel" hidden></div>
-      <form class="thread-composer" id="composerForm">
+      <form class="thread-composer" id="composerForm" autocomplete="off">
         <button type="button" class="emoji-btn" id="emojiBtn" aria-label="${t('chat.emoji')}">😊</button>
-        <input type="text" id="composerInput" maxlength="2000" placeholder="Message…" autocomplete="off" />
+        <input type="text" id="composerInput" name="chat-message" maxlength="2000" placeholder="Message…"
+          autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
+          data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
         <button type="submit" id="composerSend">Send</button>
       </form>
     </div>
@@ -379,6 +429,7 @@ async function renderThread(friendId) {
   `;
 
   setConvAvatar($('#threadAvatar'), { emoji: friendEmoji, url: friendAvatarUrl });
+  const stopThreadLayout = initThreadLayout($('.thread-wrap'));
 
   const msgsEl = $('#threadMsgs');
   const olderSpinner = $('#loadOlderSpinner');
@@ -992,6 +1043,7 @@ async function renderThread(friendId) {
     clearInterval(presenceRefreshTimer);
     clearTimeout(typingHideTimer);
     stopTypingSignal();
+    stopThreadLayout();
   };
   window.addEventListener('beforeunload', onLeave);
   window.addEventListener('pagehide', onLeave);

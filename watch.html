@@ -75,38 +75,6 @@
     }
     .live-game-meta{ font-size:.76rem; opacity:.65; margin-top:.15rem; }
 
-    /* Spectator board view */
-    .spectate-view{ padding:0 1rem 1rem; }
-    .spectate-topbar{
-      display:flex; align-items:center; justify-content:space-between; margin-bottom:.6rem;
-    }
-    .spectate-status-banner{
-      margin:0 0 .6rem; padding:.55rem .8rem; border-radius:.7rem;
-      background:#fff3cd; color:#7a5b00; font-weight:700; font-size:.85rem; text-align:center;
-    }
-    .spectate-board-wrap{
-      display:flex; flex-direction:column; gap:.4rem;
-      /* Matches play.html's own .board-panel sizing approach so the board
-         never grows past a comfortable width on a tall/narrow phone. */
-      max-width:480px; margin:0 auto;
-    }
-    .captured-row{
-      display:flex; flex-wrap:wrap; gap:2px; min-height:16px; align-items:center;
-    }
-    .captured-piece{
-      width:16px; height:16px; background-size:contain; background-repeat:no-repeat;
-      background-position:center; opacity:.85;
-    }
-    .spectate-meta-row{
-      display:flex; align-items:center; justify-content:center; gap:.6rem;
-      font-size:.82rem; font-weight:700; opacity:.75; padding:.2rem 0;
-    }
-    .move-history{
-      max-height:120px; overflow-y:auto; font-size:.78rem; opacity:.75;
-      background:var(--panel); border-radius:.7rem; padding:.5rem .7rem;
-      border:1px solid rgba(13,45,92,.06); line-height:1.6;
-    }
-
     /* AI vs AI panel */
     .ai-setup{
       display:flex; flex-direction:column; gap:.7rem; padding:0 1rem 1rem;
@@ -138,44 +106,13 @@
         </button>
       </div>
 
-      <!-- Friend Live panel -->
+      <!-- Friend Live panel — a list only. Clicking a row opens the real
+           play.html (?mode=spectate), so watching a friends' game uses the
+           exact same board/clocks/checkmate-presentation a real game has,
+           instead of a second, separate board implementation here. -->
       <section id="panelFriend" class="watch-panel">
-        <div id="friendListView">
-          <div id="friendState" class="watch-state" hidden></div>
-          <div id="liveGamesList" class="card-list"></div>
-        </div>
-
-        <div id="spectateView" class="spectate-view" hidden>
-          <div class="spectate-topbar">
-            <button class="pill" id="btnBackToList" type="button">‹ <span data-i18n="watch.tabFriend">Friends Online</span></button>
-          </div>
-          <div id="spectateBanner" class="spectate-status-banner" hidden></div>
-          <div class="spectate-board-wrap">
-            <div class="timers">
-              <div class="player-row top">
-                <div class="player-avatar" id="specAvatarBlack" hidden></div>
-                <div class="player-name" id="specNameBlack">—</div>
-              </div>
-              <div class="captured-row" id="specCapturedByWhite"></div>
-            </div>
-
-            <div id="specBoard" class="board board-wood no-coords" aria-label="Spectator board"></div>
-
-            <div class="captured-row" id="specCapturedByBlack"></div>
-            <div class="timers">
-              <div class="player-row bottom">
-                <div class="player-avatar" id="specAvatarWhite" hidden></div>
-                <div class="player-name" id="specNameWhite">—</div>
-              </div>
-            </div>
-
-            <div class="spectate-meta-row">
-              <span class="live-badge"><span class="live-dot"></span><span data-i18n="watch.live">LIVE</span></span>
-              <span id="specMoveLabel"></span>
-            </div>
-            <div class="move-history" id="specHistory"></div>
-          </div>
-        </div>
+        <div id="friendState" class="watch-state" hidden></div>
+        <div id="liveGamesList" class="card-list"></div>
       </section>
 
       <!-- AI vs AI panel — a setup screen only. Starting a match opens the

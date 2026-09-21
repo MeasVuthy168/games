@@ -813,18 +813,16 @@ export async function initUI() {
   }
 
   // An AI side's own avatar: the same illustrated robot mascot for every
-  // AI, ringed in that side's real piece color (hex, from the active
-  // theme — Classic White/Black, Silver/Gold, Blue/Red, ...) so which
-  // side it's playing is folded straight into the one icon instead of a
-  // separate chess-piece glyph next to it. box-shadow (not border) so the
-  // ring never shrinks the mascot image inside, and a thin dark hairline
-  // just outside the color keeps a near-white ring (Classic White,
-  // Silver) visible against the row's own light background.
-  function setAiAvatarImage(el, ringHex) {
+  // AI, on either side — which side it's playing is instead named
+  // directly in the short color label next to the level badge (see
+  // applyPlayerLabels below), since a colored ring around this
+  // particular image (real photo, opaque white background baked in) had
+  // no reliable contrast against the row's own light/dark backgrounds.
+  function setAiAvatarImage(el) {
     if (!el) return;
     el.style.backgroundColor = '';
     el.style.backgroundImage = 'url("assets/ui/ai-avatar.jpg")';
-    el.style.boxShadow = `0 0 0 2px ${ringHex}, 0 0 0 3px rgba(0,0,0,.25)`;
+    el.style.boxShadow = '';
     el.textContent = '';
   }
 
@@ -887,14 +885,15 @@ export async function initUI() {
       // Both sides are AI here, so both get the same avatar+level-badge
       // treatment Friends Online spectating uses for two humans (see
       // watch.js's specAvatarWhite/specAvatarBlack) — the mascot icon
-      // (ringed in that side's real piece color) standing in for a photo.
-      // The name itself is emptied rather than hidden outright so its
-      // flex:1 still keeps the clock pinned to the row's right edge (see
-      // .player-row/.player-name in styles.css).
-      elNameTop.textContent    = '';
-      elNameBottom.textContent = '';
-      setAiAvatarImage(elAvatarTop, pieceColors.b.hex);
-      setAiAvatarImage(elAvatarBottom, pieceColors.w.hex);
+      // standing in for a photo. A colored ring around this particular
+      // image had no reliable contrast (real photo, opaque white
+      // background), so which side it's playing is named directly here
+      // instead — just the short color word, not the old "AI Level N"
+      // phrase.
+      elNameTop.textContent    = pieceColors.b.short;
+      elNameBottom.textContent = pieceColors.w.short;
+      setAiAvatarImage(elAvatarTop);
+      setAiAvatarImage(elAvatarBottom);
       setLevelBadge(elLevelTop, settings.aiLevelBlack);
       setLevelBadge(elLevelBottom, settings.aiLevelWhite);
       if (elAvatarTop) elAvatarTop.hidden = false;
@@ -904,8 +903,8 @@ export async function initUI() {
       if (elResign) elResign.hidden = true;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
-      elNameTop.textContent    = aiIsWhite ? `អ្នក (You) · ${pieceColors.b.short}` : '';
-      elNameBottom.textContent = aiIsWhite ? '' : `អ្នក (You) · ${pieceColors.w.short}`;
+      elNameTop.textContent    = aiIsWhite ? `អ្នក (You) · ${pieceColors.b.short}` : pieceColors.b.short;
+      elNameBottom.textContent = aiIsWhite ? pieceColors.w.short : `អ្នក (You) · ${pieceColors.w.short}`;
       // Only the AI's own row gets the mascot avatar + level badge — the
       // human row stays as it was (no photo to show in a local,
       // possibly-signed-out game).
@@ -914,11 +913,11 @@ export async function initUI() {
       if (elLevelTop) elLevelTop.hidden = aiIsWhite;
       if (elLevelBottom) elLevelBottom.hidden = !aiIsWhite;
       if (!aiIsWhite) {
-        setAiAvatarImage(elAvatarTop, pieceColors.b.hex);
+        setAiAvatarImage(elAvatarTop);
         setLevelBadge(elLevelTop, settings.aiLevel);
       }
       if (aiIsWhite) {
-        setAiAvatarImage(elAvatarBottom, pieceColors.w.hex);
+        setAiAvatarImage(elAvatarBottom);
         setLevelBadge(elLevelBottom, settings.aiLevel);
       }
       if (elResign) elResign.hidden = true;

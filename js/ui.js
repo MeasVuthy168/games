@@ -826,18 +826,25 @@ export async function initUI() {
     el.textContent = '';
   }
 
-  // AI Level 1-10, drawn like a phone battery gauge — an outline with a
-  // small nub, filled green proportional to level/10 — replacing the old
-  // "AI Level N" text entirely (see applyPlayerLabels below, which empties
-  // .player-name instead of hiding it, so its flex:1 still keeps the
-  // clock pinned to the row's right edge with nothing visible in between).
+  // AI Level 1-10, drawn as a small vertical battery — a nub + outline
+  // holding 10 stacked pill segments, lit bottom-up in glowing green —
+  // replacing the old "AI Level N" text entirely.
   function batteryLevelSVG(level) {
-    const pct = Math.max(0, Math.min(10, level)) / 10;
-    const fillW = Math.round(16 * pct);
-    return `<svg viewBox="0 0 22 12" width="26" height="14" aria-hidden="true">
-      <rect x="1" y="1" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1"/>
-      <rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor" fill-opacity=".55"/>
-      <rect x="2.5" y="2.5" width="${fillW}" height="7" rx="1" fill="#2ecc71"/>
+    const lit = Math.max(0, Math.min(10, level));
+    const segW = 12, segH = 2.9, gap = 0.7, x = 4, bodyBottom = 39.5;
+    let segments = '';
+    for (let i = 0; i < 10; i++) {
+      // i=0 is the bottom segment — lights up first, same reading order a
+      // phone battery fills in.
+      const y = (bodyBottom - (i + 1) * segH - i * gap).toFixed(2);
+      segments += i < lit
+        ? `<rect x="${x}" y="${y}" width="${segW}" height="${segH}" rx="1.3" fill="#2ecc71" filter="drop-shadow(0 0 1.6px rgba(46,204,113,.85))"/>`
+        : `<rect x="${x}" y="${y}" width="${segW}" height="${segH}" rx="1.3" fill="#e4e7ec" stroke="rgba(0,0,0,.12)" stroke-width="0.5"/>`;
+    }
+    return `<svg viewBox="0 0 20 44" width="18" height="40" aria-hidden="true">
+      <rect x="8.5" y="1" width="3" height="2.4" rx="1.2" fill="#b7bcc4"/>
+      <rect x="2" y="3" width="16" height="38" rx="6" fill="none" stroke="#b7bcc4" stroke-width="1.4"/>
+      ${segments}
     </svg>`;
   }
 

@@ -397,20 +397,20 @@ body{
 .player-name{ font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Real photo (or emoji fallback) for an online opponent/self — toggled by
    js/ui.js's setAvatar(), hidden entirely outside online mode. An AI's own
-   avatar (setAiAvatarImage()) instead gets a colored ring (box-shadow, so
-   it never shrinks the image inside) in that side's actual piece color —
-   a thin dark hairline outside the ring keeps a near-white color (Classic
-   White, Silver) visible against the row's own light background. */
+   avatar (setAiAvatarImage()) reuses this same circle at a larger size —
+   which side it's playing is named directly next to the level badge
+   instead (see applyPlayerLabels), not drawn onto the avatar itself. */
 .player-avatar{
-  width:26px; height:26px; border-radius:50%; flex:none;
+  width:38px; height:38px; border-radius:50%; flex:none;
   display:flex; align-items:center; justify-content:center;
-  font-size:1rem; line-height:1; background:var(--chip-bg);
+  font-size:1.3rem; line-height:1; background:var(--chip-bg);
   background-size:cover; background-position:center;
 }
-/* AI Level 1-10, drawn as a phone-battery-style gauge (outline + a nub,
-   filled green proportional to level/10) — sits right next to the AI's
-   own avatar, toggled by js/ui.js's setLevelBadge()/applyPlayerLabels(),
-   hidden entirely outside AI-vs-AI and single-AI mode. */
+/* AI Level 1-10, drawn as a small vertical segmented gauge (10 stacked
+   pills, lit bottom-up in green with a soft glow) — sits right next to
+   the AI's own avatar, toggled by js/ui.js's
+   setLevelBadge()/applyPlayerLabels(), hidden entirely outside AI-vs-AI
+   and single-AI mode. */
 .ai-level-badge{
   flex:none; display:flex; align-items:center; justify-content:center;
 }

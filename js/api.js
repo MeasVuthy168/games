@@ -176,6 +176,21 @@ export async function getConversations() {
   return data.conversations;
 }
 
+export async function markThreadUnread(friendId) {
+  return request(`/api/chat/${friendId}/unread`, { method: 'POST' });
+}
+
+export async function setConversationPrefs(friendId, { pinned, muted } = {}) {
+  const body = {};
+  if (typeof pinned === 'boolean') body.pinned = pinned;
+  if (typeof muted === 'boolean') body.muted = muted;
+  return request(`/api/chat/${friendId}/prefs`, { method: 'PATCH', body });
+}
+
+export async function deleteConversation(friendId) {
+  return request(`/api/chat/${friendId}`, { method: 'DELETE' });
+}
+
 // `opts.since` (ISO timestamp) — messages strictly after it, ascending
 // (reconnect gap-fill). `opts.before` (a message id) — the page of
 // messages immediately before it, ascending (infinite-scroll-up). Neither

@@ -718,7 +718,11 @@ body.ai-thinking #board{
   background:var(--blue); border-top:1px solid rgba(255,255,255,.12);
   display:grid; grid-template-columns:repeat(6,1fr);
   gap:.2rem;
-  padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
+  /* max(), not +: the inset already covers the home-indicator clearance
+     on its own. Adding the base .3rem on top of it (the old calc()) made
+     iOS's bar taller than Android's by that .3rem for no reason — this
+     takes the larger of the two instead of stacking them. */
+  padding:.3rem .3rem max(.3rem, env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.16);
 }
 .nav-item{

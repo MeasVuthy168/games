@@ -25,26 +25,63 @@
 
   <style>
     .chat-list{ padding:1rem; display:flex; flex-direction:column; gap:.6rem; }
+
+    /* Conversation row is wrapped so the swipe-revealed background layers
+       (read cue on the right, more-actions cue on the left) can sit behind
+       it without affecting the row's own box shadow/border. */
+    .conv-row-wrap{ position:relative; border-radius:.9rem; overflow:hidden; }
+    .conv-bg{
+      position:absolute; inset:0; display:flex; align-items:center;
+      font-weight:800; font-size:.85rem; color:#fff; opacity:0; transition:opacity .15s ease;
+      padding:0 1.1rem;
+    }
+    .conv-bg.show{ opacity:1; }
+    .conv-bg-read{ background:var(--blue); justify-content:flex-end; }
+    .conv-bg-menu{ background:#67707c; justify-content:flex-start; }
+
     .conv-row{
-      display:flex; align-items:center; gap:.7rem; padding:.7rem .8rem;
+      position:relative; display:flex; align-items:center; gap:.7rem; padding:.7rem .8rem;
       background:var(--panel); border-radius:.9rem; box-shadow:var(--shadow);
-      border:1px solid rgba(13,45,92,.06); cursor:pointer;
+      border:1px solid rgba(13,45,92,.06); cursor:pointer; touch-action:pan-y;
     }
     .conv-row:active{ transform:scale(.99); }
-    .conv-emoji{ font-size:1.6rem; flex:none; }
-    .conv-meta{ flex:1; min-width:0; }
-    .conv-name{ font-weight:800; font-size:.95rem; }
-    .conv-preview{ font-size:.8rem; opacity:.65; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .conv-badge{
-      background:var(--blue); color:#fff; font-weight:800; font-size:.72rem;
-      border-radius:999px; padding:.15rem .5rem; flex:none;
+    /* Always takes up its flex slot (even when read) so the avatar/name
+       don't shift between rows — just fades in/out via opacity. */
+    .conv-dot{
+      width:9px; height:9px; border-radius:50%; background:var(--blue); flex:none;
+      opacity:0;
     }
+    .conv-row.unread .conv-dot{ opacity:1; }
+    .conv-avatar{
+      width:48px; height:48px; border-radius:50%; flex:none;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.5rem; line-height:1; background:var(--chip-bg);
+      background-size:cover; background-position:center;
+    }
+    .conv-meta{ flex:1; min-width:0; display:flex; flex-direction:column; gap:.15rem; }
+    .conv-top, .conv-bottom{ display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+    .conv-name{ font-size:.95rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .conv-time{ flex:none; font-size:.72rem; opacity:.55; }
+    .conv-preview{ flex:1; min-width:0; font-size:.8rem; opacity:.65; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .conv-row.unread .conv-name, .conv-row.unread .conv-preview{ font-weight:800; opacity:1; color:var(--ink); }
+    .conv-badge{
+      background:var(--blue); color:#fff; font-weight:800; font-size:.7rem;
+      border-radius:999px; min-width:18px; height:18px; padding:0 .4rem; flex:none;
+      display:flex; align-items:center; justify-content:center; line-height:1;
+    }
+    .conv-muted-icon{ flex:none; opacity:.5; display:flex; }
     .empty-note{ padding:1rem; text-align:center; opacity:.6; font-size:.88rem; }
 
     /* Thread view */
     .thread-wrap{ position:relative; display:flex; flex-direction:column; height:calc(100dvh - 130px); }
     .thread-header{ display:flex; align-items:center; gap:.6rem; padding:.8rem 1rem; border-bottom:1px solid rgba(13,45,92,.08); }
     .thread-header a{ color:var(--blue); font-weight:800; text-decoration:none; font-size:1.2rem; }
+    .thread-avatar{
+      width:34px; height:34px; border-radius:50%; flex:none;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.2rem; line-height:1; background:var(--chip-bg);
+      background-size:cover; background-position:center;
+    }
     .thread-header-meta{ display:flex; flex-direction:column; line-height:1.25; min-width:0; }
     .thread-header .thread-name{ font-weight:800; }
     .thread-presence{ font-size:.72rem; opacity:.6; }
@@ -139,7 +176,7 @@
     /* Long-press action menu (bottom sheet) */
     .msg-menu-overlay{
       position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:flex-end;
-      z-index:50;
+      z-index:60;
     }
     .msg-menu-overlay[hidden]{ display:none; }
     .msg-menu{
@@ -157,7 +194,7 @@
     /* Message info modal */
     .info-modal-overlay{
       position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center;
-      z-index:50; padding:1rem;
+      z-index:60; padding:1rem;
     }
     .info-modal-overlay[hidden]{ display:none; }
     .info-modal{
@@ -188,8 +225,8 @@
     <footer id="appTabbar" class="home-nav">
       <a class="nav-item" href="index.html"><img class="ni-img" src="assets/ui/nav-home.png" alt=""><span data-i18n="nav.home">Home</span></a>
       <a class="nav-item" href="friends.html"><img class="ni-img" src="assets/ui/nav-friends.png" alt=""><span data-i18n="nav.friend">Friend</span></a>
-      <a class="nav-item active" href="chat.html" aria-current="page"><img class="ni-img" src="assets/ui/nav-chat.png" alt=""><span data-i18n="nav.chat">Chat</span></a>
       <a class="nav-item" href="play.html"><img class="ni-img" src="assets/ui/nav-play.png" alt=""><span data-i18n="nav.play">Play</span></a>
+      <a class="nav-item active" href="chat.html" aria-current="page"><img class="ni-img" src="assets/ui/nav-chat.png" alt=""><span data-i18n="nav.chat">Chat</span></a>
       <a class="nav-item" href="settings.html"><img class="ni-img" src="assets/ui/nav-settings.png" alt=""><span data-i18n="nav.setting">Setting</span></a>
       <a class="nav-item" href="notifications.html"><img class="ni-img" src="assets/ui/nav-bell.png" alt=""><span data-i18n="nav.notification">Notification</span></a>
     </footer>

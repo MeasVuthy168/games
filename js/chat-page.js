@@ -74,13 +74,168 @@ function escapeHtml(s) {
   return d.innerHTML;
 }
 
+// Feather/Lucide-style 24x24 stroke icons, matching the outline icons
+// already used elsewhere in the app (see play.html's fullscreen icons).
+// Module-scope (not nested in renderThread) since both the message
+// long-press menu and the conversation-row swipe menu share this set.
+const MENU_ICONS = {
+  copy: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/>',
+  reply: '<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
+  pin: '<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+  trashUsers: '<path d="M3 6h11"/><path d="M12 6l-.4 5.5"/><path d="M5 6l.7 11.2A2 2 0 0 0 7.7 19H10"/><path d="M8 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><circle cx="17" cy="14" r="1.8"/><path d="M13.8 21c0-1.7 1.4-3 3.2-3s3.2 1.3 3.2 3"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
+  bellOff: '<path d="M8.7 3A6 6 0 0 1 18 8a21.3 21.3 0 0 0 .6 5"/><path d="M17 17H3s3-2 3-9a4.67 4.67 0 0 1 .3-1.7"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/><line x1="2" y1="2" x2="22" y2="22"/>',
+};
+
+function menuIcon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', '18');
+  svg.setAttribute('height', '18');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.innerHTML = MENU_ICONS[name] || '';
+  return svg;
+}
+
+function setConvAvatar(el, { emoji, url } = {}) {
+  if (!el) return;
+  if (url) { el.style.backgroundImage = `url("${url}")`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = emoji || '🐯'; }
+}
+
+// Compact Messenger-style relative time for the conversation row's
+// right-aligned timestamp ("now" / "5m" / "3h" / "2d" / a short date) —
+// deliberately terser than fmtLastSeen's full "Last seen X ago" sentence,
+// which doesn't fit a single row's right edge.
+function fmtConvTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  const diffMin = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (diffMin < 1) return t('chat.timeNow');
+  if (diffMin < 60) return t('chat.timeMinShort', { n: diffMin });
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return t('chat.timeHourShort', { n: diffH });
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 7) return t('chat.timeDayShort', { n: diffD });
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+// Pointer-Events horizontal swipe for a conversation row: swipe left
+// commits immediately (mark as read); swipe right reveals a small bottom
+// sheet of conversation-level actions instead of committing anything by
+// itself, since "mark as unread / Pin / Mute / Delete / unfriend" is too
+// much to represent as instant single-direction swipe actions the way
+// notifications-page.js's read/delete swipe does.
+function attachConvSwipe(row, { bgRead, bgMenu, onSwipeLeft, onSwipeRight, onTap }) {
+  const THRESHOLD = 70;
+  let startX = 0, startY = 0, dx = 0, dragging = false, horizontal = false, pointerId = null;
+
+  row.addEventListener('pointerdown', (e) => {
+    startX = e.clientX; startY = e.clientY; dx = 0; dragging = true; horizontal = false;
+    pointerId = e.pointerId;
+    row.style.transition = 'none';
+  });
+
+  row.addEventListener('pointermove', (e) => {
+    if (!dragging || e.pointerId !== pointerId) return;
+    const ddx = e.clientX - startX, ddy = e.clientY - startY;
+    if (!horizontal) {
+      if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+      if (Math.abs(ddx) <= Math.abs(ddy)) { dragging = false; return; }
+      horizontal = true;
+      row.setPointerCapture(pointerId);
+    }
+    dx = ddx;
+    row.style.transform = `translateX(${dx}px)`;
+    if (bgRead) bgRead.classList.toggle('show', dx < -20);
+    if (bgMenu) bgMenu.classList.toggle('show', dx > 20);
+  });
+
+  function finish(e) {
+    if (!dragging || e.pointerId !== pointerId) return;
+    dragging = false;
+    row.style.transition = 'transform .2s ease';
+    row.style.transform = 'translateX(0)';
+    if (bgRead) bgRead.classList.remove('show');
+    if (bgMenu) bgMenu.classList.remove('show');
+    if (!horizontal) { onTap(); return; }
+    if (dx <= -THRESHOLD) onSwipeLeft();
+    else if (dx >= THRESHOLD) onSwipeRight();
+  }
+  row.addEventListener('pointerup', finish);
+  row.addEventListener('pointercancel', finish);
+}
+
+function convMenuItem(label, onClick, iconName, { danger } = {}) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'msg-menu-item' + (danger ? ' danger' : '');
+  btn.appendChild(menuIcon(iconName));
+  const span = document.createElement('span');
+  span.textContent = label;
+  btn.appendChild(span);
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
 async function renderList() {
   const listView = $('#listView');
   listView.hidden = false;
   $('#threadView').hidden = true;
 
-  listView.innerHTML = '<div class="chat-list" id="chatList"></div>';
+  listView.innerHTML = `
+    <div class="chat-list" id="chatList"></div>
+    <div class="msg-menu-overlay" id="convMenuOverlay" hidden>
+      <div class="msg-menu" id="convMenu"></div>
+    </div>
+  `;
   const chatList = $('#chatList');
+  const menuOverlay = $('#convMenuOverlay');
+  const menuEl = $('#convMenu');
+
+  function closeConvMenu() {
+    menuOverlay.hidden = true;
+    menuEl.innerHTML = '';
+  }
+  menuOverlay.addEventListener('click', (e) => { if (e.target === menuOverlay) closeConvMenu(); });
+
+  async function openConvMenu(c) {
+    menuEl.innerHTML = '';
+    menuEl.appendChild(convMenuItem(t('chat.menuMarkUnread'), async () => {
+      closeConvMenu();
+      try { await Api.markThreadUnread(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+    }, 'mail'));
+    menuEl.appendChild(convMenuItem(c.pinned ? t('chat.menuUnpin') : t('chat.menuPin'), async () => {
+      closeConvMenu();
+      try { await Api.setConversationPrefs(c.userId, { pinned: !c.pinned }); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+    }, 'pin'));
+    menuEl.appendChild(convMenuItem(c.muted ? t('chat.menuUnmute') : t('chat.menuMute'), async () => {
+      closeConvMenu();
+      try { await Api.setConversationPrefs(c.userId, { muted: !c.muted }); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+    }, 'bellOff'));
+    const delBtn = convMenuItem(t('chat.menuDeleteConv'), async () => {
+      closeConvMenu();
+      if (!window.confirm(t('chat.deleteConvConfirm'))) return;
+      try { await Api.deleteConversation(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+    }, 'trash', { danger: true });
+    menuEl.appendChild(delBtn);
+    const unfriendBtn = convMenuItem(t('chat.menuUnfriend'), async () => {
+      closeConvMenu();
+      if (!window.confirm(t('friends.removeConfirm', { name: c.displayName }))) return;
+      try { await Api.removeFriend(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+    }, 'trashUsers', { danger: true });
+    menuEl.appendChild(unfriendBtn);
+    menuEl.appendChild(convMenuItem(t('chat.menuCancel'), closeConvMenu));
+    menuOverlay.hidden = false;
+  }
 
   try {
     const conversations = await Api.getConversations();
@@ -89,18 +244,41 @@ async function renderList() {
       return;
     }
     for (const c of conversations) {
-      const row = document.createElement('div');
-      row.className = 'conv-row';
-      row.innerHTML = `
-        <div class="conv-emoji">${c.avatarEmoji || '🐯'}</div>
-        <div class="conv-meta">
-          <div class="conv-name">${escapeHtml(c.displayName)}</div>
-          <div class="conv-preview">${c.lastMessage ? (c.lastMessage.fromMe ? 'You: ' : '') + escapeHtml(c.lastMessage.body) : 'Say hello!'}</div>
-        </div>
-        ${c.unread ? `<div class="conv-badge">${c.unread}</div>` : ''}
+      const wrap = document.createElement('div');
+      wrap.className = 'conv-row-wrap';
+      wrap.innerHTML = `
+        <div class="conv-bg conv-bg-read">${t('chat.swipeRead')}</div>
+        <div class="conv-bg conv-bg-menu">${t('chat.swipeMore')}</div>
       `;
-      row.addEventListener('click', () => { location.href = `chat.html?friend=${c.userId}`; });
-      chatList.appendChild(row);
+      const row = document.createElement('div');
+      row.className = 'conv-row' + (c.unread ? ' unread' : '');
+      row.innerHTML = `
+        <span class="conv-dot"></span>
+        <div class="conv-avatar"></div>
+        <div class="conv-meta">
+          <div class="conv-top">
+            <span class="conv-name">${escapeHtml(c.displayName)}</span>
+            <span class="conv-time">${c.lastMessage ? fmtConvTime(c.lastMessage.createdAt) : ''}</span>
+          </div>
+          <div class="conv-bottom">
+            <span class="conv-preview">${c.lastMessage ? (c.lastMessage.fromMe ? t('chat.youPrefix') : '') + escapeHtml(c.lastMessage.deleted ? t('chat.deletedMessage') : c.lastMessage.body) : t('chat.sayHello')}</span>
+            ${c.unread ? `<span class="conv-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
+            ${c.muted ? `<span class="conv-muted-icon">${menuIcon('bellOff').outerHTML}</span>` : ''}
+          </div>
+        </div>
+      `;
+      setConvAvatar(row.querySelector('.conv-avatar'), { emoji: c.avatarEmoji, url: c.avatarUrl });
+      wrap.appendChild(row);
+      attachConvSwipe(row, {
+        bgRead: wrap.querySelector('.conv-bg-read'),
+        bgMenu: wrap.querySelector('.conv-bg-menu'),
+        onTap: () => { location.href = `chat.html?friend=${c.userId}`; },
+        onSwipeLeft: async () => {
+          try { await Api.markThreadRead(c.userId); renderList(); } catch { /* best-effort */ }
+        },
+        onSwipeRight: () => openConvMenu(c),
+      });
+      chatList.appendChild(wrap);
     }
   } catch (err) {
     chatList.innerHTML = `<div class="empty-note">${escapeHtml(err.message || 'Could not load conversations.')}</div>`;
@@ -113,11 +291,11 @@ async function renderThread(friendId) {
   threadView.hidden = false;
 
   const myId = Api.getCurrentUser()?.id;
-  let friendName = 'Friend', friendEmoji = '🐯';
+  let friendName = 'Friend', friendEmoji = '🐯', friendAvatarUrl = null;
   try {
     const friends = await Api.getFriends();
     const f = friends.find(x => x.userId === friendId);
-    if (f) { friendName = f.displayName; friendEmoji = f.avatarEmoji; }
+    if (f) { friendName = f.displayName; friendEmoji = f.avatarEmoji; friendAvatarUrl = f.avatarUrl; }
     else { threadView.innerHTML = '<div class="empty-note">You are not friends with this person.</div>'; return; }
   } catch {
     // fall through with defaults
@@ -127,7 +305,7 @@ async function renderThread(friendId) {
     <div class="thread-wrap">
       <div class="thread-header">
         <a href="chat.html">‹</a>
-        <span>${friendEmoji}</span>
+        <div class="thread-avatar" id="threadAvatar"></div>
         <div class="thread-header-meta">
           <span class="thread-name">${escapeHtml(friendName)}</span>
           <span class="thread-presence" id="presenceStatus"></span>
@@ -160,6 +338,8 @@ async function renderThread(friendId) {
       <div class="info-modal" id="infoModal"></div>
     </div>
   `;
+
+  setConvAvatar($('#threadAvatar'), { emoji: friendEmoji, url: friendAvatarUrl });
 
   const msgsEl = $('#threadMsgs');
   const olderSpinner = $('#loadOlderSpinner');
@@ -310,32 +490,6 @@ async function renderThread(friendId) {
   function closeMenu() {
     menuOverlay.hidden = true;
     menuEl.innerHTML = '';
-  }
-
-  // Feather/Lucide-style 24x24 stroke icons, matching the outline icons
-  // already used elsewhere in the app (see play.html's fullscreen icons).
-  const MENU_ICONS = {
-    copy: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><line x1="8" y1="11" x2="16" y2="11"/><line x1="8" y1="15" x2="16" y2="15"/>',
-    reply: '<polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/>',
-    pin: '<line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 0-2H8a1 1 0 0 0 0 2h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/>',
-    info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
-    trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
-    trashUsers: '<path d="M3 6h11"/><path d="M12 6l-.4 5.5"/><path d="M5 6l.7 11.2A2 2 0 0 0 7.7 19H10"/><path d="M8 6V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><circle cx="17" cy="14" r="1.8"/><path d="M13.8 21c0-1.7 1.4-3 3.2-3s3.2 1.3 3.2 3"/>',
-  };
-
-  function menuIcon(name) {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', '18');
-    svg.setAttribute('height', '18');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('fill', 'none');
-    svg.setAttribute('stroke', 'currentColor');
-    svg.setAttribute('stroke-width', '2');
-    svg.setAttribute('stroke-linecap', 'round');
-    svg.setAttribute('stroke-linejoin', 'round');
-    svg.setAttribute('aria-hidden', 'true');
-    svg.innerHTML = MENU_ICONS[name] || '';
-    return svg;
   }
 
   function menuItem(label, onClick, iconName) {

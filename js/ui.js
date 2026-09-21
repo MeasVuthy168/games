@@ -795,6 +795,21 @@ export async function initUI() {
   });
   clocks.init(settings.minutes, settings.increment, COLORS.WHITE);
 
+  // A watched AI-vs-AI match or a tournament round must never leak into the
+  // one resumable-game slot (SAVE_KEY) — both are already documented as
+  // "always a clean board, never a resumed one" above, but that promise
+  // only held at load time; every in-game saveGameState() call below was
+  // still unconditional, so a mid-match save (including the beforeunload
+  // one when the viewer navigates to another tab) would silently overwrite
+  // the real saved game with the spectated/tournament board. Navigating
+  // back to a bare play.html (no ?mode= params) would then resume THAT
+  // board as an ordinary human-vs-AI game — the exact "AI vs AI turned
+  // into AI vs me" bug this guards against.
+  function persistGameState() {
+    if (aiVsAiMode || tournamentMode) return;
+    saveGameState(game, clocks);
+  }
+
   // Build board
   elBoard.innerHTML = '';
   const cells = [];
@@ -1749,7 +1764,7 @@ export async function initUI() {
         applyMoveFeedback(res2, { captured: !!before2 });
 
         clocks.switchedByMove(prev2);
-        render(); saveGameState(game, clocks);
+        render(); persistGameState();
         recordAiVsAiPosition();
 
         const over2 = concludeIfOver(res2);
@@ -1760,7 +1775,7 @@ export async function initUI() {
       applyMoveFeedback(res, { captured: !!before });
 
       clocks.switchedByMove(prevTurn);
-      render(); saveGameState(game, clocks);
+      render(); persistGameState();
       recordAiVsAiPosition();
 
       const over = concludeIfOver(res);
@@ -1950,7 +1965,7 @@ export async function initUI() {
 
       clocks.switchedByMove(prev);
       selected = null; legal = []; clearHints();
-      render(); saveGameState(game, clocks);
+      render(); persistGameState();
 
       if (!concludeIfOver(res)) {
         thinkAndPlay();
@@ -2049,7 +2064,7 @@ export async function initUI() {
 
     applyMoveFeedback(res, { captured: !!before });
     clocks.switchedByMove(prev);
-    render(); saveGameState(game, clocks);
+    render(); persistGameState();
 
     if (!concludeIfOver(res)) { thinkAndPlay(); }
   }
@@ -2181,7 +2196,7 @@ export async function initUI() {
 
     selected = null; legal = []; premove = null; clearHints();
     clocks.turn = game.turn;
-    render(); saveGameState(game, clocks);
+    render(); persistGameState();
   });
 
   btnPause?.addEventListener('click', () => {
@@ -2202,7 +2217,7 @@ export async function initUI() {
     if (aiVsAiMode && !wasRunning && !game.winner) thinkAndPlay();
   });
 
-  window.addEventListener('beforeunload', () => saveGameState(game, clocks));
+  window.addEventListener('beforeunload', persistGameState);
 
   initFullscreenButton();
   initPlayMenu();

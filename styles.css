@@ -716,7 +716,7 @@ body.ai-thinking #board{
 #appTabbar{
   position:fixed; left:0; right:0; bottom:0; z-index:50;
   background:var(--blue); border-top:1px solid rgba(255,255,255,.12);
-  display:grid; grid-template-columns:repeat(5,1fr);
+  display:grid; grid-template-columns:repeat(6,1fr);
   gap:.2rem;
   padding:.3rem .3rem calc(.3rem + env(safe-area-inset-bottom));
   box-shadow:0 -6px 20px rgba(0,0,0,.16);

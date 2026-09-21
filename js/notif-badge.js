@@ -144,7 +144,13 @@ export async function refreshNotifBadge() {
   const badge = ensureBadgeEl();
   if (!Api.isSignedIn() || !notificationsEnabled()) { if (badge) badge.hidden = true; return; }
   try {
-    const { notifications, unread } = await Api.getNotifications();
+    const { notifications } = await Api.getNotifications();
+    // `message` notifications now have their own dedicated badge (see
+    // js/chat-badge.js, on the Chat tab) — excluded here so a new chat
+    // message doesn't inflate two different badges for the same event.
+    // The server's own `unread` field still counts every type, so this is
+    // recomputed client-side from the notifications array already fetched.
+    const unread = notifications.filter(n => !n.read && n.type !== 'message').length;
     if (badge) {
       if (unread > 0) {
         badge.textContent = unread > 9 ? '9+' : String(unread);

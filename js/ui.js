@@ -811,44 +811,56 @@ export async function initUI() {
     else { el.style.backgroundImage = ''; el.textContent = emoji || '🐯'; }
   }
 
-  // An AI side's own avatar: a solid circle in that side's actual piece
-  // color (hex, from the active theme — Classic White/Black, Silver/Gold,
-  // Blue/Red, ...) holding a simple bot glyph, so it reads at a glance as
-  // "an AI, playing this color" the same way an online opponent's row
-  // reads as "a person, with this photo" — matching that same
-  // avatar+name layout (see applyPlayerLabels below) rather than the bare
-  // text-only label AI sides used to get.
-  //
-  // The glyph itself is drawn in whichever of black/white has more
-  // contrast against that exact background (plain W3C relative-luminance
-  // threshold) so it stays legible across every theme, including
-  // near-white "Classic White" and mid-tone "Gold" backgrounds where a
-  // single fixed glyph color would wash out.
-  function relativeLuma(hex) {
-    const n = parseInt(hex.slice(1), 16);
-    const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-    return 0.299 * r + 0.587 * g + 0.114 * b;
+  // An AI side's own avatar: the same illustrated robot mascot for every
+  // AI, on either side — which side is which is already unambiguous from
+  // board geometry (top=Black rank, bottom=White rank) and the level
+  // badge beside it, so the icon itself doesn't need to vary.
+  function setAiAvatarImage(el) {
+    if (!el) return;
+    el.style.backgroundColor = '';
+    el.style.backgroundImage = 'url("assets/ui/ai-avatar.jpg")';
+    el.textContent = '';
   }
 
-  function aiAvatarIconSVG(bgHex) {
-    const glyph = relativeLuma(bgHex) > 150 ? '#1a1a1a' : '#fff';
-    return `<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <rect x="5.5" y="8" width="13" height="12" rx="3.5" fill="${glyph}"/>
-      <rect x="3" y="12" width="2" height="4" rx="1" fill="${glyph}"/>
-      <rect x="19" y="12" width="2" height="4" rx="1" fill="${glyph}"/>
-      <rect x="11.3" y="5.2" width="1.4" height="2.6" fill="${glyph}"/>
-      <circle cx="12" cy="4" r="1.4" fill="${glyph}"/>
-      <circle cx="9.3" cy="14" r="1.5" fill="${bgHex}"/>
-      <circle cx="14.7" cy="14" r="1.5" fill="${bgHex}"/>
-      <rect x="9" y="17.6" width="6" height="1.3" rx="0.65" fill="${bgHex}"/>
+  // Which side this AI is actually playing, drawn as a small chess-piece
+  // silhouette (a pawn — the one piece every theme has) filled in that
+  // side's real piece color (hex, from the active theme — Classic
+  // White/Black, Silver/Gold, Blue/Red, ...), sitting between the mascot
+  // avatar and the level badge. A thin fixed outline (independent of the
+  // fill) keeps a near-white fill (Classic White, Silver) from washing
+  // out against the row's own light background.
+  function chessColorIconSVG(hex) {
+    return `<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+      <circle cx="12" cy="7.2" r="3.2" fill="${hex}" stroke="rgba(0,0,0,.5)" stroke-width="1.1"/>
+      <path d="M9 12 L15 12 L17.2 18.2 L6.8 18.2 Z" fill="${hex}" stroke="rgba(0,0,0,.5)" stroke-width="1.1"/>
+      <rect x="6" y="19" width="12" height="2.2" rx="1" fill="${hex}" stroke="rgba(0,0,0,.5)" stroke-width="1.1"/>
     </svg>`;
   }
 
-  function setAiAvatar(el, bgHex) {
+  function setChessColorBadge(el, hex) {
     if (!el) return;
-    el.style.backgroundImage = '';
-    el.style.backgroundColor = bgHex;
-    el.innerHTML = aiAvatarIconSVG(bgHex);
+    el.innerHTML = chessColorIconSVG(hex);
+  }
+
+  // AI Level 1-10, drawn like a phone battery gauge — an outline with a
+  // small nub, filled green proportional to level/10 — replacing the old
+  // "AI Level N" text entirely (see applyPlayerLabels below, which empties
+  // .player-name instead of hiding it, so its flex:1 still keeps the
+  // clock pinned to the row's right edge with nothing visible in between).
+  function batteryLevelSVG(level) {
+    const pct = Math.max(0, Math.min(10, level)) / 10;
+    const fillW = Math.round(16 * pct);
+    return `<svg viewBox="0 0 22 12" width="26" height="14" aria-hidden="true">
+      <rect x="1" y="1" width="18" height="10" rx="2" fill="none" stroke="currentColor" stroke-opacity=".55" stroke-width="1"/>
+      <rect x="20" y="4" width="1.6" height="4" rx="0.8" fill="currentColor" fill-opacity=".55"/>
+      <rect x="2.5" y="2.5" width="${fillW}" height="7" rx="1" fill="#2ecc71"/>
+    </svg>`;
+  }
+
+  function setLevelBadge(el, level) {
+    if (!el) return;
+    el.innerHTML = batteryLevelSVG(level);
+    el.title = `AI Level ${level}`;
   }
 
   // Player-name rows are fixed to board geometry (top = Black rank, bottom =
@@ -858,6 +870,10 @@ export async function initUI() {
     const elNameBottom = document.getElementById('nameWhite');
     const elAvatarTop    = document.getElementById('avatarBlack');
     const elAvatarBottom = document.getElementById('avatarWhite');
+    const elLevelTop    = document.getElementById('levelBadgeBlack');
+    const elLevelBottom = document.getElementById('levelBadgeWhite');
+    const elColorTop    = document.getElementById('colorBadgeBlack');
+    const elColorBottom = document.getElementById('colorBadgeWhite');
     const elResign = document.getElementById('btnResign');
     if (!elNameTop || !elNameBottom) return;
     // Which side is called what depends on the chosen piece theme — Silver
@@ -880,37 +896,68 @@ export async function initUI() {
       setAvatar(elAvatarBottom, { emoji: me?.avatarEmoji, url: me?.avatarUrl });
       if (elAvatarTop) elAvatarTop.hidden = false;
       if (elAvatarBottom) elAvatarBottom.hidden = false;
+      if (elColorTop) elColorTop.hidden = true;
+      if (elColorBottom) elColorBottom.hidden = true;
+      if (elLevelTop) elLevelTop.hidden = true;
+      if (elLevelBottom) elLevelBottom.hidden = true;
       if (elResign) elResign.hidden = false;
     } else if (aiVsAiMode) {
-      // Both sides are AI here, so both get the same avatar+name treatment
-      // Friends Online spectating already uses for two humans (see
-      // watch.js's specAvatarWhite/specAvatarBlack) — a colored bot icon
-      // standing in for a photo, level folded into the name exactly as
-      // before.
-      elNameTop.textContent    = `AI Level ${settings.aiLevelBlack} · ${pieceColors.b.short}`;
-      elNameBottom.textContent = `AI Level ${settings.aiLevelWhite} · ${pieceColors.w.short}`;
-      setAiAvatar(elAvatarTop, pieceColors.b.hex);
-      setAiAvatar(elAvatarBottom, pieceColors.w.hex);
+      // Both sides are AI here, so both get the same avatar+level-badge
+      // treatment Friends Online spectating uses for two humans (see
+      // watch.js's specAvatarWhite/specAvatarBlack) — the mascot icon
+      // standing in for a photo. The name itself is emptied rather than
+      // hidden outright so its flex:1 still keeps the clock pinned to the
+      // row's right edge (see .player-row/.player-name in styles.css) —
+      // which side/level it is now lives entirely in the chess-color and
+      // battery badges instead.
+      elNameTop.textContent    = '';
+      elNameBottom.textContent = '';
+      setAiAvatarImage(elAvatarTop);
+      setAiAvatarImage(elAvatarBottom);
+      setChessColorBadge(elColorTop, pieceColors.b.hex);
+      setChessColorBadge(elColorBottom, pieceColors.w.hex);
+      setLevelBadge(elLevelTop, settings.aiLevelBlack);
+      setLevelBadge(elLevelBottom, settings.aiLevelWhite);
       if (elAvatarTop) elAvatarTop.hidden = false;
       if (elAvatarBottom) elAvatarBottom.hidden = false;
+      if (elColorTop) elColorTop.hidden = false;
+      if (elColorBottom) elColorBottom.hidden = false;
+      if (elLevelTop) elLevelTop.hidden = false;
+      if (elLevelBottom) elLevelBottom.hidden = false;
       if (elResign) elResign.hidden = true;
     } else if (settings.aiEnabled) {
       const aiIsWhite = settings.aiColor === COLORS.WHITE;
-      elNameTop.textContent    = (aiIsWhite ? 'អ្នក (You)' : 'Master (AI)') + ` · ${pieceColors.b.short}`;
-      elNameBottom.textContent = (aiIsWhite ? 'Master (AI)' : 'អ្នក (You)') + ` · ${pieceColors.w.short}`;
-      // Only the AI's own row gets the colored bot avatar — the human row
-      // stays as it was (no photo to show in a local, possibly-signed-out
-      // game).
+      elNameTop.textContent    = aiIsWhite ? `អ្នក (You) · ${pieceColors.b.short}` : '';
+      elNameBottom.textContent = aiIsWhite ? '' : `អ្នក (You) · ${pieceColors.w.short}`;
+      // Only the AI's own row gets the mascot avatar + color/level badges
+      // — the human row stays as it was (no photo to show in a local,
+      // possibly-signed-out game).
       if (elAvatarTop) elAvatarTop.hidden = aiIsWhite;
       if (elAvatarBottom) elAvatarBottom.hidden = !aiIsWhite;
-      if (!aiIsWhite) setAiAvatar(elAvatarTop, pieceColors.b.hex);
-      if (aiIsWhite) setAiAvatar(elAvatarBottom, pieceColors.w.hex);
+      if (elColorTop) elColorTop.hidden = aiIsWhite;
+      if (elColorBottom) elColorBottom.hidden = !aiIsWhite;
+      if (elLevelTop) elLevelTop.hidden = aiIsWhite;
+      if (elLevelBottom) elLevelBottom.hidden = !aiIsWhite;
+      if (!aiIsWhite) {
+        setAiAvatarImage(elAvatarTop);
+        setChessColorBadge(elColorTop, pieceColors.b.hex);
+        setLevelBadge(elLevelTop, settings.aiLevel);
+      }
+      if (aiIsWhite) {
+        setAiAvatarImage(elAvatarBottom);
+        setChessColorBadge(elColorBottom, pieceColors.w.hex);
+        setLevelBadge(elLevelBottom, settings.aiLevel);
+      }
       if (elResign) elResign.hidden = true;
     } else {
       elNameTop.textContent    = `អ្នកទី១ · ${pieceColors.b.label}`;
       elNameBottom.textContent = `អ្នកទី២ · ${pieceColors.w.label}`;
       if (elAvatarTop) elAvatarTop.hidden = true;
       if (elAvatarBottom) elAvatarBottom.hidden = true;
+      if (elColorTop) elColorTop.hidden = true;
+      if (elColorBottom) elColorBottom.hidden = true;
+      if (elLevelTop) elLevelTop.hidden = true;
+      if (elLevelBottom) elLevelBottom.hidden = true;
       if (elResign) elResign.hidden = true;
     }
   }

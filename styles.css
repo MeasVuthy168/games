@@ -396,22 +396,16 @@ body{
 }
 .player-name{ font-weight:700; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 /* Real photo (or emoji fallback) for an online opponent/self — toggled by
-   js/ui.js's setAvatar(), hidden entirely outside online mode. */
+   js/ui.js's setAvatar(), hidden entirely outside online mode. An AI's own
+   avatar (setAiAvatarImage()) instead gets a colored ring (box-shadow, so
+   it never shrinks the image inside) in that side's actual piece color —
+   a thin dark hairline outside the ring keeps a near-white color (Classic
+   White, Silver) visible against the row's own light background. */
 .player-avatar{
   width:26px; height:26px; border-radius:50%; flex:none;
   display:flex; align-items:center; justify-content:center;
   font-size:1rem; line-height:1; background:var(--chip-bg);
   background-size:cover; background-position:center;
-}
-/* A small chess-piece glyph in that side's actual piece color (from the
-   active theme), sitting between the AI avatar and the level badge — see
-   js/ui.js's setChessColorBadge()/applyPlayerLabels(). A fixed neutral
-   backdrop circle (independent of theme/fill color) keeps a near-white
-   fill (Classic White, Silver) from washing out against the row's own
-   light background, the same way a coin gives a light engraving contrast. */
-.chess-color-badge{
-  flex:none; display:flex; align-items:center; justify-content:center;
-  width:20px; height:20px; border-radius:50%; background:#dfe3e8;
 }
 /* AI Level 1-10, drawn as a phone-battery-style gauge (outline + a nub,
    filled green proportional to level/10) — sits right next to the AI's

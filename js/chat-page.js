@@ -153,11 +153,19 @@ function attachConvSwipe(row, { bgRead, bgMenu, onSwipeLeft, onSwipeRight, onTap
       horizontal = true;
       row.setPointerCapture(pointerId);
     }
+    // Once this is a real horizontal drag, stop the browser from also
+    // interpreting the same touch as its own gesture — iOS Safari's
+    // edge-swipe-back and rubber-band overscroll both compete for a
+    // horizontal touch move and can eat some of the movement before our
+    // handler sees it, which reads as "the swipe feels unreliable/wrong"
+    // on a real touchscreen even though the exact same drag replays
+    // correctly with a mouse (no competing gesture there to hijack it).
+    e.preventDefault();
     dx = ddx;
     row.style.transform = `translateX(${dx}px)`;
     if (bgRead) bgRead.classList.toggle('show', dx < -20);
     if (bgMenu) bgMenu.classList.toggle('show', dx > 20);
-  });
+  }, { passive: false });
 
   function finish(e) {
     if (!dragging || e.pointerId !== pointerId) return;

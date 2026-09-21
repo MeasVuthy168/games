@@ -186,6 +186,12 @@ function convMenuItem(label, onClick, iconName, { danger } = {}) {
   return btn;
 }
 
+// View shell + SSE subscription are set up exactly once per page load (this
+// runs once from the DOMContentLoaded handler at the bottom of the file);
+// loadConversations() below is the repeatable part, called both for the
+// initial fill and every time a live event or a menu action means the list
+// needs to reflect new data — it never rebuilds the shell or reconnects the
+// stream, so calling it often is cheap and doesn't pile up connections.
 async function renderList() {
   const listView = $('#listView');
   listView.hidden = false;
@@ -211,78 +217,103 @@ async function renderList() {
     menuEl.innerHTML = '';
     menuEl.appendChild(convMenuItem(t('chat.menuMarkUnread'), async () => {
       closeConvMenu();
-      try { await Api.markThreadUnread(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+      try { await Api.markThreadUnread(c.userId); loadConversations(); } catch { showToast(t('chat.actionFailed'), 'error'); }
     }, 'mail'));
     menuEl.appendChild(convMenuItem(c.pinned ? t('chat.menuUnpin') : t('chat.menuPin'), async () => {
       closeConvMenu();
-      try { await Api.setConversationPrefs(c.userId, { pinned: !c.pinned }); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+      try { await Api.setConversationPrefs(c.userId, { pinned: !c.pinned }); loadConversations(); } catch { showToast(t('chat.actionFailed'), 'error'); }
     }, 'pin'));
     menuEl.appendChild(convMenuItem(c.muted ? t('chat.menuUnmute') : t('chat.menuMute'), async () => {
       closeConvMenu();
-      try { await Api.setConversationPrefs(c.userId, { muted: !c.muted }); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+      try { await Api.setConversationPrefs(c.userId, { muted: !c.muted }); loadConversations(); } catch { showToast(t('chat.actionFailed'), 'error'); }
     }, 'bellOff'));
     const delBtn = convMenuItem(t('chat.menuDeleteConv'), async () => {
       closeConvMenu();
       if (!window.confirm(t('chat.deleteConvConfirm'))) return;
-      try { await Api.deleteConversation(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+      try { await Api.deleteConversation(c.userId); loadConversations(); } catch { showToast(t('chat.actionFailed'), 'error'); }
     }, 'trash', { danger: true });
     menuEl.appendChild(delBtn);
     const unfriendBtn = convMenuItem(t('chat.menuUnfriend'), async () => {
       closeConvMenu();
       if (!window.confirm(t('friends.removeConfirm', { name: c.displayName }))) return;
-      try { await Api.removeFriend(c.userId); renderList(); } catch { showToast(t('chat.actionFailed'), 'error'); }
+      try { await Api.removeFriend(c.userId); loadConversations(); } catch { showToast(t('chat.actionFailed'), 'error'); }
     }, 'trashUsers', { danger: true });
     menuEl.appendChild(unfriendBtn);
     menuEl.appendChild(convMenuItem(t('chat.menuCancel'), closeConvMenu));
     menuOverlay.hidden = false;
   }
 
-  try {
-    const conversations = await Api.getConversations();
-    if (!conversations.length) {
-      chatList.innerHTML = '<div class="empty-note">No conversations yet. Message a friend from the Friend tab.</div>';
-      return;
-    }
-    for (const c of conversations) {
-      const wrap = document.createElement('div');
-      wrap.className = 'conv-row-wrap';
-      wrap.innerHTML = `
-        <div class="conv-bg conv-bg-read">${t('chat.swipeRead')}</div>
-        <div class="conv-bg conv-bg-menu">${t('chat.swipeMore')}</div>
-      `;
-      const row = document.createElement('div');
-      row.className = 'conv-row' + (c.unread ? ' unread' : '');
-      row.innerHTML = `
-        <span class="conv-dot"></span>
-        <div class="conv-avatar"></div>
-        <div class="conv-meta">
-          <div class="conv-top">
-            <span class="conv-name">${escapeHtml(c.displayName)}</span>
-            <span class="conv-time">${c.lastMessage ? fmtConvTime(c.lastMessage.createdAt) : ''}</span>
+  async function loadConversations() {
+    try {
+      const conversations = await Api.getConversations();
+      if (!conversations.length) {
+        chatList.innerHTML = '<div class="empty-note">No conversations yet. Message a friend from the Friend tab.</div>';
+        return;
+      }
+      chatList.innerHTML = '';
+      for (const c of conversations) {
+        const wrap = document.createElement('div');
+        wrap.className = 'conv-row-wrap';
+        wrap.innerHTML = `
+          <div class="conv-bg conv-bg-read">${t('chat.swipeRead')}</div>
+          <div class="conv-bg conv-bg-menu">${t('chat.swipeMore')}</div>
+        `;
+        const row = document.createElement('div');
+        row.className = 'conv-row' + (c.unread ? ' unread' : '');
+        row.innerHTML = `
+          <span class="conv-dot"></span>
+          <div class="conv-avatar"></div>
+          <div class="conv-meta">
+            <div class="conv-top">
+              <span class="conv-name">${escapeHtml(c.displayName)}</span>
+              <span class="conv-time">${c.lastMessage ? fmtConvTime(c.lastMessage.createdAt) : ''}</span>
+            </div>
+            <div class="conv-bottom">
+              <span class="conv-preview">${c.lastMessage ? (c.lastMessage.fromMe ? t('chat.youPrefix') : '') + escapeHtml(c.lastMessage.deleted ? t('chat.deletedMessage') : c.lastMessage.body) : t('chat.sayHello')}</span>
+              ${c.unread ? `<span class="conv-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
+              ${c.muted ? `<span class="conv-muted-icon">${menuIcon('bellOff').outerHTML}</span>` : ''}
+            </div>
           </div>
-          <div class="conv-bottom">
-            <span class="conv-preview">${c.lastMessage ? (c.lastMessage.fromMe ? t('chat.youPrefix') : '') + escapeHtml(c.lastMessage.deleted ? t('chat.deletedMessage') : c.lastMessage.body) : t('chat.sayHello')}</span>
-            ${c.unread ? `<span class="conv-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : ''}
-            ${c.muted ? `<span class="conv-muted-icon">${menuIcon('bellOff').outerHTML}</span>` : ''}
-          </div>
-        </div>
-      `;
-      setConvAvatar(row.querySelector('.conv-avatar'), { emoji: c.avatarEmoji, url: c.avatarUrl });
-      wrap.appendChild(row);
-      attachConvSwipe(row, {
-        bgRead: wrap.querySelector('.conv-bg-read'),
-        bgMenu: wrap.querySelector('.conv-bg-menu'),
-        onTap: () => { location.href = `chat.html?friend=${c.userId}`; },
-        onSwipeLeft: async () => {
-          try { await Api.markThreadRead(c.userId); renderList(); } catch { /* best-effort */ }
-        },
-        onSwipeRight: () => openConvMenu(c),
-      });
-      chatList.appendChild(wrap);
+        `;
+        setConvAvatar(row.querySelector('.conv-avatar'), { emoji: c.avatarEmoji, url: c.avatarUrl });
+        wrap.appendChild(row);
+        attachConvSwipe(row, {
+          bgRead: wrap.querySelector('.conv-bg-read'),
+          bgMenu: wrap.querySelector('.conv-bg-menu'),
+          onTap: () => { location.href = `chat.html?friend=${c.userId}`; },
+          onSwipeLeft: async () => {
+            try { await Api.markThreadRead(c.userId); loadConversations(); } catch { /* best-effort */ }
+          },
+          onSwipeRight: () => openConvMenu(c),
+        });
+        chatList.appendChild(wrap);
+      }
+    } catch (err) {
+      chatList.innerHTML = `<div class="empty-note">${escapeHtml(err.message || 'Could not load conversations.')}</div>`;
     }
-  } catch (err) {
-    chatList.innerHTML = `<div class="empty-note">${escapeHtml(err.message || 'Could not load conversations.')}</div>`;
   }
+
+  await loadConversations();
+
+  // Live updates: a friend's incoming message, this account's own send from
+  // another tab/device, or a read/delete elsewhere should all be reflected
+  // here immediately, not only after a manual refresh/back-navigation — the
+  // list previously only ever (re)fetched on page load. Any of these event
+  // types can change what a row shows (preview text, unread badge/dot,
+  // ordering), so just refetch the whole list rather than patching a single
+  // row; it's a small, infrequent request either way.
+  const stream = connectChatStream({
+    onOpen: () => loadConversations(),
+    onEvent: (type) => {
+      // Every event on this stream already belongs to this account (the
+      // server only ever publishes to a conversation's own two
+      // participants) — no extra filtering needed here.
+      if (type === 'message:new' || type === 'message:read' || type === 'message:deleted') loadConversations();
+    },
+  });
+  const onLeave = () => stream.stop();
+  window.addEventListener('beforeunload', onLeave);
+  window.addEventListener('pagehide', onLeave);
 }
 
 async function renderThread(friendId) {

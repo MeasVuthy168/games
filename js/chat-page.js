@@ -412,13 +412,13 @@ async function renderThread(friendId) {
         <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" aria-label="Cancel">✕</button>
       </div>
       <div class="emoji-panel" id="emojiPanel" hidden></div>
-      <form class="thread-composer" id="composerForm" autocomplete="off">
+      <div class="thread-composer" id="composerForm">
         <button type="button" class="emoji-btn" id="emojiBtn" aria-label="${t('chat.emoji')}">😊</button>
         <input type="text" id="composerInput" name="chat-message" maxlength="2000" placeholder="Message…"
           autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
           data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
-        <button type="submit" id="composerSend">Send</button>
-      </form>
+        <button type="button" id="composerSend">Send</button>
+      </div>
     </div>
     <div class="msg-menu-overlay" id="msgMenuOverlay" hidden>
       <div class="msg-menu" id="msgMenu"></div>
@@ -1048,8 +1048,13 @@ async function renderThread(friendId) {
   window.addEventListener('beforeunload', onLeave);
   window.addEventListener('pagehide', onLeave);
 
-  $('#composerForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
+  // No <form>/submit here on purpose: an <input> that's a descendant of a
+  // <form> is exactly what makes iOS Safari/WKWebView show its native
+  // Previous/Next/Done "form accessory" toolbar above the keyboard (the
+  // extra bar the user's screenshot flagged, absent from every native chat
+  // app) — there's no HTML/CSS way to suppress that bar once a <form> is
+  // present, so Send is a plain button + an Enter-key listener instead.
+  async function sendCurrentMessage() {
     const input = $('#composerInput');
     const body = input.value.trim();
     if (!body) return;
@@ -1084,6 +1089,16 @@ async function renderThread(friendId) {
       showToast(err.message || 'Could not send message', 'error');
     } finally {
       input.focus();
+    }
+  }
+  $('#composerSend').addEventListener('click', sendCurrentMessage);
+  $('#composerInput').addEventListener('keydown', (e) => {
+    // isComposing/keyCode 229 guard: an IME (Khmer, Chinese, Japanese, …)
+    // uses Enter to confirm its own in-progress composition — sending the
+    // message on that keystroke would fire before the user finished typing.
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      sendCurrentMessage();
     }
   });
 }

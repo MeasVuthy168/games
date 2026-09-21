@@ -7,6 +7,7 @@ export const translations = {
   en: {
     'nav.home': 'Home',
     'nav.friend': 'Friend',
+    'nav.chat': 'Chat',
     'nav.play': 'Play',
     'nav.setting': 'Setting',
     'nav.notification': 'Notification',
@@ -232,6 +233,7 @@ export const translations = {
   km: {
     'nav.home': 'ទំព័រដើម',
     'nav.friend': 'មិត្តភក្តិ',
+    'nav.chat': 'ជជែក',
     'nav.play': 'លេង',
     'nav.setting': 'កំណត់',
     'nav.notification': 'ជូនដំណឹង',

@@ -21,10 +21,11 @@ const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 // more than one step ever scheduled per completed move (see thinkAndPlay()).
 const AI_VS_AI_MOVE_DELAY_MS = 400;
 
-const LS_KEY     = 'kc_settings_v1';
-const SAVE_KEY   = 'kc_game_state_makruk_v1';
-const WATCH_KEY  = 'kc_aivsai_watch_v1';
-const ONLINE_KEY = 'kc_online_active_v1';
+const LS_KEY       = 'kc_settings_v1';
+const SAVE_KEY     = 'kc_game_state_makruk_v1';
+const WATCH_KEY    = 'kc_aivsai_watch_v1';
+const ONLINE_KEY   = 'kc_online_active_v1';
+const SPECTATE_KEY = 'kc_spectate_active_v1';
 
 const DEFAULTS = {
   minutes: 10,
@@ -108,6 +109,22 @@ function loadOnlineActive() {
 
 function clearOnlineActive() {
   try { localStorage.removeItem(ONLINE_KEY); } catch {}
+}
+
+// Same reasoning as ONLINE_KEY above, for a game being spectated (watch.html's
+// Friends Online "Watch" button) instead of played — just the gameId, since
+// a spectated game is server-authoritative and always re-fetched fresh too
+// (see Api.spectateGame below).
+function saveSpectateActive(gameId) {
+  try { localStorage.setItem(SPECTATE_KEY, gameId); } catch {}
+}
+
+function loadSpectateActive() {
+  try { return localStorage.getItem(SPECTATE_KEY); } catch { return null; }
+}
+
+function clearSpectateActive() {
+  try { localStorage.removeItem(SPECTATE_KEY); } catch {}
 }
 
 function loadSettings() {
@@ -541,6 +558,24 @@ export async function initUI() {
   window.__kcOnlineActive = onlineMode;
   let onlineState = null; // latest {status,myColor,turn,myTurn,board,history,result,opponentId,opponentName,...}
 
+  // Spectate mode: watch.html's Friends Online "Watch" button sends the
+  // viewer here with ?mode=spectate&gameId=<id> instead of rendering its
+  // own separate read-only board, so watching a friends' game uses this
+  // exact same screen a real game does (see js/watch.js's own comment on
+  // why AI vs AI already works this way). Read-only for a true third
+  // party — no move input, no Resign, no chat — backed by the same
+  // sanitized Api.spectateGame(id) the old in-page viewer used. Same
+  // bare-navigation resume reasoning as onlineMode above (SPECTATE_KEY).
+  const urlSpectateGameId = urlParams.get('gameId');
+  const urlSpectateMode = urlParams.get('mode') === 'spectate' && !!urlSpectateGameId;
+  const resumedSpectateGameId = hasExplicitMode ? null : loadSpectateActive();
+  if (hasExplicitMode) clearSpectateActive();
+
+  const spectateMode = urlSpectateMode || !!resumedSpectateGameId;
+  const spectateGameId = urlSpectateMode ? urlSpectateGameId : resumedSpectateGameId;
+  window.__kcSpectateActive = spectateMode;
+  let spectateState = null; // latest {status,turn,board,history,moveCount,result,counting,whiteName,whiteAvatar,whiteAvatarUrl,blackName,blackAvatar,blackAvatarUrl,updatedAt}
+
   // AI vs AI mode: watch.html's "Start" sends the viewer here with
   // ?mode=aivsai&levelWhite=W&levelBlack=B instead of running its own
   // separate board/game-loop, so watching a match uses this exact same
@@ -591,6 +626,27 @@ export async function initUI() {
     }
   }
 
+  if (spectateMode) {
+    if (!Api.isSignedIn()) {
+      location.href = `auth.html?next=${encodeURIComponent(location.pathname + location.search)}`;
+      return;
+    }
+    try {
+      spectateState = await Api.spectateGame(spectateGameId);
+      // Same reasoning as onlineMode's own save/clear above — nothing to
+      // resume once the game being watched has actually ended.
+      if (spectateState.status === 'finished') clearSpectateActive();
+      else saveSpectateActive(spectateGameId);
+    } catch (err) {
+      // Stale/deleted game, or spectating was turned off since the link
+      // was opened — never let it resurface on a later bare navigation.
+      clearSpectateActive();
+      alert(err.message || 'Could not load this game.');
+      location.href = 'watch.html';
+      return;
+    }
+  }
+
   const game = new Game();
   const settings = loadSettings();
   // Fire-and-forget, as early as possible — warms every piece image into
@@ -611,6 +667,14 @@ export async function initUI() {
     if (onlineState.board) {
       game.board = onlineState.board;
       game.turn = onlineState.turn;
+    }
+  }
+  if (spectateMode) {
+    // Same reasoning as onlineMode above — mirrors server truth only.
+    settings.aiEnabled = false;
+    if (spectateState.board) {
+      game.board = spectateState.board;
+      game.turn = spectateState.turn;
     }
   }
   if (aiVsAiMode) {
@@ -888,15 +952,27 @@ export async function initUI() {
       if (elLevelTop) elLevelTop.hidden = true;
       if (elLevelBottom) elLevelBottom.hidden = true;
       if (elResign) elResign.hidden = false;
+    } else if (spectateMode) {
+      // A real friends' game, but the viewer isn't one of its two
+      // participants — both sides get their real name + photo (no "You"
+      // seat at all, unlike onlineMode above), and no Resign/level badge.
+      elNameTop.textContent    = spectateState.blackName + ` · ${pieceColors.b.short}`;
+      elNameBottom.textContent = spectateState.whiteName + ` · ${pieceColors.w.short}`;
+      setAvatar(elAvatarTop, { emoji: spectateState.blackAvatar, url: spectateState.blackAvatarUrl });
+      setAvatar(elAvatarBottom, { emoji: spectateState.whiteAvatar, url: spectateState.whiteAvatarUrl });
+      if (elAvatarTop) elAvatarTop.hidden = false;
+      if (elAvatarBottom) elAvatarBottom.hidden = false;
+      if (elLevelTop) elLevelTop.hidden = true;
+      if (elLevelBottom) elLevelBottom.hidden = true;
+      if (elResign) elResign.hidden = true;
     } else if (aiVsAiMode) {
-      // Both sides are AI here, so both get the same avatar+level-badge
-      // treatment Friends Online spectating uses for two humans (see
-      // watch.js's specAvatarWhite/specAvatarBlack) — the mascot icon
-      // standing in for a photo. A colored ring around this particular
-      // image had no reliable contrast (real photo, opaque white
-      // background), so which side it's playing is named directly here
-      // instead — just the short color word, not the old "AI Level N"
-      // phrase.
+      // Both sides are AI here, so both get the same avatar+name-row
+      // treatment the spectateMode branch above uses for two real
+      // players — the mascot icon standing in for a photo. A colored ring
+      // around this particular image had no reliable contrast (real
+      // photo, opaque white background), so which side it's playing is
+      // named directly here instead — just the short color word, not the
+      // old "AI Level N" phrase.
       elNameTop.textContent    = pieceColors.b.short;
       elNameBottom.textContent = pieceColors.w.short;
       setAiAvatarImage(elAvatarTop);
@@ -940,10 +1016,12 @@ export async function initUI() {
   }
   applyPlayerLabels();
 
-  // Online games have no server-enforced time control, so a local countdown
-  // would just be misleading — hide just the clock, not the whole row
-  // (which now also carries the real name/photo and, on top, Resign).
-  if (onlineMode) {
+  // Online/spectated games have no server-enforced time control, so a
+  // local countdown would just be misleading — hide just the clock, not
+  // the whole row (which now also carries the real name/photo and, for a
+  // participant, Resign). Reset/Pause/Undo (#localControls) make no sense
+  // either way: there's no local game here to reset, pause, or undo.
+  if (onlineMode || spectateMode) {
     document.getElementById('clockB')?.style.setProperty('display', 'none');
     document.getElementById('clockW')?.style.setProperty('display', 'none');
     document.getElementById('localControls')?.setAttribute('hidden', '');
@@ -1057,8 +1135,9 @@ export async function initUI() {
   function whoSuffix(color) {
     // No human seat at all — the "AI Level N" name rows (applyPlayerLabels)
     // already say who's who; a "· វេនអ្នក (You)" suffix here would falsely
-    // claim someone is playing.
-    if (aiVsAiMode) return '';
+    // claim someone is playing. Same reasoning for spectateMode: the
+    // viewer isn't a participant, so there's no "You" seat to suffix.
+    if (aiVsAiMode || spectateMode) return '';
     if (onlineMode) return color === onlineState.myColor ? ' · វេនអ្នក (You)' : ` · វេន ${onlineState.opponentName}`;
     if (!settings.aiEnabled) return '';
     return color === settings.aiColor ? ' · វេន Master (AI)' : ' · វេនអ្នក (You)';
@@ -1548,6 +1627,16 @@ export async function initUI() {
     onlineChatPollHandle = null;
   }
 
+  /* ====== Spectating (watch.html's Friends Online "Watch" button) ====== */
+
+  let spectatePollHandle = null;
+  let spectateFinished = false;
+
+  function stopSpectatePolling() {
+    if (spectatePollHandle) clearInterval(spectatePollHandle);
+    spectatePollHandle = null;
+  }
+
   function renderOnlineBanner() {
     const banner = document.getElementById('onlineStatusBanner');
     if (!banner) return;
@@ -1767,6 +1856,85 @@ export async function initUI() {
         if (g.updatedAt !== onlineState.updatedAt || g.status !== onlineState.status) applyOnlineGameState(g);
       } catch { /* transient — try again next tick */ }
     }, ONLINE_POLL_MS);
+  }
+
+  // Mirrors server truth into the board exactly like applyOnlineGameState
+  // above, but for a true third party watching someone else's game — no
+  // myColor/myTurn/opponentName concepts exist here (there's no "me"), so
+  // an ending is presented neutrally ("X wins", real name, never framed as
+  // a personal WIN/LOSS) and never recorded to Games/Win-Rate/Coins —
+  // watching isn't playing, same reasoning as aiVsAiMode's own
+  // recordGameEnd() early return.
+  function applySpectateGameState(g) {
+    const prevUpdatedAt = spectateState?.updatedAt;
+    spectateState = g;
+    game.board = g.board;
+    game.turn = g.turn;
+    game.counting = g.counting || emptyCounting();
+    game.history = [];
+    if (g.history?.length) {
+      const lastMove = g.history[g.history.length - 1];
+      game.history = [{ from: lastMove.from, to: lastMove.to, captured: !!lastMove.captured, promo: !!lastMove.promo }];
+    }
+    if (g.status === 'active') render();
+
+    if (g.status === 'finished' && !spectateFinished) {
+      spectateFinished = true;
+      clearSpectateActive();
+      stopSpectatePolling();
+      render();
+      const pieceColors = activePieceTheme(settings.pieceTheme).colors;
+      const isDraw = g.result === 'draw';
+      let result, reason, descOverride;
+      // Same derivation online games use — no explicit "why did it end"
+      // field, but fully derivable from data already mirrored above.
+      const st = game.status();
+      if (isDraw) {
+        const isCounting = g.counting?.result === 'draw' && g.counting.type !== 'BARE_KINGS';
+        result = isCounting ? 'DRAW_COUNTING' : 'DRAW';
+        reason = isCounting ? 'COUNTING' : 'STALEMATE';
+      } else {
+        const winnerIsWhite = g.result === 'white';
+        const winnerName = winnerIsWhite ? g.whiteName : g.blackName;
+        const sideTxt = winnerIsWhite ? pieceColors.w.short : pieceColors.b.short;
+        result = 'WIN';
+        reason = st.state === 'checkmate' ? 'CHECKMATE' : 'RESIGNATION';
+        descOverride = t('watch.resultPlayerWins', { name: `${winnerName} (${sideTxt})` });
+      }
+      presentGameResult({
+        result, reason,
+        extra: {
+          titleOverride: isDraw ? undefined : t('watch.gameOver'),
+          descOverride,
+          counting: g.counting,
+          summary: buildSummary(`${g.whiteName} vs ${g.blackName}`),
+        },
+      });
+    } else if (prevUpdatedAt !== g.updatedAt && g.history?.length) {
+      const last = g.history[g.history.length - 1];
+      if (last.captured) beeper.capture(); else beeper.move();
+      triggerHaptic(last.captured ? 'capture' : 'move');
+      if (last.promo) { beeper.promotion(); triggerHaptic('promotion'); }
+      const st = game.status();
+      if (st.state === 'check') { beeper.check(); triggerHaptic('check'); }
+      applyCountingFeedback(g.counting);
+    }
+  }
+
+  const SPECTATE_POLL_MS = 1200;
+
+  function startSpectatePolling() {
+    spectatePollHandle = setInterval(async () => {
+      if (spectateFinished || document.hidden) return;
+      try {
+        const g = await Api.spectateGame(spectateGameId);
+        if (g.updatedAt !== spectateState.updatedAt || g.status !== spectateState.status) applySpectateGameState(g);
+      } catch (err) {
+        // 403/404 = spectating was turned off or the game is gone since
+        // this poll loop started — that can never succeed again.
+        if (err?.status === 403 || err?.status === 404) { stopSpectatePolling(); clearSpectateActive(); }
+      }
+    }, SPECTATE_POLL_MS);
   }
 
   // Real chat, reusing the same friend-chat backend the Friend tab's
@@ -2089,7 +2257,7 @@ export async function initUI() {
   }
 
   function onCellTap(e) {
-    if (aiVsAiMode) return; // pure spectator screen — no click/tap input of any kind
+    if (aiVsAiMode || spectateMode) return; // pure spectator screen — no click/tap input of any kind
     if (animLock) return; // an animation is still visually settling
     if (game.winner) return; // game already over (checkmate/stalemate/Counting Draw) — input locked
     const x = +e.currentTarget.dataset.x;
@@ -2279,10 +2447,14 @@ export async function initUI() {
   function onCellPointerMove(e){ if (dragging && e.pointerId===dragPointerId){ moveGhost(e.clientX, e.clientY); } }
   function onCellPointerUp(e){ if (e.pointerId===dragPointerId){ endDrag(e.clientX, e.clientY); dragPointerId=null; } }
 
-  if (!onlineMode) {
+  if (!onlineMode && !spectateMode) {
     // Tap-to-move only for online games — simpler and fully functional;
     // drag-and-drop is a nice-to-have that isn't worth the extra
-    // client/server round-trip complexity here.
+    // client/server round-trip complexity here. Spectating never accepts
+    // any input at all (see onCellTap's own early return above) — the
+    // isAITurn() guard onCellPointerDown otherwise relies on doesn't
+    // apply here since settings.aiEnabled is false for a spectated game,
+    // so this drag path needs its own explicit exclusion.
     for (const c of cells){
       c.addEventListener('pointerdown', onCellPointerDown, { passive:false });
       c.addEventListener('pointermove', onCellPointerMove, { passive:true });
@@ -2336,6 +2508,18 @@ export async function initUI() {
     }
 
     window.addEventListener('beforeunload', stopOnlinePolling);
+    return game;
+  }
+
+  if (spectateMode) {
+    // Routed through the same state-applying function every later poll
+    // uses (rather than a bare render()) so a game that was ALREADY
+    // finished by the time this loaded (e.g. a bare-nav resume, or a
+    // direct link opened late) still gets the same end-of-game
+    // presentation immediately, not a silently static board.
+    applySpectateGameState(spectateState);
+    if (spectateState.status === 'active') startSpectatePolling();
+    window.addEventListener('beforeunload', stopSpectatePolling);
     return game;
   }
 

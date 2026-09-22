@@ -11,27 +11,83 @@
 // groupNotifications below).
 import * as Api from './api.js';
 import { notificationsEnabled } from './notif-badge.js';
-import { initTranslations } from './i18n.js';
+import { initTranslations, t } from './i18n.js';
 
-const LABELS = {
-  friend_request: (d) => ({ emoji: '👤', text: `<b>${esc(d.fromDisplayName)}</b> sent you a friend request` }),
-  friend_accepted: (d) => ({ emoji: '🤝', text: `<b>${esc(d.byDisplayName)}</b> accepted your friend request` }),
-  message: (d) => ({ emoji: '💬', text: `<b>${esc(d.fromDisplayName)}</b>: ${esc(d.preview)}` }),
-  game_invite: (d) => ({ emoji: '♟️', text: `<b>${esc(d.fromDisplayName)}</b> challenged you to a game` }),
-  game_accepted: (d) => ({ emoji: '♟️', text: `<b>${esc(d.byDisplayName)}</b> accepted your challenge` }),
-  game_move: (d) => ({ emoji: '➡️', text: `It's your move against <b>${esc(d.byDisplayName)}</b>` }),
-  game_over: (d) => ({
-    emoji: d.result === 'draw' ? '🤝' : '🏁',
-    text: d.result === 'draw'
-      ? `Your game with <b>${esc(d.byDisplayName)}</b> ended in a draw`
-      : `Game over vs <b>${esc(d.byDisplayName)}</b> — ${esc(d.reason === 'resignation' ? `${d.result} won by resignation` : `${d.result} won`)}`,
-  }),
+// Feather/Lucide-style 24x24 stroke icons — a small badge overlaid on the
+// avatar circle names what happened (a real vector icon reads consistently
+// across platforms, unlike relying on each OS/browser's own emoji font).
+const TYPE_ICONS = {
+  friend_request: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/>',
+  friend_accepted: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/>',
+  message: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  game_invite: '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><line x1="13" y1="19" x2="19" y2="13"/><line x1="16" y1="16" x2="20" y2="20"/><line x1="19" y1="21" x2="21" y2="19"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><line x1="5" y1="14" x2="9" y2="18"/><line x1="7" y1="17" x2="4" y2="20"/><line x1="3" y1="19" x2="5" y2="21"/>',
+  game_accepted: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  game_move: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  game_over: '<path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/>',
 };
+
+function typeIconSvg(type) {
+  const path = TYPE_ICONS[type];
+  if (!path) return '';
+  return `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${path}</svg>`;
+}
+
+// Colors picked mostly for contrast against the small white badge circle —
+// not meaningful beyond "differentiate the event types at a glance".
+const TYPE_BADGE_BG = {
+  friend_request: '#2f7de1', friend_accepted: '#1c9a5b', message: '#2f7de1',
+  game_invite: '#c0392b', game_accepted: '#1c9a5b', game_move: '#e08b1a', game_over: '#555f6e',
+};
+
+// { name, preview } are pre-escaped HTML fragments (the name is already
+// wrapped in <b>) — t() does plain string substitution, no HTML-escaping
+// of its own, matching how the rest of this page already builds row HTML.
+const LABELS = {
+  friend_request: (d) => ({
+    text: t('notif.friendRequest', { name: bold(d.fromDisplayName) }),
+    avatarEmoji: d.fromAvatarEmoji, avatarUrl: d.fromAvatarUrl,
+  }),
+  friend_accepted: (d) => ({
+    text: t('notif.friendAccepted', { name: bold(d.byDisplayName) }),
+    avatarEmoji: d.byAvatarEmoji, avatarUrl: d.byAvatarUrl,
+  }),
+  message: (d) => ({
+    text: t('notif.message', { name: bold(d.fromDisplayName), preview: esc(d.preview) }),
+    avatarEmoji: d.fromAvatarEmoji, avatarUrl: d.fromAvatarUrl,
+  }),
+  game_invite: (d) => ({
+    text: t('notif.gameInvite', { name: bold(d.fromDisplayName) }),
+    avatarEmoji: d.fromAvatarEmoji, avatarUrl: d.fromAvatarUrl,
+  }),
+  game_accepted: (d) => ({
+    text: t('notif.gameAccepted', { name: bold(d.byDisplayName) }),
+    avatarEmoji: d.byAvatarEmoji, avatarUrl: d.byAvatarUrl,
+  }),
+  game_move: (d) => ({
+    text: t('notif.gameMove', { name: bold(d.byDisplayName) }),
+    avatarEmoji: d.byAvatarEmoji, avatarUrl: d.byAvatarUrl,
+  }),
+  game_over: (d) => {
+    const color = t(d.result === 'white' ? 'notif.colorWhite' : 'notif.colorBlack');
+    const text = d.result === 'draw'
+      ? t('notif.gameOverDraw', { name: bold(d.byDisplayName) })
+      : t(d.reason === 'resignation' ? 'notif.gameOverWinResignation' : 'notif.gameOverWin', { name: bold(d.byDisplayName), color });
+    return { text, avatarEmoji: d.byAvatarEmoji, avatarUrl: d.byAvatarUrl };
+  },
+};
+
+function bold(s) { return `<b>${esc(s)}</b>`; }
 
 function esc(s) {
   const d = document.createElement('div');
   d.textContent = s == null ? '' : String(s);
   return d.innerHTML;
+}
+
+function setAvatar(el, { emoji, url } = {}) {
+  if (!el) return;
+  if (url) { el.style.backgroundImage = `url("${url}")`; el.textContent = ''; }
+  else { el.style.backgroundImage = ''; el.textContent = emoji || '👤'; }
 }
 
 function targetFor(n) {
@@ -46,10 +102,10 @@ function fmtTime(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return '';
   const diffMin = Math.round((Date.now() - d.getTime()) / 60000);
-  if (diffMin < 1) return 'just now';
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) return t('notif.timeJustNow');
+  if (diffMin < 60) return t('notif.timeMinAgo', { n: diffMin });
   const diffH = Math.round(diffMin / 60);
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 24) return t('notif.timeHourAgo', { n: diffH });
   return d.toLocaleDateString();
 }
 
@@ -137,6 +193,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const notifMenu = document.getElementById('notifMenu');
   const notifMenuList = document.getElementById('notifMenuList');
   const btnNotifMenu = document.getElementById('btnNotifMenu');
+  const btnMarkAllRead = document.getElementById('btnMarkAllRead');
+  const btnDeleteAll = document.getElementById('btnDeleteAll');
+  if (btnMarkAllRead) btnMarkAllRead.textContent = t('notif.markAllRead');
+  if (btnDeleteAll) btnDeleteAll.textContent = t('notif.deleteAll');
 
   function closeMenu() { notifMenuList.hidden = true; }
   btnNotifMenu?.addEventListener('click', (e) => {
@@ -152,14 +212,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const note = document.createElement('div');
     note.className = 'signin-note card card-full clickable';
     note.style.cursor = 'pointer';
-    note.innerHTML = '<div class="card-left"><div class="card-title">Sign in to see notifications</div><div class="card-sub">Friend requests, accepted friends, and chat messages</div></div><div class="card-right">›</div>';
+    note.innerHTML = `<div class="card-left"><div class="card-title">${t('notif.signInTitle')}</div><div class="card-sub">${t('notif.signInSub')}</div></div><div class="card-right">›</div>`;
     note.addEventListener('click', () => { location.href = 'auth.html?next=notifications.html'; });
     root.appendChild(note);
     return;
   }
 
   if (!notificationsEnabled()) {
-    root.innerHTML = '<div class="empty-note">Notifications are turned off. Enable them in Settings to see friend, chat, and game activity.</div>';
+    root.innerHTML = `<div class="empty-note">${t('notif.emptyDisabled')}</div>`;
     return;
   }
 
@@ -170,7 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const { notifications } = await Api.getNotifications();
       root.innerHTML = '';
       if (!notifications.length) {
-        root.innerHTML = '<div class="empty-note">No notifications yet.</div>';
+        root.innerHTML = `<div class="empty-note">${t('notif.empty')}</div>`;
         return;
       }
       const list = document.createElement('div');
@@ -184,23 +244,27 @@ document.addEventListener('DOMContentLoaded', async () => {
         // pings got folded together, and the .notif-count badge already
         // conveys that. Grouped messages get their own "N messages" text.
         const meta = group.items.length > 1 && first.type === 'message'
-          ? { emoji: '💬', text: `<b>${esc(first.data.fromDisplayName)}</b> sent you <b>${group.items.length}</b> messages` }
-          : (LABELS[first.type] || (() => ({ emoji: '🔔', text: first.type })))(first.data);
+          ? { text: t('notif.groupedMessages', { name: bold(first.data.fromDisplayName), count: group.items.length }), avatarEmoji: first.data.fromAvatarEmoji, avatarUrl: first.data.fromAvatarUrl }
+          : (LABELS[first.type] || (() => ({ text: esc(first.type), avatarEmoji: null, avatarUrl: null })))(first.data);
 
         const wrap = document.createElement('div');
         wrap.className = 'notif-row-wrap';
         wrap.innerHTML = `
-          <div class="notif-swipe-bg notif-swipe-bg-read">✓ Read</div>
-          <div class="notif-swipe-bg notif-swipe-bg-delete">🗑️ Delete</div>
+          <div class="notif-swipe-bg notif-swipe-bg-read">✓ ${t('notif.swipeRead')}</div>
+          <div class="notif-swipe-bg notif-swipe-bg-delete">🗑️ ${t('notif.swipeDelete')}</div>
         `;
         const row = document.createElement('div');
         row.className = 'notif-row' + (allRead ? '' : ' unread');
         row.innerHTML = `
-          <div class="notif-emoji">${meta.emoji}</div>
+          <div class="notif-avatar-wrap">
+            <div class="notif-avatar"></div>
+            <div class="notif-badge-icon" style="background:${TYPE_BADGE_BG[first.type] || '#555f6e'}">${typeIconSvg(first.type)}</div>
+          </div>
           <div class="notif-text">${meta.text}</div>
           ${group.items.length > 1 ? `<div class="notif-count">${group.items.length}</div>` : ''}
           <div class="notif-time">${fmtTime(first.createdAt)}</div>
         `;
+        setAvatar(row.querySelector('.notif-avatar'), { emoji: meta.avatarEmoji, url: meta.avatarUrl });
         wrap.appendChild(row);
         list.appendChild(wrap);
 
@@ -223,18 +287,18 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       root.appendChild(list);
     } catch (err) {
-      root.innerHTML = `<div class="empty-note">${esc(err.message || 'Could not load notifications.')}</div>`;
+      root.innerHTML = `<div class="empty-note">${esc(err.message || t('notif.loadError'))}</div>`;
     }
   }
 
-  document.getElementById('btnMarkAllRead').addEventListener('click', async () => {
+  btnMarkAllRead.addEventListener('click', async () => {
     closeMenu();
     await Api.markAllNotificationsRead().catch(() => {});
     render();
   });
-  document.getElementById('btnDeleteAll').addEventListener('click', async () => {
+  btnDeleteAll.addEventListener('click', async () => {
     closeMenu();
-    if (!confirm('Delete all notifications? This cannot be undone.')) return;
+    if (!confirm(t('notif.deleteAllConfirm'))) return;
     await Api.deleteAllNotifications().catch(() => {});
     render();
   });

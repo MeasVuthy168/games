@@ -44,7 +44,24 @@
     .notif-swipe-bg.show{ opacity:1; }
     .notif-swipe-bg-read{ background:#e4f8ea; color:#1c7a3a; justify-content:flex-start; }
     .notif-swipe-bg-delete{ background:#fdeaea; color:#a3312f; justify-content:flex-end; }
-    .notif-emoji{ font-size:1.3rem; flex:none; }
+    /* Real avatar (photo, or emoji fallback for old rows/system events)
+       with a small colored icon badge overlaid at the bottom-right corner
+       naming the event type — same real-photo-or-emoji pattern used
+       elsewhere (js/ui.js's setAvatar, chat.html's .conv-avatar), plus a
+       proper vector icon instead of relying on each platform's own emoji
+       font rendering inconsistently. */
+    .notif-avatar-wrap{ position:relative; flex:none; }
+    .notif-avatar{
+      width:40px; height:40px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center;
+      font-size:1.2rem; line-height:1; background:var(--chip-bg);
+      background-size:cover; background-position:center;
+    }
+    .notif-badge-icon{
+      position:absolute; right:-2px; bottom:-2px; width:18px; height:18px; border-radius:50%;
+      display:flex; align-items:center; justify-content:center; color:#fff;
+      box-shadow:0 0 0 2px var(--panel);
+    }
     .notif-count{
       font-weight:800; font-size:.7rem; color:#fff; background:var(--blue);
       border-radius:999px; padding:.05rem .45rem; margin-inline-start:.35rem; flex:none;

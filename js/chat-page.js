@@ -391,33 +391,33 @@ async function renderThread(friendId) {
   threadView.innerHTML = `
     <div class="thread-wrap">
       <div class="thread-header">
-        <a href="chat.html" tabindex="-1">‹</a>
+        <a href="chat.html">‹</a>
         <div class="thread-avatar" id="threadAvatar"></div>
         <div class="thread-header-meta">
           <span class="thread-name">${escapeHtml(friendName)}</span>
           <span class="thread-presence" id="presenceStatus"></span>
         </div>
       </div>
-      <button type="button" class="pinned-banner" id="pinnedBanner" tabindex="-1" hidden></button>
+      <button type="button" class="pinned-banner" id="pinnedBanner" hidden></button>
       <div class="thread-msgs" id="threadMsgs">
         <div class="load-older-spinner" id="loadOlderSpinner" hidden>${t('chat.loadingOlder')}</div>
       </div>
       <div class="typing-indicator" id="typingIndicator" hidden></div>
-      <button type="button" class="new-msgs-pill" id="newMsgsPill" tabindex="-1" hidden>↓ <span data-i18n="chat.newMessages">${t('chat.newMessages')}</span></button>
+      <button type="button" class="new-msgs-pill" id="newMsgsPill" hidden>↓ <span data-i18n="chat.newMessages">${t('chat.newMessages')}</span></button>
       <div class="reply-preview" id="replyPreview" hidden>
         <div class="reply-preview-text">
           <div class="reply-preview-label">${t('chat.replyingTo')}</div>
           <div class="reply-preview-body" id="replyPreviewBody"></div>
         </div>
-        <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" tabindex="-1" aria-label="Cancel">✕</button>
+        <button type="button" class="reply-preview-cancel" id="replyPreviewCancel" aria-label="Cancel">✕</button>
       </div>
       <div class="emoji-panel" id="emojiPanel" hidden></div>
       <div class="thread-composer" id="composerForm">
-        <button type="button" class="emoji-btn" id="emojiBtn" tabindex="-1" aria-label="${t('chat.emoji')}">😊</button>
+        <button type="button" class="emoji-btn" id="emojiBtn" aria-label="${t('chat.emoji')}">😊</button>
         <input type="text" id="composerInput" name="chat-message" maxlength="2000" placeholder="Message…"
           autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"
           data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
-        <button type="button" id="composerSend" tabindex="-1">Send</button>
+        <button type="button" id="composerSend">Send</button>
       </div>
     </div>
     <div class="msg-menu-overlay" id="msgMenuOverlay" hidden>
@@ -944,7 +944,6 @@ async function renderThread(friendId) {
     for (const em of EMOJI_LIST) {
       const b = document.createElement('button');
       b.type = 'button';
-      b.tabIndex = -1;
       b.className = 'emoji-item';
       b.textContent = em;
       b.addEventListener('click', () => insertEmoji(em));

@@ -14,6 +14,7 @@ import * as Api from './api.js';
 import { pieceThemes, boardThemes, pieceImageUrl, clampThemeIndex, preloadPieceImages, activePieceTheme } from './themes.js';
 import { showToast } from './toast.js';
 import { initTranslations, t } from './i18n.js';
+import { acquireWakeLock, releaseWakeLock } from './wake-lock.js';
 
 const AIPICK   = AI.pickAIMove || AI.chooseAIMove;
 // Natural pacing between plies in AI-vs-AI mode (js/watch.js's own AI vs AI
@@ -597,6 +598,16 @@ export async function initUI() {
 
   const aiVsAiMode = urlAiVsAiMode || !!resumedWatch;
   window.__kcAiVsAiActive = aiVsAiMode;
+
+  // Keep the screen on for as long as this is a pure spectator screen —
+  // watching a friend's online game or an AI-vs-AI match never registers
+  // as "user activity" (no taps, no scrolling), so without this the OS's
+  // normal screen-dim/lock timer fires exactly as if the page were idle.
+  // Never requested for a real game the viewer is actually playing.
+  if (spectateMode || aiVsAiMode) {
+    acquireWakeLock();
+    window.addEventListener('beforeunload', releaseWakeLock);
+  }
 
   // Only AI/local-friend games get the page locked (see play.html's
   // .board-locked CSS) — online games have a real chat form that can sit

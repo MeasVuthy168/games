@@ -1729,8 +1729,14 @@ export async function initUI() {
       let result, reason;
       if (isDraw) {
         const isCounting = g.counting?.result === 'draw' && g.counting.type !== 'BARE_KINGS';
-        result = isCounting ? 'DRAW_COUNTING' : 'DRAW';
-        reason = isCounting ? 'COUNTING' : 'STALEMATE';
+        // 3-fold repetition, server-authoritative (see src/routes/games.js's
+        // POST /:id/move) — mirrors concludeIfOver()'s own priority order
+        // (checkmate/stalemate > counting > repetition): g.repetition is
+        // never true when a counting draw also applies, so isCounting is
+        // always checked first here too.
+        const isRepetition = !isCounting && !!g.repetition;
+        result = isCounting ? 'DRAW_COUNTING' : (isRepetition ? 'DRAW_REPETITION' : 'DRAW');
+        reason = isCounting ? 'COUNTING' : (isRepetition ? 'REPETITION' : 'STALEMATE');
       } else {
         result = myWon ? 'WIN' : 'LOSS';
         reason = st.state === 'checkmate' ? 'CHECKMATE' : 'RESIGNATION';
@@ -1891,8 +1897,12 @@ export async function initUI() {
       const st = game.status();
       if (isDraw) {
         const isCounting = g.counting?.result === 'draw' && g.counting.type !== 'BARE_KINGS';
-        result = isCounting ? 'DRAW_COUNTING' : 'DRAW';
-        reason = isCounting ? 'COUNTING' : 'STALEMATE';
+        // See applyOnlineGameState's identical branch above for why
+        // isCounting is always checked first (g.repetition and a counting
+        // draw's g.counting.result === 'draw' are mutually exclusive).
+        const isRepetition = !isCounting && !!g.repetition;
+        result = isCounting ? 'DRAW_COUNTING' : (isRepetition ? 'DRAW_REPETITION' : 'DRAW');
+        reason = isCounting ? 'COUNTING' : (isRepetition ? 'REPETITION' : 'STALEMATE');
       } else {
         const winnerIsWhite = g.result === 'white';
         const winnerName = winnerIsWhite ? g.whiteName : g.blackName;

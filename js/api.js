@@ -204,8 +204,17 @@ export async function getMessages(friendId, opts = {}) {
   return { messages: data.messages, hasMore: !!data.hasMore };
 }
 
-export async function sendMessage(friendId, body, replyToId) {
-  return request(`/api/chat/${friendId}/messages`, { method: 'POST', body: replyToId ? { body, replyToId } : { body } });
+// clientMessageId (Phase 18): a UUID chat-page.js generates once per real
+// send OPERATION, not per HTTP attempt — see chat-page.js's own comment.
+// Sending the identical id on a retry lets the backend recognize it as
+// the same operation instead of creating a second message; omitting it
+// (older callers) is fully supported and behaves exactly as before this
+// phase.
+export async function sendMessage(friendId, body, replyToId, clientMessageId) {
+  return request(`/api/chat/${friendId}/messages`, {
+    method: 'POST',
+    body: { body, ...(replyToId ? { replyToId } : {}), ...(clientMessageId ? { clientMessageId } : {}) },
+  });
 }
 
 export async function markThreadRead(friendId) {

@@ -461,6 +461,13 @@ async function renderThread(friendId) {
   // before responding. reconcileTemp() below is idempotent so either path
   // can call it safely without ever producing a second bubble.
   const tempIdQueue = [];
+  // Phase 18 — tempId -> { body, replyToId, clientMessageId } for the one
+  // send OPERATION that row represents, kept only while status is
+  // 'sending'/'failed' so a tap-to-retry on a failed row can resend with
+  // the SAME clientMessageId (see sendCurrentMessage()/retryFailedSend()
+  // below) — a genuinely new message the user types is always a fresh
+  // call to sendCurrentMessage() with its own fresh id, never this map.
+  const pendingSendById = new Map();
 
   function isAtBottom() {
     return msgsEl.scrollHeight - msgsEl.scrollTop - msgsEl.clientHeight < 60;
@@ -1054,6 +1061,59 @@ async function renderThread(friendId) {
   // extra bar the user's screenshot flagged, absent from every native chat
   // app) — there's no HTML/CSS way to suppress that bar once a <form> is
   // present, so Send is a plain button + an Enter-key listener instead.
+  // Phase 18 — a fresh UUID identifies this one send OPERATION to the
+  // backend (see api.js's sendMessage()); crypto.randomUUID() needs a
+  // secure context, so a browser/context without it just gets no key at
+  // all (sendMessage omits the field), falling back to this phase's
+  // pre-existing, unprotected-but-unchanged behavior rather than sending
+  // a malformed one the server would reject.
+  function newClientMessageId() {
+    try { return crypto.randomUUID(); } catch { return null; }
+  }
+
+  // Shared by a fresh send and a tap-to-retry of a failed one — the only
+  // difference between them is whether pendingSendById already has an
+  // entry (retry) or one is created fresh (new message); either way the
+  // clientMessageId used is whatever's stored for this tempId, so a retry
+  // always reuses the ORIGINAL operation's key, never a new one.
+  async function attemptSend(tempId) {
+    const pending = pendingSendById.get(tempId);
+    if (!pending) return;
+    const row = nodesById.get(tempId);
+    if (row) { row.dataset.status = 'sending'; updateRowMeta(row, { fromMe: true, createdAt: pending.createdAt, status: 'sending' }); }
+    try {
+      const res = await Api.sendMessage(friendId, pending.body, pending.replyToId, pending.clientMessageId);
+      pendingSendById.delete(tempId);
+      // Reconcile the temp row to its real id — a no-op if the SSE echo of
+      // this same send already won that race and did it first (see the
+      // 'message:new' case above); either way, apply the definitive
+      // delivered status via setStatus's own never-downgrade guard, since
+      // an SSE-driven reconcile only had a placeholder to work with.
+      reconcileTemp({ id: res.id, createdAt: res.createdAt, delivered: res.delivered });
+      setStatus(res.id, res.delivered ? 'delivered' : 'sent');
+    } catch (err) {
+      const idx = tempIdQueue.indexOf(tempId);
+      if (idx !== -1) tempIdQueue.splice(idx, 1);
+      if (row) { row.dataset.status = 'failed'; updateRowMeta(row, { fromMe: true, createdAt: pending.createdAt, status: 'failed' }); }
+      showToast(err.message || 'Could not send message', 'error');
+    }
+  }
+
+  // Tapping a failed bubble retries that SAME operation (same text, same
+  // clientMessageId) — not the same thing as retyping the text and
+  // hitting Send again, which is a deliberate new operation with its own
+  // fresh key (see sendCurrentMessage() below and db.js's Phase 18
+  // comment on why that distinction matters).
+  function retryFailedSend(tempId) {
+    if (!pendingSendById.has(tempId)) return;
+    if (!tempIdQueue.includes(tempId)) tempIdQueue.push(tempId);
+    attemptSend(tempId);
+  }
+  msgsEl.addEventListener('click', (e) => {
+    const row = e.target.closest?.('[data-status="failed"]');
+    if (row && nodesById.get(row.dataset.msgId) === row) retryFailedSend(row.dataset.msgId);
+  });
+
   async function sendCurrentMessage() {
     const input = $('#composerInput');
     const body = input.value.trim();
@@ -1065,31 +1125,18 @@ async function renderThread(friendId) {
     clearReply();
 
     const tempId = `local-${Date.now()}-${nextTempSeq++}`;
+    const createdAt = new Date().toISOString();
     tempIdQueue.push(tempId);
+    pendingSendById.set(tempId, {
+      body, createdAt, replyToId: replyingTo?.id || null, clientMessageId: newClientMessageId(),
+    });
     const optimistic = {
-      id: tempId, fromMe: true, body, createdAt: new Date().toISOString(), status: 'sending',
+      id: tempId, fromMe: true, body, createdAt, status: 'sending',
       replyTo: replyingTo ? { id: replyingTo.id, body: replyingTo.deleted ? null : replyingTo.body, deleted: !!replyingTo.deleted, fromMe: replyingTo.fromMe } : null,
     };
     addIncoming(optimistic, { forceScroll: true });
-
-    try {
-      const res = await Api.sendMessage(friendId, body, replyingTo?.id);
-      // Reconcile the temp row to its real id — a no-op if the SSE echo of
-      // this same send already won that race and did it first (see the
-      // 'message:new' case above); either way, apply the definitive
-      // delivered status via setStatus's own never-downgrade guard, since
-      // an SSE-driven reconcile only had a placeholder to work with.
-      reconcileTemp({ id: res.id, createdAt: res.createdAt, delivered: res.delivered });
-      setStatus(res.id, res.delivered ? 'delivered' : 'sent');
-    } catch (err) {
-      const idx = tempIdQueue.indexOf(tempId);
-      if (idx !== -1) tempIdQueue.splice(idx, 1);
-      const row = nodesById.get(tempId);
-      if (row) { row.dataset.status = 'failed'; updateRowMeta(row, { fromMe: true, createdAt: optimistic.createdAt, status: 'failed' }); }
-      showToast(err.message || 'Could not send message', 'error');
-    } finally {
-      input.focus();
-    }
+    input.focus();
+    await attemptSend(tempId);
   }
   $('#composerSend').addEventListener('click', sendCurrentMessage);
   $('#composerInput').addEventListener('keydown', (e) => {

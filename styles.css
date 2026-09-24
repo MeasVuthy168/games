@@ -150,7 +150,19 @@ body{
    this element is ever parsed — see that file for exactly when each
    direction applies (real browser Back/Forward vs any other same-origin
    arrival, never bottom-nav menu order) and when neither class is added
-   at all (reduced motion, reload, fresh/external entry).
+   at all (reduced motion, reload, fresh/external entry, or the app's own
+   Animation setting turned off).
+
+   The extra .pt-ready requirement below is what makes the animation wait
+   for real content instead of animating an empty box: on a page whose
+   content is present synchronously (Home, Play, Settings) that class is
+   just in the HTML from the start. On a page that populates itself from
+   an API call (Friend/Chat/Notification), the page's own JS adds
+   .pt-ready only once real content (or a final empty/error state) is in
+   place — see friends-page.js / chat-page.js / notifications-page.js —
+   with a short timeout fallback so a slow/failed request can never delay
+   the animation (or the page) indefinitely.
+
    transform+opacity only (GPU-friendly, no layout properties touched).
    The end state is exactly `transform:none` (not e.g. translateX(0)) on
    purpose: ANY non-none transform value, even one that resolves to the
@@ -158,8 +170,8 @@ body{
    position:fixed descendant — translateX(0) would permanently break
    fixed-positioned children the moment this animation finished, not
    just misplace them for the animation's own duration. */
-html.pt-enter-right .page-transition-root{ animation: pt-slide-in-right 280ms cubic-bezier(0.22,1,0.36,1) both; }
-html.pt-enter-left .page-transition-root{ animation: pt-slide-in-left 280ms cubic-bezier(0.22,1,0.36,1) both; }
+html.pt-enter-right .page-transition-root.pt-ready{ animation: pt-slide-in-right 280ms cubic-bezier(0.22,1,0.36,1) both; }
+html.pt-enter-left .page-transition-root.pt-ready{ animation: pt-slide-in-left 280ms cubic-bezier(0.22,1,0.36,1) both; }
 @keyframes pt-slide-in-right{
   from{ transform:translateX(36px); opacity:0; }
   to{ transform:none; opacity:1; }

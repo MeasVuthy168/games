@@ -190,6 +190,13 @@ function attachSwipe(row, { bgDelete, bgRead, onSwipeLeft, onSwipeRight, onTap }
 document.addEventListener('DOMContentLoaded', async () => {
   initTranslations();
   const root = document.getElementById('notifRoot');
+  // The page-transition slide (styles.css) is gated on this class so it
+  // animates the real notification list instead of the empty <main> the
+  // fallback text above gets cleared into — see that file's comment. A
+  // capped timeout guarantees the animation never waits indefinitely on
+  // a slow/failed request.
+  const ptRoot = document.querySelector('.page-transition-root');
+  function markPtReady() { ptRoot?.classList.add('pt-ready'); }
   const notifMenu = document.getElementById('notifMenu');
   const notifMenuList = document.getElementById('notifMenuList');
   const btnNotifMenu = document.getElementById('btnNotifMenu');
@@ -215,11 +222,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     note.innerHTML = `<div class="card-left"><div class="card-title">${t('notif.signInTitle')}</div><div class="card-sub">${t('notif.signInSub')}</div></div><div class="card-right">›</div>`;
     note.addEventListener('click', () => { location.href = 'auth.html?next=notifications.html'; });
     root.appendChild(note);
+    markPtReady();
     return;
   }
 
   if (!notificationsEnabled()) {
     root.innerHTML = `<div class="empty-note">${t('notif.emptyDisabled')}</div>`;
+    markPtReady();
     return;
   }
 
@@ -303,5 +312,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
   });
 
-  render();
+  render().then(markPtReady);
+  setTimeout(markPtReady, 600);
 });

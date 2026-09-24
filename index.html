@@ -76,6 +76,24 @@
     .menu-grid .menu-card:nth-child(4){ animation-delay:120ms; }
     .menu-grid .menu-card:nth-child(5){ animation-delay:160ms; }
     .menu-grid .menu-card:nth-child(6){ animation-delay:200ms; }
+    /* Arriving via the page-level slide (html.pt-enter-*, styles.css) only:
+       push this same stagger later by 150ms so the incoming page's own
+       horizontal slide gets a brief, uncontested window first, instead of
+       both animations competing for attention from frame 0. Values/keyframe
+       unchanged — a cold/fresh load (no pt-enter-* class) keeps the original
+       timing above exactly as before. */
+    html.pt-enter-right .menu-grid .menu-card:nth-child(1),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(1){ animation-delay:150ms; }
+    html.pt-enter-right .menu-grid .menu-card:nth-child(2),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(2){ animation-delay:190ms; }
+    html.pt-enter-right .menu-grid .menu-card:nth-child(3),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(3){ animation-delay:230ms; }
+    html.pt-enter-right .menu-grid .menu-card:nth-child(4),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(4){ animation-delay:270ms; }
+    html.pt-enter-right .menu-grid .menu-card:nth-child(5),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(5){ animation-delay:310ms; }
+    html.pt-enter-right .menu-grid .menu-card:nth-child(6),
+    html.pt-enter-left .menu-grid .menu-card:nth-child(6){ animation-delay:350ms; }
     @media (prefers-reduced-motion: reduce){
       .menu-card{ animation:none; }
     }
@@ -141,7 +159,7 @@
     </header>
 
     <!-- Main -->
-    <main class="home-main page-transition-root">
+    <main class="home-main page-transition-root pt-ready">
       <button id="installBtn" class="install-btn" data-i18n="home.install">📲 ធ្វើការតំឡើងកម្មវិធី (Install App)</button>
 
       <div class="menu-grid">

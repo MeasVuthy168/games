@@ -191,10 +191,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   initTranslations();
   const root = document.getElementById('notifRoot');
   // The page-transition slide (styles.css) is gated on this class so it
-  // animates the real notification list instead of the empty <main> the
-  // fallback text above gets cleared into — see that file's comment. A
-  // capped timeout guarantees the animation never waits indefinitely on
-  // a slow/failed request.
+  // never animates the empty <main> the fallback text above gets cleared
+  // into — see that file's comment. Marked as soon as SOME stable content
+  // (sign-in note / disabled note / the "Loading…" placeholder below) is
+  // in root; the slide never waits on render()'s own Api.getNotifications()
+  // call, which only replaces root's contents once it resolves.
   const ptRoot = document.querySelector('.page-transition-root');
   function markPtReady() { ptRoot?.classList.add('pt-ready'); }
   const notifMenu = document.getElementById('notifMenu');
@@ -233,6 +234,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   notifMenu.hidden = false;
+  root.innerHTML = `<div class="empty-note">Loading…</div>`;
+  markPtReady();
 
   async function render() {
     try {
@@ -312,6 +315,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     render();
   });
 
-  render().then(markPtReady);
-  setTimeout(markPtReady, 600);
+  render();
 });

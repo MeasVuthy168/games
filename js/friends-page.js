@@ -9,10 +9,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const signedOutView = document.getElementById('signedOutView');
   const signedInView = document.getElementById('signedInView');
   // The page-transition slide (styles.css) is gated on this class so it
-  // animates the real, populated section instead of the empty <main> both
-  // sections start as (both start `hidden`) — see that file's comment.
-  // A capped timeout guarantees the animation (and nothing else) never
-  // waits indefinitely on a slow/failed request.
+  // never animates the empty <main> both sections start as (both start
+  // `hidden`) — see that file's comment. Marked right after whichever
+  // section is unhidden below, since that's already real, stable chrome
+  // (search box, "My Friends" label, etc.) the instant it's visible; the
+  // slide never waits on loadFriends()/loadGames()/loadRequests(), which
+  // only fill in the lists inside that chrome once they resolve.
   const ptRoot = document.querySelector('.page-transition-root');
   function markPtReady() { ptRoot?.classList.add('pt-ready'); }
 
@@ -26,6 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   signedInView.hidden = false;
+  markPtReady();
   const meName = document.getElementById('meName');
   const searchInput = document.getElementById('searchInput');
   const btnSearch = document.getElementById('btnSearch');
@@ -207,8 +210,9 @@ document.addEventListener('DOMContentLoaded', () => {
   btnSearch.addEventListener('click', doSearch);
   searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
-  Promise.allSettled([loadFriends(), loadRequests(), loadGames()]).then(markPtReady);
-  setTimeout(markPtReady, 600);
+  loadFriends();
+  loadRequests();
+  loadGames();
 
   // Real-time-ish updates: an accept/decline made on the OTHER person's
   // device (or an incoming request/challenge) used to only ever show up

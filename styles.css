@@ -138,6 +138,41 @@ body{
   padding-top:calc(.75rem + env(safe-area-inset-top, 0px));
 }
 
+/* ===== Bottom-tab page entrance transition =====
+   .page-transition-root is the same element each page already uses as
+   its scrollable content area (main.page / main.home-main / main.layout
+   in play.html — chat.html is the one exception, targeting its own
+   #listView instead of <main>, since #threadView's .thread-wrap is a
+   position:fixed panel nested INSIDE <main> there; see that file's own
+   comment) — nothing else, so the fixed topbar/#appTabbar around it are
+   never part of this animation and never move. The html.pt-enter-* class
+   is added by js/page-transition.js, synchronously in <head>, before
+   this element is ever parsed — see that file for exactly when each
+   direction applies (real browser Back/Forward vs any other same-origin
+   arrival, never bottom-nav menu order) and when neither class is added
+   at all (reduced motion, reload, fresh/external entry).
+   transform+opacity only (GPU-friendly, no layout properties touched).
+   The end state is exactly `transform:none` (not e.g. translateX(0)) on
+   purpose: ANY non-none transform value, even one that resolves to the
+   identity, makes its element a new containing block for any
+   position:fixed descendant — translateX(0) would permanently break
+   fixed-positioned children the moment this animation finished, not
+   just misplace them for the animation's own duration. */
+html.pt-enter-right .page-transition-root{ animation: pt-slide-in-right 280ms cubic-bezier(0.22,1,0.36,1) both; }
+html.pt-enter-left .page-transition-root{ animation: pt-slide-in-left 280ms cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes pt-slide-in-right{
+  from{ transform:translateX(36px); opacity:0; }
+  to{ transform:none; opacity:1; }
+}
+@keyframes pt-slide-in-left{
+  from{ transform:translateX(-36px); opacity:0; }
+  to{ transform:none; opacity:1; }
+}
+@media (prefers-reduced-motion: reduce){
+  html.pt-enter-right .page-transition-root,
+  html.pt-enter-left .page-transition-root{ animation:none; }
+}
+
 /* Inert placeholder (aria-hidden, no toggle logic anywhere) — its own
    aria-hidden="true" already signals it's not meant to be visible.
    Previously masked by #app's own overflow always being taller than the

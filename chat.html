@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1,user-scalable=no" />
   <script src="js/theme-init.js"></script>
+  <script src="js/page-transition.js"></script>
   <script src="js/topbar-back.js" defer></script>
   <title>Chat | Khmer Chess</title>
 
@@ -238,7 +239,13 @@
     </header>
 
     <main class="page">
-      <div id="listView"></div>
+      <!-- page-transition-root goes on #listView specifically, not
+           <main> itself: #threadView's own .thread-wrap (built by
+           js/chat-page.js) is position:fixed, and any transform on an
+           ancestor — even <main> — would make it a new containing block
+           for that fixed descendant, breaking its viewport-anchored
+           positioning. #listView has no such descendant, so it's safe. -->
+      <div id="listView" class="page-transition-root"></div>
       <div id="threadView" hidden></div>
     </main>
 

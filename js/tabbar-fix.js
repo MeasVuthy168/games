@@ -15,15 +15,26 @@
 // position:fixed + env(safe-area-inset-*) (already on both bars in
 // styles.css) is simpler and can't produce that failure mode.
 
-// Tap-and-hold on a bottom-nav tab: these are plain <a href> links (see
-// #appTabbar in every page), so a long-press brings up the BROWSER's own
-// native link menu (Copy link address / Share link / Open in Chrome
+// Tap-and-hold on ANY in-app navigation link -- bottom-nav tabs, home's
+// menu cards, Settings' profile-bar link, etc. -- brings up the BROWSER's
+// own native link menu (Copy link address / Share link / Open in Chrome
 // browser, etc. — Android Chrome's version of this; iOS Safari's
 // equivalent callout is already suppressed by styles.css's global
 // -webkit-touch-callout:none, which is a WebKit-only property with no
-// effect on Chrome). These tabs are app navigation, not links meant to be
-// copied, shared, or downloaded — a native app's own tab bar would never
-// show this menu — so suppress it the same way here.
-document.querySelectorAll('#appTabbar a').forEach(function (a) {
-  a.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-});
+// effect on Chrome). Every one of these is app navigation, not a link
+// meant to be copied, shared, or downloaded — a native app's own screens
+// never show this menu — so suppress it the same way here.
+//
+// Delegated on `document` (rather than querying specific selectors) so it
+// covers every current and future in-app link at once, including ones
+// built dynamically by page-specific JS. The one deliberate exception:
+// genuinely external targets (mailto:, tel:, http(s)://) are left alone,
+// since someone long-pressing Settings' support-email link plausibly
+// DOES want to copy/share that address -- there's exactly one such link
+// in the whole app.
+document.addEventListener('contextmenu', function (e) {
+  var a = e.target.closest && e.target.closest('a[href]');
+  if (!a) return;
+  if (/^(mailto:|tel:|https?:)/i.test(a.getAttribute('href') || '')) return;
+  e.preventDefault();
+}, true);

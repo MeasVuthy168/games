@@ -238,6 +238,12 @@ async function renderList() {
   const listView = $('#listView');
   listView.hidden = false;
   $('#threadView').hidden = true;
+  // listView IS the page-transition-root here (styles.css) — mark it
+  // ready once the real conversation list (or a final empty/error state)
+  // is in place below, instead of letting the slide animate the empty
+  // shell this function is about to build. Capped so a slow/failed
+  // request can never delay the animation indefinitely.
+  setTimeout(() => listView.classList.add('pt-ready'), 600);
   // Undo renderThread()'s hide — restores the bottom nav when back on the
   // conversation list (a defensive no-op on a fresh page load, where it's
   // already visible by default).
@@ -343,6 +349,7 @@ async function renderList() {
   }
 
   await loadConversations();
+  listView.classList.add('pt-ready');
 
   // Live updates: a friend's incoming message, this account's own send from
   // another tab/device, or a read/delete elsewhere should all be reflected

@@ -29,6 +29,16 @@
   try {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
+    // Reuses the app's existing Animation ON/OFF setting (js/settings.js /
+    // js/ui.js's isAnimationEnabled()) rather than inventing a second one —
+    // same localStorage key, same "missing/true means on" default. This is
+    // a plain classic script with no module imports available, so it reads
+    // the stored value directly instead of importing settings.js.
+    try {
+      var storedSettings = JSON.parse(localStorage.getItem('kc_settings_v1') || 'null');
+      if (storedSettings && storedSettings.animationEnabled === false) return;
+    } catch (e) {}
+
     var navEntry = performance.getEntriesByType('navigation')[0];
     var navType = navEntry ? navEntry.type : 'navigate';
     if (navType === 'reload') return;

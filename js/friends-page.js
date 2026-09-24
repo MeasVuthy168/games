@@ -8,12 +8,20 @@ document.addEventListener('DOMContentLoaded', () => {
   initTranslations();
   const signedOutView = document.getElementById('signedOutView');
   const signedInView = document.getElementById('signedInView');
+  // The page-transition slide (styles.css) is gated on this class so it
+  // animates the real, populated section instead of the empty <main> both
+  // sections start as (both start `hidden`) — see that file's comment.
+  // A capped timeout guarantees the animation (and nothing else) never
+  // waits indefinitely on a slow/failed request.
+  const ptRoot = document.querySelector('.page-transition-root');
+  function markPtReady() { ptRoot?.classList.add('pt-ready'); }
 
   if (!Api.isSignedIn()) {
     signedOutView.hidden = false;
     document.getElementById('btnGoSignIn').addEventListener('click', () => {
       location.href = 'auth.html?next=friends.html';
     });
+    markPtReady();
     return;
   }
 
@@ -199,9 +207,8 @@ document.addEventListener('DOMContentLoaded', () => {
   btnSearch.addEventListener('click', doSearch);
   searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
 
-  loadFriends();
-  loadRequests();
-  loadGames();
+  Promise.allSettled([loadFriends(), loadRequests(), loadGames()]).then(markPtReady);
+  setTimeout(markPtReady, 600);
 
   // Real-time-ish updates: an accept/decline made on the OTHER person's
   // device (or an incoming request/challenge) used to only ever show up

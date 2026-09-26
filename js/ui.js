@@ -2502,8 +2502,8 @@ export async function initUI() {
       catch (err) { showToast(err.message || 'Could not resign', 'error'); }
     });
 
-    // Watch page opt-in — private by default (see ouk-ai-backend's
-    // spectator_enabled), a participant flips it on/off here. Reflects
+    // Public Watch visibility — enabled by default (see ouk-ai-backend's
+    // spectator_enabled). Either participant can flip it on/off here. Reflects
     // `onlineState.spectatorEnabled` from the server rather than tracking
     // its own local boolean, so it can never drift from the real value.
     const btnAllowSpectators = document.getElementById('btnAllowSpectators');

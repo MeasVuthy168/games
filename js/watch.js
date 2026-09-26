@@ -5,8 +5,8 @@
 // own onlineMode/spectateMode/aiVsAiMode), instead of a second, separate
 // board implementation living here.
 //
-// - Friends Online: lists games a participant has explicitly opted into
-//   spectator visibility (Api.getLiveGames()) — clicking one opens
+// - Live Games: lists active games whose participants have not disabled
+//   public spectator visibility (Api.getLiveGames()) — clicking one opens
 //   play.html?mode=spectate&gameId=<id>.
 // - AI vs AI: level pickers + Start opens play.html?mode=aivsai&....
 import * as Api from './api.js';
@@ -38,7 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
   tabFriend.addEventListener('click', () => showTab('friend'));
   tabAI.addEventListener('click', () => showTab('ai'));
 
-  /* ---------------- Friends Online: list ---------------- */
+  /* ---------------- Public Live Games: list ---------------- */
   const friendState = document.getElementById('friendState');
   const liveGamesList = document.getElementById('liveGamesList');
 

@@ -328,8 +328,8 @@ export async function resignGame(id) {
  * (spectator_enabled gate on /live and /:id/spectate; every mutating route
  * above still requires participant match), these are just thin wrappers. */
 
-// Games another participant has opted into spectator visibility, minus my
-// own (nothing to "watch" in a game I'm already playing).
+// Public live games with spectator visibility enabled, minus my own
+// games (there is nothing to "watch" in a game I'm already playing).
 export async function getLiveGames() {
   const data = await request('/api/games/live');
   return data.games;
@@ -342,8 +342,9 @@ export async function spectateGame(id) {
   return data.game;
 }
 
-// Participant-only opt-in/out toggle for whether MY game can be listed/
-// watched by non-participants at all. Off by default.
+// Participant-only opt-in/out toggle for whether MY live game can be listed/
+// watched by non-participants. Public spectator visibility is ON by default;
+// this toggle lets either player turn it OFF.
 export async function setSpectatorEnabled(id, enabled) {
   return request(`/api/games/${id}/spectator`, { method: 'PATCH', body: { enabled: !!enabled } });
 }
